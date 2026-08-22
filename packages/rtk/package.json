@@ -1,0 +1,9 @@
+{
+  "//": "Dependency direction: rtk-core <- rtk; @bluecode/rtk may depend on @bluecode/rtk-core (and transitively shared/contracts). No dependencies installed yet, by design.",
+  "name": "@bluecode/rtk",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

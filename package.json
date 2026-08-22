@@ -1,0 +1,19 @@
+{
+  "name": "bluecode",
+  "version": "0.0.1",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bun run --filter '*' typecheck",
+    "eval": "bun run --cwd packages/eval src/cli.ts",
+    "verify": "bun run typecheck && bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "bun-types": "^1.4.0",
+    "typescript": "^5.7.0"
+  }
+}

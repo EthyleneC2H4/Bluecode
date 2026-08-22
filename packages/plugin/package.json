@@ -1,0 +1,9 @@
+{
+  "//": "Dependency direction: contracts <- shared <- {rtk-core, headroomd, plugin, eval}; @bluecode/plugin may depend on @bluecode/shared only. NOTE: devDependencies will later need zod (used to declare custom tool schemas); intentionally NOT installed yet - placeholder only.",
+  "name": "@bluecode/plugin",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

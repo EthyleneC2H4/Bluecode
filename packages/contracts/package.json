@@ -1,0 +1,9 @@
+{
+  "//": "Dependency direction: bottom of the graph; @bluecode/contracts must not depend on any other bluecode package.",
+  "name": "@bluecode/contracts",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

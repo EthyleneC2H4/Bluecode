@@ -1,0 +1,9 @@
+{
+  "//": "Dependency direction: contracts <- shared <- {rtk-core, headroomd, plugin, eval}; @bluecode/headroomd may depend on @bluecode/shared only. No dependencies installed yet, by design.",
+  "name": "@bluecode/headroomd",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}
