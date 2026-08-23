@@ -56,11 +56,29 @@ const TOOL_OUTPUT_POOL = {
   backspaceCorruption: generateBackspaceCorruption(),
 };
 
+/**
+ * Deterministic PRNG (mulberry32). TOOL_OUTPUT_POOL is built once at module
+ * load: Math.random there makes content differ ACROSS processes (within one
+ * process both builds share the pool, so in-process byte-equality tests pass
+ * anyway) and silently destabilises baseline comparison. Fixed seeds keep
+ * every build byte-for-byte reproducible.
+ */
+function seededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 function generateLsOutput(): string {
+  const rand = seededRandom(0x1a2b3c);
   const lines: string[] = ["total 123456"];
   for (let i = 0; i < 220; i++) {
     const perms = i % 2 === 0 ? "drwxr-xr-x" : "-rw-r--r--";
-    const size = Math.floor(Math.random() * 10000) + 100;
+    const size = Math.floor(rand() * 10000) + 100;
     const name = `file_${i.toString().padStart(4, "0")}.${i % 3 === 0 ? "ts" : i % 3 === 1 ? "json" : "md"}`;
     lines.push(`${perms}  2 user  staff  ${size}  Aug 22 10:00 ${name}`);
   }
@@ -68,6 +86,7 @@ function generateLsOutput(): string {
 }
 
 function generateGrepOutput(): string {
+  const rand = seededRandom(0x4d5e6f);
   const files = [
     "src/client.ts",
     "src/server.ts",
@@ -85,14 +104,14 @@ function generateGrepOutput(): string {
 
   for (const file of files) {
     for (const pattern of patterns) {
-      const lineNum = Math.floor(Math.random() * 500) + 1;
+      const lineNum = Math.floor(rand() * 500) + 1;
       const context = `function ${pattern}Handler() { return process${pattern}(); }`;
       lines.push(`${file}:${lineNum}:${context}`);
     }
   }
   // Add some extra lines to exceed 100
   for (let i = 0; i < 20; i++) {
-    lines.push(`src/utils.ts:${Math.floor(Math.random() * 200) + 1}:const ${i} = "extra";`);
+    lines.push(`src/utils.ts:${Math.floor(rand() * 200) + 1}:const ${i} = "extra";`);
   }
   return lines.join("\n");
 }
@@ -101,7 +120,10 @@ function generateReadOutput(): string {
   const lines: string[] = [];
   for (let i = 1; i <= 300; i++) {
     if (i % 50 === 0) {
-      lines.push(`${i.toString().padStart(4, " ")} | // GOLDEN FACT: critical error at line ${i} in function handleCompress`);
+      // Token rides along on every 50th line too: the %30 tokens below skip
+      // multiples of 50, so collectors anchoring on the 50-step grid would
+      // otherwise reference facts (e.g. must-hit-150) that never exist.
+      lines.push(`${i.toString().padStart(4, " ")} | // GOLDEN FACT: critical error at line ${i} in function handleCompress [must-hit-${i}]`);
     } else if (i % 30 === 0) {
       lines.push(`${i.toString().padStart(4, " ")} | const GOLDEN_FACT_TOKEN = "must-hit-${i}";`);
     } else {
@@ -182,13 +204,19 @@ function generateNoiseText(): string {
     "exercitation", "ullamco", "laboris", "nisi", "ut", "aliquip", "ex", "ea",
     "commodo", "consequat", "duis", "aute", "irure", "dolor", "in", "reprehenderit",
   ];
+  const rand = seededRandom(0xfeed);
   const lines: string[] = [];
   for (let i = 0; i < 500; i++) {
     const lineWords = [];
     for (let j = 0; j < 20; j++) {
-      lineWords.push(words[Math.floor(Math.random() * words.length)]);
+      lineWords.push(words[Math.floor(rand() * words.length)]);
     }
-    lines.push(lineWords.join(" "));
+    // Sparse anchors on every 50th line: with zero embedded facts, recall
+    // on this fixture is vacuous (nothing CAN survive) and the structure
+    // invariant "every fixture has >= 1 must-hit" fails.
+    let line = lineWords.join(" ");
+    if (i % 50 === 0) line += ` GOLDEN FACT: noise-marker-${i}`;
+    lines.push(line);
   }
   return lines.join("\n");
 }
@@ -235,10 +263,13 @@ function generateLongSession(): FixtureSample {
     const topic = topics[turn % topics.length];
     const isUser = turn % 3 !== 2; // 2/3 user, 1/3 assistant with tool
 
+    // Nice-to-have refs ride on the first 10 turns so recall has a real
+    // softer tier — facts absent from the source can never be "found".
+    const niceToHaveRef = turn < 10 ? ` Context ref: nice-to-have-${turn}-${topic}` : "";
     if (isUser) {
       messages.push({
         info: { id: `msg-${turn}`, role: "user" },
-        parts: [{ type: "text", text: `User question about ${topic} - turn ${turn}. GOLDEN FACT: user-query-${turn}-${topic}` }],
+        parts: [{ type: "text", text: `User question about ${topic} - turn ${turn}. GOLDEN FACT: user-query-${turn}-${topic}${niceToHaveRef}` }],
       });
     } else {
       // Assistant with tool output
@@ -250,53 +281,57 @@ function generateLongSession(): FixtureSample {
       messages.push({
         info: { id: `msg-${turn}`, role: "assistant" },
         parts: [
-          { type: "text", text: `I'll help with ${topic}. GOLDEN FACT: assistant-response-${turn}` },
+          { type: "text", text: `I'll help with ${topic}. GOLDEN FACT: assistant-response-${turn}${niceToHaveRef}` },
           { type: "tool", tool: tool as string, state: { status: "completed", output: output as string } },
         ],
       });
     }
   }
 
-  // Collect all golden facts from the session
-  const mustHit: string[] = [];
-  const niceToHave: string[] = [];
+  // Collect all golden facts from the session. A Set: tool kinds recur every
+  // 5 turns, so array pushes would duplicate identical facts and inflate the
+  // recall denominators.
+  const mustHit = new Set<string>();
+  const niceToHave = new Set<string>();
 
   for (let turn = 0; turn < 55; turn++) {
     const topic = topics[turn % topics.length];
-    mustHit.push(`user-query-${turn}-${topic}`);
+    // user-query facts exist only in user turns (turn % 3 !== 2); collecting
+    // them unconditionally listed facts the session never contained.
+    if (turn % 3 !== 2) {
+      mustHit.add(`user-query-${turn}-${topic}`);
+    }
     if (turn % 3 === 2) {
-      mustHit.push(`assistant-response-${turn}`);
+      mustHit.add(`assistant-response-${turn}`);
       const toolNames = ["ls", "grep", "read", "diff", "test"];
       const tool = toolNames[turn % toolNames.length];
       if (tool === "read") {
         for (let i = 50; i <= 300; i += 50) {
-          mustHit.push(`must-hit-${i}`);
+          mustHit.add(`must-hit-${i}`);
         }
       } else if (tool === "diff") {
-        mustHit.push("budget increased for large outputs");
-        mustHit.push("new timeout handling");
-        mustHit.push("new protocol version handling");
+        mustHit.add("budget increased for large outputs");
+        mustHit.add("new timeout handling");
+        mustHit.add("new protocol version handling");
       } else if (tool === "test") {
-        mustHit.push('degraded reason "timeout" at test line 15');
-        mustHit.push("compression ratio threshold 0.85");
+        mustHit.add('degraded reason "timeout" at test line 15');
+        mustHit.add("compression ratio threshold 0.85");
       }
     }
   }
 
-  // Add fixture-specific golden facts
-  mustHit.push("ansi-marker-0", "ansi-marker-99");
-  mustHit.push("progress-0", "progress-100", "progress-complete");
-  mustHit.push("backspace-marker-0", "backspace-marker-49");
+  // NOTE: no ansi/progress/backspace markers here — long-session's tool mix
+  // is ls/grep/read/diff/test only; those markers belong to their own fixtures.
 
   for (let i = 0; i < 10; i++) {
-    niceToHave.push(`nice-to-have-${i}-${topics[i]}`);
+    niceToHave.add(`nice-to-have-${i}-${topics[i]}`);
   }
 
   return {
     name: "long-session",
     description: "55-turn synthetic conversation with tool outputs",
     messages,
-    goldenFacts: { mustHit, niceToHave },
+    goldenFacts: { mustHit: [...mustHit], niceToHave: [...niceToHave] },
   };
 }
 
@@ -311,7 +346,7 @@ function generateToolOutputFixtures(): FixtureSample[] {
         parts: [{ type: "tool", tool: "ls", state: { status: "completed", output: TOOL_OUTPUT_POOL.lsLarge } }],
       }],
       goldenFacts: {
-        mustHit: ["file_0000.ts", "file_0100.ts", "file_0219.md"],
+        mustHit: ["file_0000.ts", "file_0100.json", "file_0219.ts"],
         niceToHave: ["total 123456"],
       },
     },
@@ -365,14 +400,15 @@ function generateToolOutputFixtures(): FixtureSample[] {
     },
     {
       name: "tool-noise",
-      description: "Pure noise text",
+      description: "Pure noise text with sparse golden markers",
       messages: [{
         info: { id: "tool-noise-1", role: "assistant" },
         parts: [{ type: "tool", tool: "cat", state: { status: "completed", output: TOOL_OUTPUT_POOL.noise } }],
       }],
       goldenFacts: {
-        mustHit: [],
-        niceToHave: ["lorem ipsum", "adipiscing elit"],
+        // Markers land on every 50th line (see generateNoiseText).
+        mustHit: ["noise-marker-0", "noise-marker-250", "noise-marker-450"],
+        niceToHave: ["noise-marker-100", "noise-marker-350"],
       },
     },
     {
