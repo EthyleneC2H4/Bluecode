@@ -43,7 +43,13 @@ export function desegment(text: string): string {
  *   dropped, so operators like NEAR/AND/OR/"^ can never be injected),
  * - quote each token as a phrase (ASCII verbatim, CJK pre-segmented),
  * - join with spaces (implicit AND).
- * Returns null when the query contains no usable token.
+ *
+ * The dropping is SILENT and by design: punctuation separators vanish
+ * ("error: failed" searches error AND failed), scripts outside ASCII/CJK
+ * (accents, Cyrillic, emoji) contribute nothing, and a query with no usable
+ * token at all returns null → the caller answers an empty hit list. Callers
+ * wanting richer matching must extend the extractor here, never splice user
+ * text into the expression themselves.
  */
 export function buildMatchQuery(query: string): string | null {
   const phrases: string[] = [];

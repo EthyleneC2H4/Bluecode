@@ -231,6 +231,12 @@ describe("db lifecycle + rebuild", () => {
     const first = await rebuildFromObjects(dir, meta, handle);
     expect(first.chunks).toBe(3);
     expect(first.histories).toBe(1);
+    // Review fix: rebuilt summaries keep the archive's original created_at
+    // (carried from cas_meta), not a reset-to-0 placeholder.
+    const stamped = handle.db.prepare(`SELECT created_at AS t FROM histories`).get() as {
+      t: number;
+    };
+    expect(stamped.t).toBe(1000);
 
     const beforeZh = searchChunks(handle.db, { projectId: "proj", sessionId: "sess" }, buildMatchQuery("部署")!, 5);
     const beforeEn = searchChunks(handle.db, { projectId: "proj", sessionId: "sess" }, buildMatchQuery("retry")!, 5);

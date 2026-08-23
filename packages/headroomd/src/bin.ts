@@ -76,11 +76,6 @@ if (args.version) {
   process.exit(0);
 }
 
-if (args.version) {
-  process.stdout.write(`${VERSION}\n`);
-  process.exit(0);
-}
-
 // The client's spawn recipe cannot pass CLI flags, so a spawned daemon takes
 // its data dir from the environment; --dataDir wins when both are present.
 const dataDir = args.dataDir ?? process.env.BLUECODE_DATA_DIR;

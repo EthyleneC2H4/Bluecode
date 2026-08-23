@@ -243,6 +243,7 @@ interface CasMetaRow {
   turn_index: number;
   msg_seq: number;
   history_hash: string;
+  created_at: number;
 }
 
 /**
@@ -263,7 +264,7 @@ export async function rebuildFromObjects(
 ): Promise<{ chunks: number; histories: number }> {
   const metas = metaHandle.db
     .prepare(
-      `SELECT hash, project_id, session_id, role, turn_index, msg_seq, history_hash
+      `SELECT hash, project_id, session_id, role, turn_index, msg_seq, history_hash, created_at
        FROM cas_meta ORDER BY project_id, session_id, msg_seq`,
     )
     .all() as CasMetaRow[];
@@ -278,7 +279,13 @@ export async function rebuildFromObjects(
   const chunkWrites: Parameters<typeof insertChunk>[1][] = [];
   const groups = new Map<
     string,
-    { projectId: string; sessionId: string; historyHash: string; messages: ChatMessage[] }
+    {
+      projectId: string;
+      sessionId: string;
+      historyHash: string;
+      messages: ChatMessage[];
+      createdAt: number;
+    }
   >();
 
   for (const { meta, message } of resolved) {
@@ -304,23 +311,27 @@ export async function rebuildFromObjects(
         sessionId: meta.session_id,
         historyHash: meta.history_hash,
         messages: [],
+        createdAt: meta.created_at,
       };
       groups.set(key, group);
     }
     group.messages.push(message);
   }
 
-  const historyWrites: HistoryRow[] = [];
+  const historyWrites: Array<{ row: HistoryRow; createdAt: number }> = [];
   for (const group of groups.values()) {
     const turns: Turn[] = splitTurns(group.messages).map((turn, index) => ({ ...turn, index }));
     const summary = historySummary(turns);
     historyWrites.push({
-      historyHash: group.historyHash,
-      projectId: group.projectId,
-      sessionId: group.sessionId,
-      summary,
-      rawTokens: group.messages.reduce((sum, m) => sum + messageTokens(m), 0),
-      summaryTokens: estimateTokens(summary),
+      row: {
+        historyHash: group.historyHash,
+        projectId: group.projectId,
+        sessionId: group.sessionId,
+        summary,
+        rawTokens: group.messages.reduce((sum, m) => sum + messageTokens(m), 0),
+        summaryTokens: estimateTokens(summary),
+      },
+      createdAt: group.createdAt,
     });
   }
 
@@ -329,7 +340,13 @@ export async function rebuildFromObjects(
     indexHandle.db.exec("DELETE FROM chunks_fts");
     indexHandle.db.exec("DELETE FROM histories");
     for (const chunk of chunkWrites) insertChunk(indexHandle.db, chunk);
-    for (const row of historyWrites) upsertHistory(indexHandle, row, 0);
+    for (const write of historyWrites) {
+      // createdAt rides in from cas_meta (rows ordered by msg_seq, so each
+      // group's first row is its earliest) — a rebuilt summary keeps the
+      // archive's original timestamp instead of resetting to 0. Deterministic
+      // because cas_meta itself is the stable input.
+      upsertHistory(indexHandle, write.row, write.createdAt);
+    }
   });
   apply();
 

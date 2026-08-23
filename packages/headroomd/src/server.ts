@@ -13,9 +13,13 @@
  *
  * Single-instance discipline, in order:
  * 1. socket file exists → probe-connect it. A live instance answers → this
- start yields `already-running` (bin.ts exits 0; spawn callers treat the
- daemon as up). Dead socket → unlink and bind.
- * 2. bind itself fails EADDRINUSE (a twin won the probe/bind race) → error.
+ * start yields `already-running` (bin.ts exits 0; spawn callers treat the
+ * daemon as up). Dead socket → unlink and bind.
+ * 2. bind itself fails EADDRINUSE (a twin won the probe/bind race) → re-probe
+ * once: the winner is alive by now → `already-running`; still nothing → error.
+ * The UDS bind is the actual mutex here — kernel-enforced, strictly stronger
+ * than an advisory flock lock file, which is why no `<dataDir>/headroomd.lock`
+ * exists despite early sketches naming one.
  * 3. pid file records the winner; removed on graceful shutdown.
  */
 import net from "node:net";
@@ -336,7 +340,12 @@ export async function startHeadroomServer(
     await listening;
   } catch (err) {
     engine.close();
-    // Losing the probe/bind race is the expected way to get here.
+    // Losing the probe/bind race (a twin bound between our probe and our
+    // bind) is expected: re-probe once and defer to the winner instead of
+    // making spawn callers watch a crash.
+    if ((err as NodeJS.ErrnoException)?.code === "EADDRINUSE" && (await socketAlive(socketPath))) {
+      return { status: "already-running", socketPath };
+    }
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(`headroomd: cannot bind ${socketPath}: ${message}`);
   }
