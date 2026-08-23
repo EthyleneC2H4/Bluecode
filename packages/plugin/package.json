@@ -1,9 +1,21 @@
 {
-  "//": "Dependency direction: contracts <- shared <- {rtk-core, headroomd, plugin, eval}; @bluecode/plugin may depend on @bluecode/shared only. NOTE: devDependencies will later need zod (used to declare custom tool schemas); intentionally NOT installed yet - placeholder only.",
+  "//": "Dependency direction: contracts <- shared <- {rtk-core, headroomd, plugin, eval}; plugin depends on contracts, shared, rtk, headroomd client surfaces only.",
   "name": "@bluecode/plugin",
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@bluecode/contracts": "workspace:*",
+    "@bluecode/shared": "workspace:*",
+    "@bluecode/rtk": "workspace:*",
+    "@bluecode/headroomd": "workspace:*",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.18.21",
+    "@opencode-ai/sdk": "^1.18.21"
   }
 }
