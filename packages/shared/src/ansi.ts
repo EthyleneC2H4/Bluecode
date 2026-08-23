@@ -16,6 +16,15 @@
  * - OSC sequences: ESC ] <any text but BEL/ESC> then BEL or ST (ESC \)
  * - nF sequences:  ESC <intermediates 0x20-0x2F> <final 0x30-0x7E> (e.g. charset ESC ( B)
  * - single-char escapes: ESC <0x30-0x7E> (e.g. ESC c reset, ESC 7/8 save/restore)
+ *
+ * UNTERMINATED OSC sequences (no BEL / ST before end of input) deliberately
+ * do NOT match and pass through verbatim (review ruling, M1 task). This is
+ * the conservative deterministic choice: extending the match to end-of-input
+ * would let one truncated escape swallow an unbounded amount of following
+ * legitimate text, and the pass must stay a pure function of its input so
+ * CAS hashes remain stable across replays. Downstream impact of a leaked
+ * partial OSC is bounded: it slightly inflates token counts and terminals
+ * ignore malformed sequences — never a correctness hazard for compression.
  */
 const ANSI_PATTERN =
   /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[\x20-\x2f][\x30-\x7e]|\x1b[\x30-\x7e]/g;

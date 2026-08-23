@@ -11,6 +11,9 @@ export interface PipelineStatsSnapshot {
   degradedCounts: Readonly<Record<DegradedReason, number>>;
 }
 
+// Kept in lockstep with contracts' DegradedReason enum (M3 review M-3
+// ruling: no new reasons are expected; record()'s ?? 0 keeps unknown values
+// safe at runtime if that constraint ever slips).
 const DEGRADED_REASONS: DegradedReason[] = [
   "spawn_failed",
   "timeout",
