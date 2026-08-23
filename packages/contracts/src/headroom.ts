@@ -7,7 +7,18 @@
  * snapshot that gets refreshed periodically.
  */
 import { z } from "zod";
-import { PROTOCOL_VERSION, sha256RefSchema } from "./rtk";
+import { PROTOCOL_VERSION } from "./rtk";
+
+/**
+ * Headroom hashes are BARE 64-char lowercase hex — the digest itself is the
+ * address everywhere (refs, cas_meta PK, chunks.content_hash, CAS object
+ * path). This deliberately differs from rtk's "sha256:"-prefixed wire form:
+ * compress hands refs back to retrieve verbatim, so the wire value must be
+ * byte-identical to the internal key, with no prefix to strip.
+ */
+export const headroomHashSchema = z
+  .string()
+  .regex(/^[0-9a-f]{64}$/, "expected 64 lowercase hex chars");
 import { errorSchema } from "./errors";
 
 // ---------------------------------------------------------------------------
@@ -51,7 +62,7 @@ export type HeadroomCompressParams = z.input<typeof headroomCompressParamsSchema
 export type HeadroomCompressParamsParsed = z.output<typeof headroomCompressParamsSchema>;
 
 export const compactionRefSchema = z.object({
-  contentHash: z.string(),
+  contentHash: headroomHashSchema,
   role: z.enum(["user", "assistant"]),
   turnIndex: z.number(),
 });
@@ -104,7 +115,7 @@ export type Namespace = z.infer<typeof namespaceSchema>;
 /** Retrieve by hash: fetch the full original content stored under `hash`. */
 export const retrieveByHashParamsSchema = z.strictObject({
   namespace: namespaceSchema,
-  hash: sha256RefSchema,
+  hash: headroomHashSchema,
 });
 export type RetrieveByHashParams = z.infer<typeof retrieveByHashParamsSchema>;
 

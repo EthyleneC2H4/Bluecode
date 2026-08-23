@@ -114,3 +114,68 @@ export async function readObject(dataDir: string, hash: string): Promise<Uint8Ar
   }
   return bytes;
 }
+
+// ---------------------------------------------------------------------------
+// Logical-address variants
+//
+// The functions above derive the address from sha256(content). Callers whose
+// identity lives ABOVE the storage encoding — e.g. headroomd's message
+// contentHash over a canonical projection, with gzip as mere encoding — need
+// to publish under that logical hash instead. For them the address and the
+// byte digest are intentionally different values, so these variants skip the
+// digest check; integrity of decoded content is the caller's concern
+// (headroomd relies on gzip CRC + JSON parse).
+// ---------------------------------------------------------------------------
+
+/**
+ * Publish `content` under the pre-computed logical `hash`. Same atomic
+ * temp+hardlink publication as {@link writeObject}; dedup via EEXIST with a
+ * size sanity check.
+ */
+export async function writeObjectAs(
+  dataDir: string,
+  hash: string,
+  content: Uint8Array | string,
+): Promise<{ hash: string; size: number; existed: boolean }> {
+  assertValidHash(hash);
+  const bytes = asBytes(content);
+  const path = objectPath(dataDir, hash);
+  const dir = path.slice(0, path.lastIndexOf("/"));
+  await mkdir(dir, { recursive: true });
+  const tmp = `${dir}/.tmp-${hash}-${crypto.randomUUID()}`;
+  try {
+    await writeFile(tmp, bytes);
+    try {
+      await link(tmp, path);
+      return { hash, size: bytes.byteLength, existed: false };
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code === "EEXIST") {
+        const existing = await stat(path);
+        return { hash, size: existing.size, existed: true };
+      }
+      throw err;
+    }
+  } finally {
+    await cleanTmp(tmp);
+  }
+}
+
+/** Read a logically-addressed object; null when absent, no digest check. */
+export async function readObjectAs(dataDir: string, hash: string): Promise<Uint8Array | null> {
+  assertValidHash(hash);
+  const path = objectPath(dataDir, hash);
+
+  let info: Stats;
+  try {
+    info = await stat(path);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return null;
+    throw err;
+  }
+
+  const bytes = await readFile(path);
+  if (bytes.byteLength !== info.size) {
+    throw new Error(`cas: storage corruption at ${path}: file changed between stat and read (E_INTERNAL)`);
+  }
+  return bytes;
+}

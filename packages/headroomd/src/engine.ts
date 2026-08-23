@@ -13,7 +13,6 @@
  * version. The field rides along for forward compatibility only.
  */
 import { mkdir } from "node:fs/promises";
-import path from "node:path";
 import type {
   ChatMessage,
   HeadroomCompressParamsParsed,
@@ -23,16 +22,19 @@ import type {
 } from "@bluecode/contracts";
 import { estimateTokens } from "@bluecode/shared";
 import {
+  countCasMeta,
+  countChunks,
   countSessions,
   ftsHealthy,
   getHistory,
   hasChunk,
   insertCasMeta,
-  openDb,
+  openStore,
   rebuildFromObjects,
   schemaMismatch,
   upsertHistory,
   type HeadroomDb,
+  type HeadroomStore,
 } from "./store/db";
 import { buildMatchQuery, insertChunk, searchChunks, type InsertChunkInput } from "./store/fts";
 import { readMessageObject, renderProjection, writeMessageObject } from "./store/objects";
@@ -66,20 +68,24 @@ export interface Engine {
 export async function createEngine(options: EngineOptions): Promise<Engine> {
   const dataDir = options.dataDir;
   await mkdir(dataDir, { recursive: true });
-  const handle = openDb(path.join(dataDir, "index.db"));
+  const store = openStore(dataDir);
 
-  // Self-heal on startup: a foreign schema version or a corrupt fts index is
-  // rebuilt from objects + cas_meta — objects are the source of truth.
-  if (schemaMismatch(handle) || !ftsHealthy(handle)) {
-    await rebuildFromObjects(dataDir, handle);
+  // Self-heal on startup. The derived index is rebuilt from objects +
+  // meta.cas_meta when it is corrupt, speaks a foreign schema version, or
+  // looks truncated (attribution rows exist that the index cannot account
+  // for — e.g. index.db was deleted; meta.db always outlives it).
+  const indexLooksLost =
+    countCasMeta(store.meta) > 0 && countChunks(store.index) < countCasMeta(store.meta);
+  if (schemaMismatch(store.index) || !ftsHealthy(store.index) || indexLooksLost) {
+    await rebuildFromObjects(dataDir, store.meta, store.index);
   }
 
   return {
     dataDir,
-    compress: (params) => compress(handle, dataDir, params),
-    retrieve: (params) => retrieve(handle, dataDir, params),
-    sessionCount: () => countSessions(handle),
-    close: () => handle.close(),
+    compress: (params) => compress(store, dataDir, params),
+    retrieve: (params) => retrieve(store.index, dataDir, params),
+    sessionCount: () => countSessions(store.meta),
+    close: () => store.close(),
   };
 }
 
@@ -98,7 +104,7 @@ interface ArchivePlan {
 }
 
 async function compress(
-  handle: HeadroomDb,
+  store: HeadroomStore,
   dataDir: string,
   params: HeadroomCompressParamsParsed,
 ): Promise<HeadroomCompressResult> {
@@ -126,7 +132,7 @@ async function compress(
     };
   }
 
-  const plan = await planArchive(handle, dataDir, projectId, sessionId, oldTurns, rawTokens);
+  const plan = await planArchive(store, dataDir, projectId, sessionId, oldTurns, rawTokens);
 
   return {
     compacted: true,
@@ -146,7 +152,7 @@ async function compress(
 
 /** Hash the old turns, then either reuse the stored summary or compute one. */
 async function planArchive(
-  handle: HeadroomDb,
+  store: HeadroomStore,
   dataDir: string,
   projectId: string,
   sessionId: string,
@@ -158,10 +164,10 @@ async function planArchive(
   for (const message of messages) hashes.push(await hashMessage(message));
   const historyHashValue = await hashHistory(oldTurns);
 
-  const existing = getHistory(handle, historyHashValue);
+  const existing = getHistory(store.index, historyHashValue);
   if (existing !== null) {
     // Idempotent replay: reuse the stored summary verbatim.
-    await backfill(handle, dataDir, projectId, sessionId, {
+    await backfill(store, dataDir, projectId, sessionId, {
       turns: oldTurns,
       messages,
       hashes,
@@ -187,16 +193,27 @@ async function planArchive(
     summaryTokens: estimateTokens(summary),
   };
 
-  // Objects first (CAS dedups; async outside any transaction), then ONE
-  // transaction lands cas_meta + chunks/chunks_fts + histories together —
-  // a crash before it leaves orphan objects only, which nothing indexes.
-  for (const message of messages) await writeMessageObject(dataDir, message);
+  // Write order (each step idempotent, crash-safe):
+  //   objects -> meta.cas_meta -> index rows.
+  // A crash anywhere leaves earlier steps only; attribution leading the
+  // derived index is repairable (startup heal / replay backfill), the
+  // reverse would not be. The two databases cannot share one transaction,
+  // so ordering IS the atomicity story here. Objects are addressed by their
+  // logical contentHash — the same value cas_meta and refs carry.
+  for (let i = 0; i < messages.length; i++) {
+    await writeMessageObject(dataDir, messages[i] as ChatMessage, hashes[i] as string);
+  }
 
   const createdAt = Date.now();
-  const write = handle.db.transaction(() => {
-    writeRows(handle, plan, projectId, sessionId, createdAt);
+  const writeMeta = store.meta.db.transaction(() => {
+    insertCasMetaRows(store.meta, factsOf(plan), projectId, sessionId, createdAt);
+  });
+  writeMeta();
+
+  const writeIndex = store.index.db.transaction(() => {
+    writeDerivedRows(store.index, plan, projectId, sessionId, createdAt);
     upsertHistory(
-      handle,
+      store.index,
       {
         historyHash: plan.historyHashValue,
         projectId,
@@ -208,7 +225,7 @@ async function planArchive(
       createdAt,
     );
   });
-  write();
+  writeIndex();
   return plan;
 }
 
@@ -220,17 +237,17 @@ interface RowFacts {
 }
 
 /**
- * Repair pass for an already-known history whose rows are incomplete (crash
- * mid-archive of an older build, manual tampering).
+ * Repair pass for an already-known history whose index rows are incomplete
+ * (crash between the meta and index transactions, manual tampering).
  *
- * Commit-order invariant: rows are written strictly after every object of the
- * same archive is durably published, so "all chunk rows present" implies all
- * objects present — the steady-state replay costs N point lookups and ZERO
- * file I/O. Missing rows trigger a full-object rewrite (CAS dedups existing
- * ones) plus an idempotent row transaction.
+ * Commit-order invariant: index rows are written strictly after every object
+ * of the same archive is durably published, so "all chunk rows present"
+ * implies all objects present — the steady-state replay costs N point
+ * lookups and ZERO file I/O. Missing rows trigger a full-object rewrite
+ * (CAS dedups existing ones) plus idempotent row transactions.
  */
 async function backfill(
-  handle: HeadroomDb,
+  store: HeadroomStore,
   dataDir: string,
   projectId: string,
   sessionId: string,
@@ -238,24 +255,35 @@ async function backfill(
 ): Promise<void> {
   let rowsComplete = true;
   for (const hash of facts.hashes) {
-    if (!hasChunk(handle, hash)) {
+    if (!hasChunk(store.index, hash)) {
       rowsComplete = false;
       break;
     }
   }
   if (rowsComplete) return;
 
-  for (const message of facts.messages) await writeMessageObject(dataDir, message);
+  for (let i = 0; i < facts.messages.length; i++) {
+    await writeMessageObject(dataDir, facts.messages[i] as ChatMessage, facts.hashes[i] as string);
+  }
 
-  const write = handle.db.transaction(() => {
-    writeRows(handle, facts, projectId, sessionId, Date.now());
+  const createdAt = Date.now();
+  const writeMeta = store.meta.db.transaction(() => {
+    insertCasMetaRows(store.meta, facts, projectId, sessionId, createdAt);
   });
-  write();
+  writeMeta();
+  const writeIndex = store.index.db.transaction(() => {
+    writeDerivedRows(store.index, facts, projectId, sessionId, createdAt);
+  });
+  writeIndex();
 }
 
-/** cas_meta + chunk rows for the whole plan; idempotent (OR IGNORE / DEL+INS). */
-function writeRows(
-  handle: HeadroomDb,
+function factsOf(plan: ArchivePlan): RowFacts {
+  return plan;
+}
+
+/** cas_meta rows only (meta.db side); idempotent via OR IGNORE. */
+function insertCasMetaRows(
+  meta: HeadroomDb,
   facts: RowFacts,
   projectId: string,
   sessionId: string,
@@ -265,7 +293,7 @@ function writeRows(
   // the first old turn's startMsgIndex — that offset doubles as msg_seq.
   const seqBase = facts.turns[0]?.startMsgIndex ?? 0;
   for (let i = 0; i < facts.messages.length; i++) {
-    insertCasMeta(handle, {
+    insertCasMeta(meta, {
       hash: facts.hashes[i] as string,
       projectId,
       sessionId,
@@ -276,7 +304,18 @@ function writeRows(
       createdAt,
     });
   }
-  for (const chunk of chunkInputs(facts, projectId, sessionId)) insertChunk(handle.db, chunk);
+}
+
+/** chunks/chunks_fts rows only (index.db side); idempotent DEL+INS. */
+function writeDerivedRows(
+  index: HeadroomDb,
+  facts: RowFacts,
+  projectId: string,
+  sessionId: string,
+  createdAt: number,
+): void {
+  void createdAt;
+  for (const chunk of chunkInputs(facts, projectId, sessionId)) insertChunk(index.db, chunk);
 }
 
 /** Turn owning the flattened message at `flatIndex` (last turn as fallback). */
@@ -313,7 +352,7 @@ function chunkInputs(facts: RowFacts, projectId: string, sessionId: string): Ins
 // ---------------------------------------------------------------------------
 
 async function retrieve(
-  handle: HeadroomDb,
+  index: HeadroomDb,
   dataDir: string,
   params: HeadroomRetrieveParams,
 ): Promise<HeadroomRetrieveResult> {
@@ -330,6 +369,6 @@ async function retrieve(
   const matchExpression = buildMatchQuery(params.query);
   if (matchExpression === null) return { hits: [] };
   return {
-    hits: searchChunks(handle.db, params.namespace, matchExpression, params.limit ?? 5),
+    hits: searchChunks(index.db, params.namespace, matchExpression, params.limit ?? 5),
   };
 }

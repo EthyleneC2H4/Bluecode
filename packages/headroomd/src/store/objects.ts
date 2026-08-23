@@ -1,7 +1,10 @@
 /**
- * Content-addressed per-message objects. One message = one object whose
- * content is gzip(JSON projection {info, parts}); the path reuses the shared
- * CAS layout so tooling can inspect stores uniformly.
+ * Per-message objects under their LOGICAL content address. One message = one
+ * object whose body is gzip(JSON projection {info, parts}); the address is
+ * the message's contentHash over the canonical projection (turns.ts) — NOT a
+ * digest of the gzip bytes — so refs/cas_meta/retrieve all speak one hash
+ * namespace and the object is reachable from any of them. Integrity of the
+ * decoded body rests on gzip CRC + JSON.parse instead of a byte digest.
  *
  * Attribution metadata (project/session/turn) lives in the cas_meta TABLE,
  * never inside the object body — replayed/rewritten metadata must never
@@ -10,30 +13,34 @@
  */
 import { gunzipSync } from "node:zlib";
 import type { ChatMessage } from "@bluecode/contracts";
-import { readObject, writeObject } from "@bluecode/shared";
+import { readObjectAs, writeObjectAs } from "@bluecode/shared";
 
 export interface MessageProjection {
   info: ChatMessage["info"];
   parts: ChatMessage["parts"];
 }
 
-/** Persist one message; returns its content hash (sha256 hex, no prefix). */
+/**
+ * Persist one message under `contentHash` (the canonical-projection hash
+ * computed in turns.ts). Dedup hits when that exact message is already
+ * stored.
+ */
 export async function writeMessageObject(
   dataDir: string,
   message: ChatMessage,
+  contentHash: string,
 ): Promise<{ hash: string; existed: boolean }> {
   const projection: MessageProjection = { info: message.info, parts: message.parts };
   const compressed = Bun.gzipSync(new TextEncoder().encode(JSON.stringify(projection)));
-  const stored = await writeObject(dataDir, compressed);
-  return { hash: stored.hash, existed: stored.existed };
+  return writeObjectAs(dataDir, contentHash, compressed);
 }
 
-/** Read one message back; null when absent. */
+/** Read one message back by its logical hash; null when absent. */
 export async function readMessageObject(
   dataDir: string,
   hash: string,
 ): Promise<MessageProjection | null> {
-  const bytes = await readObject(dataDir, hash);
+  const bytes = await readObjectAs(dataDir, hash);
   if (bytes === null) return null;
   return JSON.parse(new TextDecoder().decode(gunzipSync(bytes))) as MessageProjection;
 }

@@ -269,7 +269,11 @@ describe("headroomd protocol v1", () => {
   });
 
   test("retrieve hash mode", () => {
-    expect(retrieveByHashParamsSchema.safeParse({ namespace: ns, hash: SHA }).success).toBe(true);
+    // Headroom hashes are bare hex (no rtk "sha256:" prefix) — refs from
+    // compress must be usable as retrieve params verbatim.
+    const BARE = SHA.slice("sha256:".length);
+    expect(retrieveByHashParamsSchema.safeParse({ namespace: ns, hash: BARE }).success).toBe(true);
+    expect(retrieveByHashParamsSchema.safeParse({ namespace: ns, hash: SHA }).success).toBe(false);
     expect(retrieveByHashParamsSchema.safeParse({ namespace: ns, hash: "zz" }).success).toBe(
       false,
     );
@@ -294,9 +298,12 @@ describe("headroomd protocol v1", () => {
     } else {
       throw new Error("expected query branch");
     }
-    const byHash = headroomRetrieveParamsSchema.parse({ namespace: ns, hash: SHA });
+    const byHash = headroomRetrieveParamsSchema.parse({
+      namespace: ns,
+      hash: SHA.slice("sha256:".length),
+    });
     if ("hash" in byHash) {
-      expect(byHash.hash).toBe(SHA);
+      expect(byHash.hash).toBe(SHA.slice("sha256:".length));
     } else {
       throw new Error("expected hash branch");
     }

@@ -20,9 +20,12 @@ import {
   renderProjection,
   writeMessageObject,
 } from "../src/store/objects";
+import { contentHash } from "../src/turns";
 import {
+  countChunks,
   ftsHealthy,
-  openDb,
+  openIndexDb,
+  openMetaDb,
   rebuildFromObjects,
   schemaMismatch,
   type HeadroomDb,
@@ -37,12 +40,19 @@ afterAll(async () => {
   for (const dir of dirs) await rm(dir, { recursive: true, force: true });
 });
 
-async function freshDb(label: string): Promise<{ dir: string; handle: HeadroomDb }> {
+interface FreshStore {
+  dir: string;
+  meta: HeadroomDb;
+  index: HeadroomDb;
+}
+
+async function freshDb(label: string): Promise<FreshStore> {
   const dir = await mkdtemp(path.join(tmpdir(), `bluecode-hd-${label}-`));
   dirs.push(dir);
-  const handle = openDb(path.join(dir, "index.db"));
-  dbs.push(handle);
-  return { dir, handle };
+  const meta = openMetaDb(path.join(dir, "meta.db"));
+  const index = openIndexDb(path.join(dir, "index.db"));
+  dbs.push(meta, index);
+  return { dir, meta, index };
 }
 
 function user(id: string, text: string): ChatMessage {
@@ -60,16 +70,17 @@ describe("objects", () => {
         { type: "tool", tool: "bash", state: { status: "ok", output: "out\nlines" } },
       ],
     };
-    const first = await writeMessageObject(dir, message);
-    expect(first.hash).toMatch(/^[0-9a-f]{64}$/);
-    const second = await writeMessageObject(dir, message);
+    // The address is the LOGICAL contentHash (canonical projection), not a
+    // digest of the gzip bytes — refs/cas_meta/retrieve share the namespace.
+    const hash = await contentHash(message);
+    const first = await writeMessageObject(dir, message, hash);
+    expect(first.hash).toBe(hash);
+    const second = await writeMessageObject(dir, message, hash);
     expect(second.existed).toBe(true);
 
-    const loaded = await readMessageObject(dir, first.hash);
+    const loaded = await readMessageObject(dir, hash);
     expect(loaded).toEqual({ info: message.info, parts: message.parts });
 
-    // content hash is of the GZIP BYTES? No — of the stored bytes themselves:
-    // readObject returns what writeObject hashed, so the chain is consistent.
     const rendered = renderProjection(loaded!);
     expect(rendered).toContain("[assistant]");
     expect(rendered).toContain("回答正文");
@@ -102,7 +113,7 @@ describe("fts text preparation", () => {
 
 describe("searchChunks", () => {
   test("CJK substring query hits pre-segmented chunks (spike contract)", async () => {
-    const { handle } = await freshDb("cjk");
+    const { index: handle } = await freshDb("cjk");
     insertChunk(handle.db, {
       contentHash: "a".repeat(64),
       projectId: "p",
@@ -145,7 +156,7 @@ describe("searchChunks", () => {
   });
 
   test("namespace filter is same-statement: no cross-session leakage", async () => {
-    const { handle } = await freshDb("leak");
+    const { index: handle } = await freshDb("leak");
     const secret = "VSecAgent-internal-secret";
     insertChunk(handle.db, {
       contentHash: "c".repeat(64),
@@ -169,7 +180,7 @@ describe("searchChunks", () => {
   });
 
   test("bm25 ordering puts richer matches first", async () => {
-    const { handle } = await freshDb("rank");
+    const { index: handle } = await freshDb("rank");
     insertChunk(handle.db, {
       contentHash: "1".repeat(64), projectId: "p", sessionId: "s", role: "user", turnIndex: 0,
       historyHash: "h", summaryText: "auth flow", rawExcerpt: "auth flow once", keywords: "",
@@ -186,13 +197,13 @@ describe("searchChunks", () => {
 
 describe("db lifecycle + rebuild", () => {
   test("fresh db has matching schema version and healthy fts", async () => {
-    const { handle } = await freshDb("life");
+    const { index: handle } = await freshDb("life");
     expect(schemaMismatch(handle)).toBe(false);
     expect(ftsHealthy(handle)).toBe(true);
   });
 
   test("rebuild reconstructs identical searchable index from objects+cas_meta", async () => {
-    const { dir, handle } = await freshDb("rebuild");
+    const { dir, meta, index: handle } = await freshDb("rebuild");
     const messages: ChatMessage[] = [
       user("u1", "查询部署状态并检查日志"),
       {
@@ -203,8 +214,9 @@ describe("db lifecycle + rebuild", () => {
     ];
     let seq = 0;
     for (const [index, message] of messages.entries()) {
-      const { hash } = await writeMessageObject(dir, message);
-      insertCasMeta(handle, {
+      const hash = await contentHash(message);
+      await writeMessageObject(dir, message, hash);
+      insertCasMeta(meta, {
         hash,
         projectId: "proj",
         sessionId: "sess",
@@ -216,7 +228,7 @@ describe("db lifecycle + rebuild", () => {
       });
     }
 
-    const first = await rebuildFromObjects(dir, handle);
+    const first = await rebuildFromObjects(dir, meta, handle);
     expect(first.chunks).toBe(3);
     expect(first.histories).toBe(1);
 
@@ -226,19 +238,19 @@ describe("db lifecycle + rebuild", () => {
     expect(beforeEn.length).toBeGreaterThan(0);
 
     // Rebuild twice: results byte-identical (deterministic summaries).
-    const second = await rebuildFromObjects(dir, handle);
+    const second = await rebuildFromObjects(dir, meta, handle);
     expect(second).toEqual(first);
     const afterZh = searchChunks(handle.db, { projectId: "proj", sessionId: "sess" }, buildMatchQuery("部署")!, 5);
     expect(afterZh).toEqual(beforeZh);
   });
 
   test("cas_meta rows without objects are skipped by rebuild (objects are truth)", async () => {
-    const { dir, handle } = await freshDb("orphan");
-    insertCasMeta(handle, {
+    const { dir, meta, index: handle } = await freshDb("orphan");
+    insertCasMeta(meta, {
       hash: "e".repeat(64), projectId: "p", sessionId: "s", role: "user",
       turnIndex: 0, msgSeq: 0, historyHash: "h", createdAt: 1,
     });
-    const result = await rebuildFromObjects(dir, handle);
+    const result = await rebuildFromObjects(dir, meta, handle);
     expect(result.chunks).toBe(0);
     expect(result.histories).toBe(0);
   });
