@@ -8,6 +8,7 @@
  * the first 2 and last 8 are kept with an elision counter between them.
  */
 import type { ChatMessage } from "@bluecode/contracts";
+import { estimateTokens } from "@bluecode/shared";
 import { type Turn, isCompactionReplacement } from "./turns";
 
 const SENTENCE_CAP = 120;
@@ -137,6 +138,14 @@ export function messageExcerpt(message: ChatMessage): string {
     .map(({ tool, line }) => `${tool}: ${line}`)
     .join("\n")
     .slice(0, EXCERPT_CAP);
+}
+
+/** Estimated token cost of a message: text parts + tool outputs, flattened. */
+export function messageTokens(message: ChatMessage): number {
+  const flat = message.parts
+    .map((part) => (part.type === "text" ? part.text : (part.state.output ?? "")))
+    .join("\n");
+  return estimateTokens(flat);
 }
 
 // ---------------------------------------------------------------------------
