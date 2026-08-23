@@ -124,15 +124,14 @@ export class HeadroomClient {
       connectError = err;
     }
 
-    const child = Bun.spawn(
-      ["bun", "run", options.spawn.entry],
-      // exactOptionalPropertyTypes: omit cwd rather than passing undefined.
-      {
-        ...(options.spawn.cwd !== undefined ? { cwd: options.spawn.cwd } : {}),
-        stdout: "pipe", // boot handshake line, for spawn-side validation
-        stderr: "ignore",
-      },
-    );
+    const child = Bun.spawn(["bun", "run", options.spawn.entry], {
+      ...(options.spawn.cwd !== undefined ? { cwd: options.spawn.cwd } : {}),
+      // Explicit pass-through: the daemon reads BLUECODE_DATA_DIR from here,
+      // and relying on spawn's implicit env inheritance has proven flaky.
+      env: { ...process.env } as Record<string, string>,
+      stdout: "pipe", // boot handshake line, for spawn-side validation
+      stderr: "pipe", // captured so boot failures are diagnosable
+    });
 
     // Boot confirmation: one handshake line on stdout, bounded wait. Single
     // promise (not Promise.race) so no losing branch can reject later.
@@ -142,13 +141,28 @@ export class HeadroomClient {
         5000,
       );
       const decoder = new TextDecoder();
+      let stderrText = "";
+      const stderrReader = child.stderr.getReader();
+      const drainStderr = (): void => {
+        stderrReader.read().then(({ value, done }) => {
+          if (done) return;
+          stderrText += decoder.decode(value, { stream: true });
+          if (stderrText.length < 4000) drainStderr();
+        }, () => {});
+      };
+      drainStderr();
       const reader = child.stdout.getReader();
       reader.read().then(
         ({ value }) => {
           clearTimeout(timer);
+          stderrReader.cancel().catch(() => {});
           const text = value === undefined ? "" : decoder.decode(value);
           if (!text.includes('"proto"')) {
-            reject(new Error("headroomd: spawned daemon did not print a handshake line"));
+            reject(
+              new Error(
+                `headroomd: spawned daemon printed no handshake line (stdout ${JSON.stringify(text)}; stderr ${JSON.stringify(stderrText.trim())})`,
+              ),
+            );
             return;
           }
           reader.cancel().catch(() => {});
@@ -205,8 +219,10 @@ export class HeadroomClient {
 
   /** Graceful close: in-flight requests were rejected by the close event. */
   close(): Promise<void> {
-    if (this.closed) return Promise.resolve();
     this.closed = true;
+    // A socket the daemon already tore down has fired (or will never fire)
+    // its 'close' event — waiting on it here would hang forever.
+    if (this.socket.destroyed) return Promise.resolve();
     return new Promise((resolve) => {
       this.socket.once("close", () => resolve());
       this.socket.end();
