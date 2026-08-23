@@ -1,2 +1,7 @@
-/** @bluecode/shared - scaffold placeholder; implementation lands in a later milestone. */
-export const VERSION = "0.0.1" as const;
+/** @bluecode/shared — foundational utilities shared across BlueCode packages. */
+export * from "./jsonl";
+export * from "./cas";
+export * from "./ansi";
+export * from "./tokens";
+export * from "./redact";
+export * from "./ids";

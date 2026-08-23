@@ -1,9 +1,12 @@
 {
-  "//": "Dependency direction: contracts <- shared <- {rtk-core, headroomd, plugin, eval}; @bluecode/shared may depend on @bluecode/contracts only. No dependencies installed yet, by design.",
+  "//": "Dependency direction: contracts <- shared <- {rtk-core, headroomd, plugin, eval}; @bluecode/shared may depend on @bluecode/contracts only. External runtime deps: js-tiktoken (lazy-loaded, eval reports only).",
   "name": "@bluecode/shared",
   "version": "0.0.1",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "js-tiktoken": "^1.0.21"
   }
 }
