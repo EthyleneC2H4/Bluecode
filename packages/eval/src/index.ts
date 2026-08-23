@@ -10,9 +10,9 @@
  * - CLI: main entry point via cli.ts
  */
 export * from "./fixtures";
-export * from "./metrics";
+export { computeGroupMetrics, evaluateRecall, aggregateReport, dispose as disposeMetrics } from "./metrics";
 export * from "./runner";
-export * from "./report";
+export { writeReport, readReport, printSummary, dispose as disposeReport } from "./report";
 export * from "./check-baseline";
 
 export const VERSION = "0.0.1" as const;

@@ -6,6 +6,7 @@
       "@bluecode/contracts": ["../contracts/src/index.ts"],
       "@bluecode/shared": ["../shared/src/index.ts"],
       "@bluecode/rtk": ["../rtk/src/index.ts"],
+      "@bluecode/rtk-core": ["../rtk-core/src/index.ts"],
       "@bluecode/headroomd": ["../headroomd/src/index.ts"]
     }
   },

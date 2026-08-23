@@ -4,3 +4,4 @@ dist/
 *.sqlite*
 *.log
 .DS_Store
+packages/eval/eval-report.json

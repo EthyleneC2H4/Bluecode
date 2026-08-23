@@ -175,13 +175,14 @@ async function runGroupC(fixtures: FixtureSample[], options: RunnerOptions): Pro
   recallResults: RecallResult[];
 }> {
   const dataDir = options.dataDir ?? "/tmp/bluecode-eval-headroomd";
-  const headroomOptions: { dataDir: string; spawn?: { entry: string; cwd?: string }; timeoutMs?: number } = {
+  // exactOptionalPropertyTypes: absent options stay absent, not undefined.
+  const headroomOptions: HeadroomClientOptions = {
     dataDir,
-    timeoutMs: options.headroomTimeoutMs,
+    ...(options.headroomTimeoutMs !== undefined ? { timeoutMs: options.headroomTimeoutMs } : {}),
+    ...(options.headroomEntry !== undefined
+      ? { spawn: { entry: options.headroomEntry, cwd: process.cwd() } }
+      : {}),
   };
-  if (options.headroomEntry) {
-    headroomOptions.spawn = { entry: options.headroomEntry as string, cwd: process.cwd() };
-  }
   const headroom = await HeadroomClient.connect(headroomOptions);
 
   const perFixture: PerFixtureRecord[] = [];
@@ -225,7 +226,8 @@ async function runGroupC(fixtures: FixtureSample[], options: RunnerOptions): Pro
             try {
               const queryResult = await headroom.retrieve({
                 namespace: { projectId: "default", sessionId: params.sessionId },
-                query: fixture.goldenFacts.mustHit[0],
+                // Length guard above guarantees the element exists.
+                query: fixture.goldenFacts.mustHit[0]!,
                 limit: 5,
               });
               if ("hits" in queryResult) {
@@ -265,23 +267,24 @@ async function runGroupD(fixtures: FixtureSample[], options: RunnerOptions): Pro
   recallResults: RecallResult[];
 }> {
   const dataDir = options.dataDir ?? "/tmp/bluecode-eval-headroomd";
+  // exactOptionalPropertyTypes: absent options stay absent, not undefined.
   const rtk = await RtkClient.create({
-    entry: options.rtkEntry,
     cwd: process.cwd(),
-    budgetTokens: options.rtkBudgetTokens,
-    timeoutMs: options.rtkTimeoutMs,
-    minBytes: options.rtkMinBytes,
     dataDir,
     testMode: true,
+    ...(options.rtkEntry !== undefined ? { entry: options.rtkEntry } : {}),
+    ...(options.rtkBudgetTokens !== undefined ? { budgetTokens: options.rtkBudgetTokens } : {}),
+    ...(options.rtkTimeoutMs !== undefined ? { timeoutMs: options.rtkTimeoutMs } : {}),
+    ...(options.rtkMinBytes !== undefined ? { minBytes: options.rtkMinBytes } : {}),
   });
 
-  const headroomOptions: { dataDir: string; spawn?: { entry: string; cwd?: string }; timeoutMs?: number } = {
+  const headroomOptions: HeadroomClientOptions = {
     dataDir,
-    timeoutMs: options.headroomTimeoutMs,
+    ...(options.headroomTimeoutMs !== undefined ? { timeoutMs: options.headroomTimeoutMs } : {}),
+    ...(options.headroomEntry !== undefined
+      ? { spawn: { entry: options.headroomEntry, cwd: process.cwd() } }
+      : {}),
   };
-  if (options.headroomEntry) {
-    headroomOptions.spawn = { entry: options.headroomEntry as string, cwd: process.cwd() };
-  }
   const headroom = await HeadroomClient.connect(headroomOptions);
 
   const perFixture: PerFixtureRecord[] = [];
@@ -368,7 +371,8 @@ async function runGroupD(fixtures: FixtureSample[], options: RunnerOptions): Pro
             try {
               const queryResult = await headroom.retrieve({
                 namespace: { projectId: "default", sessionId: params.sessionId },
-                query: fixture.goldenFacts.mustHit[0],
+                // Length guard above guarantees the element exists.
+                query: fixture.goldenFacts.mustHit[0]!,
                 limit: 5,
               });
               if ("hits" in queryResult) {

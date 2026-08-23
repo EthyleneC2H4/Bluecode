@@ -429,7 +429,7 @@ export function allFixtures(): FixtureSample[] {
 export function quickFixtures(): FixtureSample[] {
   const set = buildFixtures();
   // For quick mode: just the long session + 3 tool outputs
-  return [set.longSession, set.toolOutputs[0], set.toolOutputs[2], set.toolOutputs[4]];
+  return [set.longSession, set.toolOutputs[0]!, set.toolOutputs[2]!, set.toolOutputs[4]!];
 }
 
 export function fixturesToHeadroomParams(fixture: FixtureSample, contextWindowTokens = 8192): HeadroomCompressParams {
