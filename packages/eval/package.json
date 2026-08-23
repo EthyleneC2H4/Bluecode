@@ -1,4 +1,5 @@
 {
+  "//": "Dependency direction: contracts <- shared <- {rtk-core, headroomd, rtk, plugin, eval}. Eval orchestrates the REAL rtk + headroomd clients (brief requirement), so unlike leaf packages it depends on both process packages; plugin precedent applies (leaf packages declare what they wire).",
   "name": "@bluecode/eval",
   "version": "0.0.1",
   "type": "module",
