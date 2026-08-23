@@ -1,0 +1,132 @@
+/**
+ * Regression gate logic (brief requirement #4).
+ *
+ * checkBaseline() reads fixed paths relative to the process CWD, so these
+ * tests back up any real eval-report.json / baseline.json, substitute
+ * controlled ones, and restore afterwards — order-independent and safe to
+ * run before or after a real baseline exists.
+ */
+import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+import { checkBaseline } from "../src/check-baseline";
+import { writeReport } from "../src/report";
+import type { FullReport, GroupMetrics } from "../src/metrics";
+import fs from "node:fs";
+import path from "node:path";
+
+const REPORT_PATH = path.resolve("packages/eval/eval-report.json");
+const BASELINE_PATH = path.resolve("packages/eval/baseline.json");
+
+let backupReport: string | null = null;
+let backupBaseline: string | null = null;
+
+function groupMetrics(overrides: Partial<GroupMetrics>): GroupMetrics {
+  return {
+    compressionRatio: 0.5,
+    longOutputRatio: 0.5,
+    latencyP50Ms: 10,
+    latencyP95Ms: 100,
+    recall: {
+      mustHit: { found: 2, total: 2, rate: 1 },
+      niceToHave: { found: 1, total: 1, rate: 1 },
+    },
+    degradedRate: {
+      spawn_failed: 0,
+      timeout: 0,
+      crash: 0,
+      protocol: 0,
+      no_gain: 0,
+      total: 0,
+      rate: 0,
+    },
+    ...overrides,
+  };
+}
+
+function makeReport(opts: { dRatio?: number; mustHitRate?: number; p95?: number }): FullReport {
+  const groups = {} as FullReport["groups"];
+  for (const g of ["A", "B", "C", "D"] as const) {
+    groups[g] = groupMetrics({
+      compressionRatio: opts.dRatio ?? 0.5,
+      latencyP95Ms: opts.p95 ?? 100,
+      ...(g !== "A"
+        ? { recall: { mustHit: { found: 2, total: 2, rate: opts.mustHitRate ?? 1 }, niceToHave: { found: 1, total: 1, rate: 1 } } }
+        : {}),
+    });
+  }
+  return {
+    meta: { timestamp: "2026-01-01T00:00:00.000Z", tokenCounter: "o200k_base", versions: { node: "test", bun: "test" } },
+    groups,
+    perFixture: [],
+  };
+}
+
+beforeEach(() => {
+  backupReport = fs.existsSync(REPORT_PATH) ? fs.readFileSync(REPORT_PATH, "utf8") : null;
+  backupBaseline = fs.existsSync(BASELINE_PATH) ? fs.readFileSync(BASELINE_PATH, "utf8") : null;
+});
+
+afterEach(() => {
+  if (backupReport !== null) fs.writeFileSync(REPORT_PATH, backupReport);
+  else if (fs.existsSync(REPORT_PATH)) fs.unlinkSync(REPORT_PATH);
+  if (backupBaseline !== null) fs.writeFileSync(BASELINE_PATH, backupBaseline);
+  else if (fs.existsSync(BASELINE_PATH)) fs.unlinkSync(BASELINE_PATH);
+});
+
+describe("check-baseline gate logic", () => {
+  test("missing baseline.json fails with an explicit violation", () => {
+    if (fs.existsSync(BASELINE_PATH)) fs.unlinkSync(BASELINE_PATH);
+    writeReport(makeReport({}));
+    const r = checkBaseline(false);
+    expect(r.passed).toBe(false);
+    expect(r.violations[0]?.metric).toBe("baseline");
+  });
+
+  test("report within thresholds passes with zero violations", () => {
+    // Baseline: ratio 0.5 / mustHit 1.0 / p95 100.
+    fs.writeFileSync(BASELINE_PATH, JSON.stringify(makeReport({})));
+    // Current: ratio +1pp (within ±2pp), same recall, p95 1.5x (< 2x).
+    writeReport(makeReport({ dRatio: 0.51, p95: 150 }));
+    const r = checkBaseline(false);
+    expect(r.passed).toBe(true);
+    expect(r.violations).toEqual([]);
+  });
+
+  test("compression ratio drift beyond ±2pp fails and names the group", () => {
+    fs.writeFileSync(BASELINE_PATH, JSON.stringify(makeReport({})));
+    writeReport(makeReport({ dRatio: 0.6 })); // +10pp
+    const r = checkBaseline(false);
+    expect(r.passed).toBe(false);
+    const v = r.violations.filter((x) => x.metric === "compressionRatio");
+    expect(v.length).toBeGreaterThanOrEqual(1);
+    expect(v[0]?.threshold).toContain("±2pp");
+  });
+
+  test("any must-hit recall decline fails even when ratios hold", () => {
+    fs.writeFileSync(BASELINE_PATH, JSON.stringify(makeReport({})));
+    writeReport(makeReport({ dRatio: 0.5, mustHitRate: 0.75 }));
+    const r = checkBaseline(false);
+    expect(r.passed).toBe(false);
+    const v = r.violations.filter((x) => x.metric === "mustHitRecall");
+    expect(v.length).toBe(3); // B, C, D all decline
+  });
+
+  test("p95 latency beyond 2x baseline fails", () => {
+    fs.writeFileSync(BASELINE_PATH, JSON.stringify(makeReport({})));
+    writeReport(makeReport({ p95: 300 }));
+    const r = checkBaseline(false);
+    expect(r.passed).toBe(false);
+    const v = r.violations.filter((x) => x.metric === "latencyP95");
+    expect(v.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("combined violations are listed together, not short-circuited", () => {
+    fs.writeFileSync(BASELINE_PATH, JSON.stringify(makeReport({})));
+    writeReport(makeReport({ dRatio: 0.9, mustHitRate: 0.5, p95: 500 }));
+    const r = checkBaseline(false);
+    expect(r.passed).toBe(false);
+    const metrics = new Set(r.violations.map((v) => v.metric));
+    expect(metrics.has("compressionRatio")).toBe(true);
+    expect(metrics.has("mustHitRecall")).toBe(true);
+    expect(metrics.has("latencyP95")).toBe(true);
+  });
+});
