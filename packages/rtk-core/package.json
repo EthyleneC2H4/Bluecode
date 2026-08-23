@@ -1,5 +1,5 @@
 {
-  "//": "Dependency direction: contracts <- shared <- {rtk-core, headroomd, plugin, eval}; @bluecode/rtk-core may depend on @bluecode/shared only. External runtime deps: none (pure functions; hashing/sanitize/tokens come from @bluecode/shared).",
+  "//": "Dependency direction: contracts <- shared <- {rtk-core, headroomd, plugin, eval}; @bluecode/rtk-core may depend on @bluecode/contracts and @bluecode/shared only. External runtime deps: none (pure functions; hashing/sanitize/tokens come from @bluecode/shared).",
   "name": "@bluecode/rtk-core",
   "version": "0.0.1",
   "type": "module",

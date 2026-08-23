@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { CompressResult } from "@bluecode/contracts";
 import { estimateTokens, sha256Hex } from "@bluecode/shared";
 import { DEFAULT_BUDGET_TOKENS, compressToolOutput } from "../src/pipeline";
+import { readStrategy } from "../src/strategies/read";
 import { createPipelineStats } from "../src/stats";
 import { NOISE, READ_OUT } from "./fixtures";
 
@@ -59,6 +60,25 @@ describe("compressToolOutput — anti-regression guard", () => {
     expect(res.output).toBe(raw);
     expect(res.degraded).toEqual({ reason: "no_gain" });
     expect(res.outTokensEst).toBe(res.rawTokensEst);
+  });
+
+  test("honest excess: anchors above budget are never trimmed (contract pin)", async () => {
+    // Read-shaped input whose head/tail-20 anchors alone bust a small budget.
+    const sr = readStrategy({ text: READ_OUT, toolId: "read" });
+    const anchorTexts = sr.lines.filter((l) => l.anchor).map((l) => l.text);
+    const anchorCost = anchorTexts.reduce((sum, t) => sum + estimateTokens(t) + 1, 0);
+    const budget = Math.max(1, Math.floor(anchorCost / 2));
+    expect(budget).toBeLessThan(anchorCost); // fixture sanity: anchors cannot fit
+
+    const res = await compressToolOutput({ tool: "read", output: READ_OUT, budgetTokens: budget });
+
+    // Compressed (much smaller than raw) yet honestly over budget...
+    expect(res.compressed).toBe(true);
+    expect(res.outTokensEst).toBeLessThan(res.rawTokensEst);
+    expect(res.outTokensEst).toBeGreaterThan(budget);
+    // ...with zero content loss on anchors and no degradation excuse.
+    expect(res.degraded).toBeNull();
+    for (const text of anchorTexts) expect(res.output).toContain(text);
   });
 });
 
