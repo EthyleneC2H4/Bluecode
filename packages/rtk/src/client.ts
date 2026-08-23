@@ -155,6 +155,21 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Build the interpreter argv that runs a TS entry file.
+ *
+ * process.execPath is only a valid script runner when the host IS the bun
+ * runtime. Inside a compiled single-file executable (real-session smoke, M7:
+ * opencode embeds bun), execPath is the host binary and `[execPath, entry]`
+ * dies with "Failed to change directory to <entry>" — fall back to "bun"
+ * from PATH there (mirrors HeadroomClient's spawn recipe).
+ */
+export function bunSpawnArgv(entry: string, execPath: string = process.execPath): string[] {
+  const base = execPath.split(/[\\/]/).pop() ?? "";
+  if (base === "bun" || base.startsWith("bun-")) return [execPath, "run", entry];
+  return ["bun", "run", entry];
+}
+
 export class RtkClient {
   private readonly opts: {
     budgetTokens: number;
@@ -379,7 +394,7 @@ export class RtkClient {
       };
       if (this.opts.testMode) env.BLUECODE_TEST = "1";
 
-      const proc = Bun.spawn([process.execPath, this.entryPath], {
+      const proc = Bun.spawn(bunSpawnArgv(this.entryPath), {
         stdin: "pipe",
         stdout: "pipe",
         stderr: "pipe",
