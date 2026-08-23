@@ -20,6 +20,12 @@
     "packages/eval": {
       "name": "@bluecode/eval",
       "version": "0.0.1",
+      "dependencies": {
+        "@bluecode/contracts": "workspace:^",
+        "@bluecode/headroomd": "workspace:^",
+        "@bluecode/rtk": "workspace:^",
+        "@bluecode/shared": "workspace:^",
+      },
     },
     "packages/headroomd": {
       "name": "@bluecode/headroomd",

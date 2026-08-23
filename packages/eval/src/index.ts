@@ -1,2 +1,18 @@
-/** @bluecode/eval - scaffold placeholder; implementation lands in a later milestone. */
+/**
+ * @bluecode/eval — Offline deterministic evaluation harness.
+ *
+ * Exports:
+ * - Fixtures: buildFixtures, allFixtures, quickFixtures, fixturesToHeadroomParams
+ * - Metrics: computeGroupMetrics, evaluateRecall, aggregateReport
+ * - Runner: runEvaluation
+ * - Report: writeReport, readReport, printSummary
+ * - Check-baseline: checkBaseline
+ * - CLI: main entry point via cli.ts
+ */
+export * from "./fixtures";
+export * from "./metrics";
+export * from "./runner";
+export * from "./report";
+export * from "./check-baseline";
+
 export const VERSION = "0.0.1" as const;

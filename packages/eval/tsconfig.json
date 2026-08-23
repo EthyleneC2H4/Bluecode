@@ -1,4 +1,13 @@
 {
   "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@bluecode/contracts": ["../contracts/src/index.ts"],
+      "@bluecode/shared": ["../shared/src/index.ts"],
+      "@bluecode/rtk": ["../rtk/src/index.ts"],
+      "@bluecode/headroomd": ["../headroomd/src/index.ts"]
+    }
+  },
   "include": ["src/**/*.ts", "test/**/*.ts"]
 }
