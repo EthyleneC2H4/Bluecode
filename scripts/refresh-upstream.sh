@@ -31,10 +31,12 @@ CLONE="$TMP_DIR/opencode"
 git clone --depth 1 "$REPO_URL" "$CLONE"
 
 # Latest release tag (vMAJOR.MINOR.PATCH), highest semver wins.
+# `|| true` keeps the pipeline alive under `set -euo pipefail` when no tag
+# matches, so the empty-result guard below stays reachable.
 LATEST_TAG="$(git ls-remote --tags "$REPO_URL" \
   | awk '{print $2}' \
   | sed 's|^refs/tags/||' \
-  | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+  | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } \
   | sort -V | tail -n 1)"
 if [ -z "$LATEST_TAG" ]; then
   echo "ERROR: no vX.Y.Z release tags found on $REPO_URL" >&2
@@ -66,4 +68,5 @@ rsync -a --delete --exclude '.git' "$CLONE/" "$TARGET/"
 
 VERSION="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' \
   "$TARGET/packages/opencode/package.json" | head -n 1)"
+[ -n "$VERSION" ] || { echo "ERROR: cannot read version from packages/opencode/package.json" >&2; exit 1; }
 echo "==> refreshed opencode-dev to version: $VERSION (tag $LATEST_TAG)"
