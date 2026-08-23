@@ -20,6 +20,7 @@ import { parseOptions, type PluginOptions as InternalOptions } from "./config";
 import { handleToolExecuteAfter, shutdownRtk, resetRtkState } from "./rtk-hook";
 import {
   handleSessionIdle,
+  eventToIdleInput,
   handleMessagesTransform,
   handleCompacting,
   shutdownHeadroom,
@@ -85,21 +86,14 @@ export default async function bluecodePlugin(
   }
 
   // Event hook for session.idle (waterlevel monitoring)
-  const eventHook = async (eventInput: { event: { type: string; sessionID?: string; status?: { type: "idle" | "busy" | "retry" } } }) => {
-    const event = eventInput.event;
-    // Handle both session.idle and session.status (idle) events
-    if (event.type === "session.idle" || (event.type === "session.status" && event.status?.type === "idle")) {
-      if (event.sessionID) {
-        // exactOptionalPropertyTypes: absent status stays absent, not undefined.
-        await handleSessionIdle(
-          {
-            sessionID: event.sessionID,
-            ...(event.status !== undefined ? { status: event.status } : {}),
-          },
-          sdkClient,
-          options,
-        );
-      }
+  const eventHook = async (eventInput: {
+    event: { type: string; properties?: Record<string, unknown> };
+  }) => {
+    // Payload fields arrive under event.properties (upstream dispatch shape —
+    // see eventToIdleInput); the envelope carries only id/type.
+    const input = eventToIdleInput(eventInput.event);
+    if (input !== null) {
+      await handleSessionIdle(input, sdkClient, options);
     }
   };
 

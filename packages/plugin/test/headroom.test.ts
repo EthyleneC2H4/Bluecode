@@ -19,26 +19,36 @@ function createMockSdkClient(overrides: Partial<{
   sessionGet: any;
   modelGet: any;
 }> = {}) {
-  // SDK messages have tokens on the message object itself, not in info
+  // SDK list items wrap the message as { info, parts } with tokens and the
+  // serving model on info — mocks must match that wire shape exactly.
   const defaultMessages = [
-    { id: "msg-1", role: "user", parts: [{ type: "text", text: "Hello" }] },
-    { id: "msg-2", role: "assistant", tokens: { total: 150000 }, parts: [{ type: "text", text: "Hi!" }] },
+    { info: { id: "msg-1", role: "user" }, parts: [{ type: "text", text: "Hello" }] },
+    {
+      info: { id: "msg-2", role: "assistant", tokens: { total: 150000 }, providerID: "anthropic", modelID: "claude-3" },
+      parts: [{ type: "text", text: "Hi!" }],
+    },
   ];
 
   return {
     session: {
-      // Real opencode SDK wraps every response in { data }: handleSessionIdle
-      // and fetchModelContextWindow both read .data — mocks must match.
-      messages: async ({ sessionID, limit }: { sessionID: string; limit?: number }) => {
+      // hey-api client: list requests take { path: {id}, query }.
+      messages: async ({ path, query }: { path: { id: string }; query?: { limit?: number } }) => {
         return { data: overrides.messages ?? defaultMessages };
       },
-      get: async ({ id }: { id: string }) => {
-        return { data: overrides.sessionGet ?? { id, model: { providerID: "anthropic", modelID: "claude-3" } } };
-      },
     },
-    model: {
-      get: async ({ providerID, modelID }: { providerID: string; modelID: string }) => {
-        return { data: overrides.modelGet ?? { limit: { context: 200000, input: 150000 }, id: modelID, providerID } };
+    config: {
+      providers: async () => {
+        return {
+          data: overrides.modelGet ?? {
+            providers: [
+              {
+                id: "anthropic",
+                models: { "claude-3": { id: "claude-3", limit: { context: 200000, output: 8192 } } },
+              },
+            ],
+            default: {},
+          },
+        };
       },
     },
   } as any;
@@ -97,11 +107,20 @@ function makeMsg(id: string, role: "user" | "assistant", text: string, tokens?: 
   return msg;
 }
 
-// Helper to create SDK-format messages (tokens at top level)
+// Helper to create SDK-format messages ({ info, parts } wire shape).
+// Tokens use the real SDK component shape (no total field).
 function makeSdkMsg(id: string, role: "user" | "assistant", text: string, tokens?: number): any {
-  const msg: any = { id, role, parts: [{ type: "text", text }] };
+  const msg: any = {
+    info: {
+      id,
+      role,
+      ...(role === "assistant" ? { providerID: "anthropic", modelID: "claude-3" } : {}),
+    },
+    parts: [{ type: "text", text }],
+  };
   if (tokens !== undefined) {
-    msg.tokens = { total: tokens };
+    const rest = tokens - 1000;
+    msg.info.tokens = { input: rest, output: 500, reasoning: 500, cache: { read: 0, write: 0 } };
   }
   return msg;
 }

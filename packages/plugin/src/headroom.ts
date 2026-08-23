@@ -5,6 +5,7 @@
 import { HeadroomClient } from "@bluecode/headroomd";
 import type { ChatMessage, HeadroomCompressParams } from "@bluecode/contracts";
 import { COMPACTION_MARKER } from "@bluecode/headroomd";
+import { estimateTokens } from "@bluecode/shared";
 import { applyPlanInPlace, type CompactionPlan } from "./apply-plan";
 import type { PluginOptions } from "./config";
 import { resolveHeadroomEntry } from "./sidecar";
@@ -76,61 +77,102 @@ async function getHeadroomClient(
 
 /**
  * Extract token count from the most recent assistant message.
- * Returns the total tokens or null if not available.
+ * Returns the total context tokens or null if not available.
+ *
+ * SDK tokens carry components ({input,output,reasoning,cache{read,write}}),
+ * not a total — sum them when total is absent (M7 smoke).
  */
 function getLatestAssistantTokens(messages: ChatMessage[]): number | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (!msg) continue;
     if (msg.info.role === "assistant") {
-      // Tokens may be on the message info (from SDK conversion) or directly on the message
-      const tokens = (msg.info as { tokens?: { total?: number } }).tokens?.total;
-      if (typeof tokens === "number") return tokens;
+      const tokens = (msg.info as { tokens?: Record<string, unknown> }).tokens;
+      if (typeof tokens !== "object" || tokens === null) continue;
+      const total = tokens.total;
+      if (typeof total === "number") return total;
+
+      const cache = (tokens.cache ?? {}) as { read?: unknown; write?: unknown };
+      const num = (v: unknown): number => (typeof v === "number" ? v : 0);
+      const sum =
+        num(tokens.input) + num(tokens.output) + num(tokens.reasoning) + num(cache.read) + num(cache.write);
+      if (num(tokens.input) > 0 || num(tokens.output) > 0 || sum > 0) return sum;
     }
   }
   return null;
 }
 
 /**
- * Convert SDK message format to ChatMessage format, preserving tokens.
+ * Convert an SDK list item ({ info, parts }) to the ChatMessage projection,
+ * or null when the message has no projectable identity.
+ *
+ * Only contract-known content is projected: text and tool parts. Real
+ * sessions also carry reasoning / step-start / step-finish parts which have
+ * no wire representation — mapping them into pseudo tool parts produced
+ * tool:undefined and E_INVALID_PARAMS from the daemon (M7 smoke).
  */
-function sdkMessageToChatMessage(m: any): ChatMessage {
+function sdkMessageToChatMessage(m: any): ChatMessage | null {
+  const info = m.info ?? {};
+  const id = typeof info.id === "string" ? info.id : undefined;
+  const role = info.role === "user" || info.role === "assistant" ? info.role : undefined;
+  if (id === undefined || role === undefined) return null;
+
+  const parts = (m.parts ?? []).flatMap((p: any): Array<ChatMessage["parts"][number]> => {
+    if (p?.type === "text" && typeof p.text === "string") {
+      return [{ type: "text", text: p.text }];
+    }
+    if (p?.type === "tool" && typeof p.tool === "string") {
+      const status = typeof p.state?.status === "string" ? p.state.status : "completed";
+      return [
+        {
+          type: "tool",
+          tool: p.tool,
+          state: {
+            status,
+            // exactOptionalPropertyTypes: absent output stays absent.
+            ...(typeof p.state?.output === "string" ? { output: p.state.output } : {}),
+          },
+        },
+      ];
+    }
+    return []; // reasoning / step markers are not projectable content
+  });
+
   return {
     info: {
-      id: m.id,
-      role: m.role,
-      // Preserve tokens from SDK message
-      ...(m.tokens ? { tokens: m.tokens } : {}),
+      id,
+      role,
+      // Client-side only (getLatestAssistantTokens); stripped by the daemon's
+      // schema, which knows nothing about it.
+      ...(info.tokens ? { tokens: info.tokens } : {}),
     },
-    parts: m.parts.map((p: any) => {
-      if (p.type === "text") return { type: "text" as const, text: p.text };
-      return { type: "tool" as const, tool: p.tool, state: { status: p.state?.status ?? "completed", output: p.state?.output ?? "" } };
-    }),
+    parts,
   };
 }
 
 /**
  * Fetch model context window via SDK.
+ *
+ * The serving model comes from the latest assistant message (Session carries
+ * no model field in SDK 1.18), resolved against /config/providers. Returns
+ * null on any mismatch — callers fall back to DEFAULT_CONTEXT_WINDOW_TOKENS.
  */
 async function fetchModelContextWindow(
   sdkClient: ReturnType<typeof import("@opencode-ai/sdk").createOpencodeClient>,
-  sessionId: string,
+  providerId?: string,
+  modelId?: string,
 ): Promise<number | null> {
+  if (providerId === undefined || modelId === undefined) return null;
   try {
-    // Get session to find the model, then get model info
-    // Use type assertions to work with SDK result types
-    const sessionResult = await (sdkClient as any).session.get({ id: sessionId });
-    const session = sessionResult.data;
-    if (!session || !session.model) return null;
+    // hey-api generated client: request params are { path, query }, not flat
+    // keys — a flat { id } silently misses and the request 404s (M7 smoke).
+    const result = await (sdkClient as any).config.providers();
+    const providers = result.data?.providers;
+    if (!Array.isArray(providers)) return null;
 
-    const modelResult = await (sdkClient as any).model.get({
-      providerID: session.model.providerID,
-      modelID: session.model.modelID,
-    });
-    const model = modelResult.data;
-    if (!model) return null;
-
-    return model.limit?.context ?? null;
+    const provider = providers.find((p: any) => p.id === providerId);
+    const model = provider?.models?.[modelId];
+    return model?.limit?.context ?? null;
   } catch {
     return null;
   }
@@ -162,6 +204,31 @@ function isCompactionInProgress(messages: ChatMessage[]): boolean {
 }
 
 /**
+ * Map an opencode plugin event envelope to a handleSessionIdle input, or null
+ * when the event is not an idle signal for an identified session.
+ *
+ * Upstream dispatch shape is { event: { id, type, properties } }: payload
+ * fields live under `properties`, not on the envelope. Reading sessionID off
+ * the top level left it undefined and the idle path never fired in a real
+ * host (M7 real-session smoke).
+ */
+export function eventToIdleInput(event: {
+  type: string;
+  properties?: Record<string, unknown>;
+}): { sessionID: string; status?: { type: "idle" | "busy" | "retry" } } | null {
+  const props = (event.properties ?? {}) as {
+    sessionID?: string;
+    status?: { type: "idle" | "busy" | "retry" };
+  };
+  if (props.sessionID === undefined) return null;
+  if (event.type === "session.idle") return { sessionID: props.sessionID };
+  if (event.type === "session.status" && props.status?.type === "idle") {
+    return { sessionID: props.sessionID, status: props.status };
+  }
+  return null;
+}
+
+/**
  * Event hook handler for session.idle / session.status (idle).
  * Triggers headroom compress when token waterlevel is reached.
  */
@@ -172,11 +239,19 @@ export async function handleSessionIdle(
 ): Promise<void> {
   if (!options.enabled) return;
 
+  // Breadcrumbs for the five silent gates below. Off by default; set
+  // BLUECODE_DEBUG=1 to see why an idle did or did not trigger compression
+  // (M7 smoke: a silent gate made live diagnosis guesswork).
+  const debug = (msg: string): void => {
+    if (process.env.BLUECODE_DEBUG) console.error(`[bluecode-plugin] idle: ${msg}`);
+  };
+
   // Only act on idle status
   // session.idle event has no status field; session.status(idle) has status.type === "idle"
   const hasStatusIdle = event.status?.type === "idle";
   const isSessionIdleEvent = "sessionID" in event && !("status" in event);
   const isIdle = hasStatusIdle || isSessionIdleEvent;
+  debug(`received sessionID=${event.sessionID} statusIdle=${hasStatusIdle} shapeIdle=${isSessionIdleEvent}`);
   if (!isIdle) return;
 
   const sessionId = event.sessionID;
@@ -185,40 +260,82 @@ export async function handleSessionIdle(
   const existing = inFlightCompress.get(sessionId);
   if (existing !== undefined) {
     // Another compress is in flight for this session, skip this cycle
+    debug("skipped: compress already in flight");
     return;
   }
 
   // Create the in-flight promise and store it immediately
   const compressPromise = (async () => {
     const client = await getHeadroomClient(options, sdkClient);
-    if (client === null) return;
+    if (client === null) {
+      debug("skipped: no headroom client");
+      return;
+    }
 
     // Check if upstream compaction is already in progress
     try {
-      const messagesResult = await (sdkClient as any).session.messages({ sessionID: sessionId, limit: 100 });
+      const messagesResult = await (sdkClient as any).session.messages({
+        path: { id: sessionId },
+        query: { limit: 100 },
+      });
       const messages = messagesResult.data;
-      if (!messages || messages.length === 0) return;
+      if (!messages || messages.length === 0) {
+        debug("skipped: no session messages via SDK");
+        return;
+      }
 
-      // Convert SDK messages to ChatMessage format, preserving tokens
-      const chatMessages = messages.map(sdkMessageToChatMessage);
+      // The serving model rides on the latest assistant message (Session has
+      // no model field in SDK 1.18).
+      const latestAssistant = [...messages].reverse().find((m: any) => m.info?.role === "assistant" && m.info?.modelID);
+
+      // Convert SDK messages to the ChatMessage projection, preserving tokens
+      const chatMessages = messages
+        .map(sdkMessageToChatMessage)
+        .filter((m: ChatMessage | null): m is ChatMessage => m !== null);
 
       if (isCompactionInProgress(chatMessages)) {
+        debug("skipped: compaction already in progress");
         return; // Skip if compaction already running
       }
 
       // Get token count from latest assistant message
-      const tokens = getLatestAssistantTokens(chatMessages);
-      if (tokens === null) return;
+      const reported = getLatestAssistantTokens(chatMessages);
+      // Providers that never report usage (all-zero components) still need
+      // waterline protection: fall back to the shared O(1) estimator over the
+      // projected conversation (M7 smoke: free-tier gateway reports zeros).
+      const tokens =
+        reported ??
+        chatMessages.reduce((sum: number, m: ChatMessage) => {
+          const text = m.parts
+            .map((p: ChatMessage["parts"][number]) =>
+              p.type === "text" ? p.text : (p.state.output ?? ""),
+            )
+            .join("\n");
+          return sum + estimateTokens(text);
+        }, 0);
+      if (tokens === 0) {
+        debug("skipped: no token usage and nothing estimable");
+        return;
+      }
+      if (reported === null) {
+        debug(`usage unreported; estimated tokens=${tokens}`);
+      }
 
       // Get context window
       let contextWindow = contextWindowCache.get(sessionId);
       if (contextWindow === undefined) {
-        contextWindow = await fetchModelContextWindow(sdkClient, sessionId) ?? DEFAULT_CONTEXT_WINDOW_TOKENS;
+        const modelId = latestAssistant?.info?.modelID as string | undefined;
+        const providerId = latestAssistant?.info?.providerID as string | undefined;
+        debug(`resolving window via providers provider=${providerId} model=${modelId}`);
+        contextWindow = await fetchModelContextWindow(sdkClient, providerId, modelId) ?? DEFAULT_CONTEXT_WINDOW_TOKENS;
         if (contextWindow > 0) contextWindowCache.set(sessionId, contextWindow);
       }
 
       const usable = contextWindow * options.headroom.triggerRatio;
-      if (tokens < usable) return; // Below waterlevel
+      if (tokens < usable) {
+        debug(`skipped: below waterline tokens=${tokens} usable=${usable}`);
+        return; // Below waterline
+      }
 
       const compressParams: HeadroomCompressParams = {
         sessionId,
@@ -229,7 +346,9 @@ export async function handleSessionIdle(
         retainRecentTurns: options.headroom.retainRecentTurns,
       };
 
+      debug(`compressing tokens=${tokens} window=${contextWindow}`);
       const result = await client.compress(compressParams);
+      debug(`compress done compacted=${result.compacted} refs=${result.refs.length}`);
 
       if (result.compacted) {
         // Store pending plan for messages.transform to consume
