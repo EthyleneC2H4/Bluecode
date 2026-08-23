@@ -57,7 +57,10 @@ describe("headroom_retrieve tool", () => {
   });
 
   test("hash retrieval: not found returns friendly message", async () => {
-    mockRetrieveImpl = async () => ({ found: false, content: "" });
+    // Contract-faithful miss shape: {found:false} carries NO content field
+    // (discriminated union). The old mock added content:"", masking a guard
+    // bug where misses fell through to "Unexpected result format".
+    mockRetrieveImpl = async () => ({ found: false });
 
     const result = await headroomRetrieveTool.execute({
       hash: "b".repeat(64),
@@ -153,5 +156,17 @@ describe("headroom_retrieve tool", () => {
 
     expect(capturedParams).toBeDefined();
     expect(capturedParams.limit).toBe(5);
+  });
+
+  test("stringified numeric limit from LLM clients is coerced (M7 smoke)", async () => {
+    let capturedParams: any = null;
+    mockRetrieveImpl = async (params) => {
+      capturedParams = params;
+      return { hits: [] };
+    };
+
+    await headroomRetrieveTool.execute({ query: "test", limit: "2" as unknown as number }, mockContext);
+
+    expect(capturedParams.limit).toBe(2);
   });
 });

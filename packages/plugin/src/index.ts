@@ -9,7 +9,11 @@
  * 5. tool (headroom_retrieve) — history retrieval tool
  * 6. dispose — cleanup on plugin unload
  */
-export const VERSION = "0.0.1" as const;
+// NOT exported: opencode's legacy plugin loader iterates every named export
+// of the module and throws "Plugin export is not a function" on any
+// non-function value (found in M7 real-session smoke). The plugin factory
+// rides on the default export alone.
+const VERSION = "0.0.1" as const;
 
 import type { PluginInput, PluginOptions, Hooks } from "@opencode-ai/plugin";
 import { parseOptions, type PluginOptions as InternalOptions } from "./config";
@@ -149,20 +153,8 @@ export default async function bluecodePlugin(
   };
 }
 
-// Export internal functions for testing
-export {
-  parseOptions,
-  handleToolExecuteAfter,
-  handleSessionIdle,
-  handleMessagesTransform,
-  handleCompacting,
-  headroomRetrieveTool,
-  setHeadroomClient,
-  shutdownRtk,
-  shutdownHeadroom,
-  resetRtkState,
-  resetHeadroomState,
-  setPendingPlan,
-  getPendingPlan,
-  clearPendingPlan,
-};
+// NOTE: no named exports beyond the default factory. opencode's legacy
+// plugin loader iterates every runtime export of this module and treats it
+// as a plugin instance — non-function values (and plain helper functions,
+// which would be invoked with a PluginInput signature) break load or crash
+// at hook time. Tests import internals via their submodule deep paths.

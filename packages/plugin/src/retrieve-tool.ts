@@ -21,7 +21,9 @@ export function setHeadroomClient(client: HeadroomClient | null): void {
 const RetrieveArgsShape = {
   hash: z.string().regex(/^[0-9a-f]{64}$/, "hash must be 64 lowercase hex chars").optional(),
   query: z.string().optional(),
-  limit: z.number().int().positive().default(5),
+  // LLM clients routinely stringify numerics (M7 real-session smoke: the
+  // model sent limit="2" and strict zod rejected it) — coerce instead.
+  limit: z.coerce.number().int().positive().default(5),
 } satisfies z.ZodRawShape;
 
 type RetrieveArgs = z.infer<z.ZodObject<typeof RetrieveArgsShape>>;
@@ -62,8 +64,11 @@ export const headroomRetrieveTool = tool({
 
       const result: HeadroomRetrieveResult = await headroomClient.retrieve(params);
 
-      // Type guard to distinguish between hash and query results
-      const isHashResult = (r: HeadroomRetrieveResult): r is RetrieveByHashResult => "content" in r;
+      // Type guard to distinguish between hash and query results.
+      // Keyed on "found", not "content": the found:false union member carries
+      // no content field, so a "content" check misroutes miss results into
+      // the unexpected-format fallback (M7 real-session smoke).
+      const isHashResult = (r: HeadroomRetrieveResult): r is RetrieveByHashResult => "found" in r;
       const isQueryResult = (r: HeadroomRetrieveResult): r is RetrieveByQueryResult => "hits" in r;
 
       if (isHashResult(result)) {
