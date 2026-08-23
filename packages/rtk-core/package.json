@@ -1,9 +1,13 @@
 {
-  "//": "Dependency direction: contracts <- shared <- {rtk-core, headroomd, plugin, eval}; @bluecode/rtk-core may depend on @bluecode/shared only. No dependencies installed yet, by design.",
+  "//": "Dependency direction: contracts <- shared <- {rtk-core, headroomd, plugin, eval}; @bluecode/rtk-core may depend on @bluecode/shared only. External runtime deps: none (pure functions; hashing/sanitize/tokens come from @bluecode/shared).",
   "name": "@bluecode/rtk-core",
   "version": "0.0.1",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bluecode/contracts": "workspace:^",
+    "@bluecode/shared": "workspace:^"
   }
 }
