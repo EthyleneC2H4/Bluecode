@@ -24,6 +24,10 @@
     "packages/headroomd": {
       "name": "@bluecode/headroomd",
       "version": "0.0.1",
+      "dependencies": {
+        "@bluecode/contracts": "workspace:^",
+        "@bluecode/shared": "workspace:^",
+      },
     },
     "packages/plugin": {
       "name": "@bluecode/plugin",
