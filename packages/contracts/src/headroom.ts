@@ -7,7 +7,8 @@
  * snapshot that gets refreshed periodically.
  */
 import { z } from "zod";
-import { sha256RefSchema } from "./rtk";
+import { PROTOCOL_VERSION, sha256RefSchema } from "./rtk";
+import { errorSchema } from "./errors";
 
 // ---------------------------------------------------------------------------
 // Message projection
@@ -173,3 +174,34 @@ export const healthResultSchema = z.object({
   sessions: z.number(),
 });
 export type HealthResult = z.infer<typeof healthResultSchema>;
+
+// ---------------------------------------------------------------------------
+// Envelopes — mirror rtk.ts conventions (errors.ts owns the code mapping)
+// ---------------------------------------------------------------------------
+
+export const headroomOpSchema = z.enum(["compress", "retrieve", "health"]);
+export type HeadroomOp = z.infer<typeof headroomOpSchema>;
+
+export const headroomRequestSchema = z.object({
+  v: z.literal(PROTOCOL_VERSION),
+  id: z.string().min(1),
+  op: headroomOpSchema,
+  params: z.unknown(),
+});
+export type HeadroomRequest = z.infer<typeof headroomRequestSchema>;
+
+export const headroomResponseSchema = z.discriminatedUnion("ok", [
+  z.object({
+    v: z.literal(PROTOCOL_VERSION),
+    id: z.string().min(1),
+    ok: z.literal(true),
+    result: z.unknown(),
+  }),
+  z.object({
+    v: z.literal(PROTOCOL_VERSION),
+    id: z.string().min(1),
+    ok: z.literal(false),
+    error: errorSchema,
+  }),
+]);
+export type HeadroomResponse = z.infer<typeof headroomResponseSchema>;
