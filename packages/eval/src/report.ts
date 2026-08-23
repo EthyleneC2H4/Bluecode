@@ -1,24 +1,22 @@
 /**
  * JSON report assembly and human-readable summary output.
  */
+import path from "node:path";
+import fs from "node:fs";
 import { aggregateReport, type FullReport } from "./metrics";
 import { dispose as disposeMetrics } from "./metrics";
 
-const REPORT_PATH = "packages/eval/eval-report.json";
+// Module-relative: `bun run eval` executes with --cwd packages/eval, so a
+// CWD-relative path would double-resolve into packages/eval/packages/eval.
+export const REPORT_PATH = path.resolve(import.meta.dir, "../eval-report.json");
 
 export function writeReport(report: FullReport): void {
-  const fs = require("node:fs");
-  const path = require("node:path");
-  const fullPath = path.resolve(REPORT_PATH);
-  fs.writeFileSync(fullPath, JSON.stringify(report, null, 2), "utf8");
-  console.error(`[eval] Report written to ${fullPath}`);
+  fs.writeFileSync(REPORT_PATH, JSON.stringify(report, null, 2), "utf8");
+  console.error(`[eval] Report written to ${REPORT_PATH}`);
 }
 
 export function readReport(): FullReport {
-  const fs = require("node:fs");
-  const path = require("node:path");
-  const fullPath = path.resolve(REPORT_PATH);
-  return JSON.parse(fs.readFileSync(fullPath, "utf8"));
+  return JSON.parse(fs.readFileSync(REPORT_PATH, "utf8"));
 }
 
 export function printSummary(report: FullReport): void {

@@ -7,14 +7,13 @@
  * run before or after a real baseline exists.
  */
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { checkBaseline } from "../src/check-baseline";
-import { writeReport } from "../src/report";
+import { checkBaseline, BASELINE_PATH } from "../src/check-baseline";
+import { writeReport, REPORT_PATH } from "../src/report";
 import type { FullReport, GroupMetrics } from "../src/metrics";
 import fs from "node:fs";
-import path from "node:path";
 
-const REPORT_PATH = path.resolve("packages/eval/eval-report.json");
-const BASELINE_PATH = path.resolve("packages/eval/baseline.json");
+// The gate reads module-relative fixed paths (CWD-independent), so the tests
+// substitute controlled files at those same exported constants.
 
 let backupReport: string | null = null;
 let backupBaseline: string | null = null;
@@ -79,6 +78,18 @@ describe("check-baseline gate logic", () => {
     const r = checkBaseline(false);
     expect(r.passed).toBe(false);
     expect(r.violations[0]?.metric).toBe("baseline");
+  });
+
+  test("--update-baseline creates a baseline even when none exists yet", () => {
+    // Regression: the missing-baseline early return used to run before the
+    // freeze branch, so the first --update-baseline could never write a file.
+    if (fs.existsSync(BASELINE_PATH)) fs.unlinkSync(BASELINE_PATH);
+    writeReport(makeReport({ dRatio: 0.42 }));
+    const r = checkBaseline(true);
+    expect(r.passed).toBe(true);
+    expect(fs.existsSync(BASELINE_PATH)).toBe(true);
+    const frozen = JSON.parse(fs.readFileSync(BASELINE_PATH, "utf8")) as FullReport;
+    expect(frozen.groups.B?.compressionRatio).toBe(0.42);
   });
 
   test("report within thresholds passes with zero violations", () => {

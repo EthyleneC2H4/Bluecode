@@ -1,0 +1,849 @@
+{
+  "meta": {
+    "timestamp": "2026-08-23T16:43:11.394Z",
+    "tokenCounter": "o200k_base",
+    "versions": {
+      "node": "v26.3.0",
+      "bun": "1.4.0"
+    }
+  },
+  "groups": {
+    "A": {
+      "compressionRatio": 1,
+      "longOutputRatio": 1,
+      "latencyP50Ms": 1.263417000000004,
+      "latencyP95Ms": 6.180000000000007,
+      "recall": {
+        "mustHit": {
+          "found": 0,
+          "total": 0,
+          "rate": 1
+        },
+        "niceToHave": {
+          "found": 0,
+          "total": 0,
+          "rate": 1
+        }
+      },
+      "degradedRate": {
+        "spawn_failed": 0,
+        "timeout": 0,
+        "crash": 0,
+        "protocol": 0,
+        "no_gain": 0,
+        "total": 0,
+        "rate": 0
+      }
+    },
+    "B": {
+      "compressionRatio": 0.3558362695854262,
+      "longOutputRatio": 0.35301444605407456,
+      "latencyP50Ms": 0.8816670000000499,
+      "latencyP95Ms": 24.106042000000002,
+      "recall": {
+        "mustHit": {
+          "found": 75,
+          "total": 94,
+          "rate": 0.7978723404255319
+        },
+        "niceToHave": {
+          "found": 17,
+          "total": 23,
+          "rate": 0.7391304347826086
+        }
+      },
+      "degradedRate": {
+        "spawn_failed": 0,
+        "timeout": 0,
+        "crash": 0,
+        "protocol": 0,
+        "no_gain": 0,
+        "total": 0,
+        "rate": 0
+      }
+    },
+    "C": {
+      "compressionRatio": 0.36514481345428196,
+      "longOutputRatio": 0.31208621600032493,
+      "latencyP50Ms": 0.16291599999999562,
+      "latencyP95Ms": 47.36725000000001,
+      "recall": {
+        "mustHit": {
+          "found": 88,
+          "total": 94,
+          "rate": 0.9361702127659575
+        },
+        "niceToHave": {
+          "found": 21,
+          "total": 23,
+          "rate": 0.9130434782608695
+        }
+      },
+      "degradedRate": {
+        "spawn_failed": 0,
+        "timeout": 0,
+        "crash": 0,
+        "protocol": 0,
+        "no_gain": 0,
+        "total": 0,
+        "rate": 0
+      }
+    },
+    "D": {
+      "compressionRatio": 0.09024914411375165,
+      "longOutputRatio": 0.06523063592423607,
+      "latencyP50Ms": 1.033916999999974,
+      "latencyP95Ms": 27.902458999999908,
+      "recall": {
+        "mustHit": {
+          "found": 74,
+          "total": 94,
+          "rate": 0.7872340425531915
+        },
+        "niceToHave": {
+          "found": 17,
+          "total": 23,
+          "rate": 0.7391304347826086
+        }
+      },
+      "degradedRate": {
+        "spawn_failed": 0,
+        "timeout": 0,
+        "crash": 0,
+        "protocol": 0,
+        "no_gain": 0,
+        "total": 0,
+        "rate": 0
+      }
+    }
+  },
+  "perFixture": [
+    {
+      "fixture": "long-session",
+      "group": "A",
+      "rawTokens": 51083,
+      "outTokens": 51083,
+      "latencyMs": 6.180000000000007,
+      "recallHits": [],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-ls-large",
+      "group": "A",
+      "rawTokens": 6579,
+      "outTokens": 6579,
+      "latencyMs": 1.113584000000003,
+      "recallHits": [],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-grep-hits",
+      "group": "A",
+      "rawTokens": 1748,
+      "outTokens": 1748,
+      "latencyMs": 1.263417000000004,
+      "recallHits": [],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-read-with-lines",
+      "group": "A",
+      "rawTokens": 4081,
+      "outTokens": 4081,
+      "latencyMs": 1.2754580000000146,
+      "recallHits": [],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-git-diff",
+      "group": "A",
+      "rawTokens": 389,
+      "outTokens": 389,
+      "latencyMs": 1.258624999999995,
+      "recallHits": [],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-test-output",
+      "group": "A",
+      "rawTokens": 187,
+      "outTokens": 187,
+      "latencyMs": 1.48683299999999,
+      "recallHits": [],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-noise",
+      "group": "A",
+      "rawTokens": 12118,
+      "outTokens": 12118,
+      "latencyMs": 1.2752920000000358,
+      "recallHits": [],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-ansi-colors",
+      "group": "A",
+      "rawTokens": 2499,
+      "outTokens": 2499,
+      "latencyMs": 1.270167000000015,
+      "recallHits": [],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-carriage-return",
+      "group": "A",
+      "rawTokens": 200,
+      "outTokens": 200,
+      "latencyMs": 1.2563749999999914,
+      "recallHits": [],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-backspace-corruption",
+      "group": "A",
+      "rawTokens": 1150,
+      "outTokens": 1150,
+      "latencyMs": 1.2557089999999675,
+      "recallHits": [],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "long-session",
+      "group": "B",
+      "rawTokens": 51083,
+      "outTokens": 21529,
+      "latencyMs": 24.106042000000002,
+      "recallHits": [
+        "user-query-0-authentication",
+        "user-query-1-database",
+        "assistant-response-2",
+        "must-hit-300",
+        "user-query-3-frontend",
+        "user-query-4-testing",
+        "assistant-response-5",
+        "user-query-6-monitoring",
+        "user-query-7-security",
+        "assistant-response-8",
+        "budget increased for large outputs",
+        "new timeout handling",
+        "new protocol version handling",
+        "user-query-9-refactoring",
+        "user-query-10-authentication",
+        "assistant-response-11",
+        "user-query-12-api",
+        "user-query-13-frontend",
+        "assistant-response-14",
+        "degraded reason \"timeout\" at test line 15",
+        "compression ratio threshold 0.85",
+        "user-query-15-deployment",
+        "user-query-16-monitoring",
+        "assistant-response-17",
+        "user-query-18-performance",
+        "user-query-19-refactoring",
+        "assistant-response-20",
+        "user-query-21-database",
+        "user-query-22-api",
+        "assistant-response-23",
+        "user-query-24-testing",
+        "user-query-25-deployment",
+        "assistant-response-26",
+        "user-query-27-security",
+        "user-query-28-performance",
+        "assistant-response-29",
+        "user-query-30-authentication",
+        "user-query-31-database",
+        "assistant-response-32",
+        "user-query-33-frontend",
+        "user-query-34-testing",
+        "assistant-response-35",
+        "user-query-36-monitoring",
+        "user-query-37-security",
+        "assistant-response-38",
+        "user-query-39-refactoring",
+        "user-query-40-authentication",
+        "assistant-response-41",
+        "user-query-42-api",
+        "user-query-43-frontend",
+        "assistant-response-44",
+        "user-query-45-deployment",
+        "user-query-46-monitoring",
+        "assistant-response-47",
+        "user-query-48-performance",
+        "user-query-49-refactoring",
+        "assistant-response-50",
+        "user-query-51-database",
+        "user-query-52-api",
+        "assistant-response-53",
+        "user-query-54-testing"
+      ],
+      "recallMisses": [
+        "must-hit-50",
+        "must-hit-100",
+        "must-hit-150",
+        "must-hit-200",
+        "must-hit-250"
+      ],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-ls-large",
+      "group": "B",
+      "rawTokens": 6579,
+      "outTokens": 3475,
+      "latencyMs": 1.4658750000000396,
+      "recallHits": [
+        "file_0000.ts",
+        "file_0100.json"
+      ],
+      "recallMisses": [
+        "file_0219.ts"
+      ],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-grep-hits",
+      "group": "B",
+      "rawTokens": 1748,
+      "outTokens": 606,
+      "latencyMs": 1.013791000000026,
+      "recallHits": [
+        "compressHandler",
+        "fetchHandler",
+        "timeoutHandler"
+      ],
+      "recallMisses": [
+        "spawnHandler"
+      ],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-read-with-lines",
+      "group": "B",
+      "rawTokens": 4081,
+      "outTokens": 654,
+      "latencyMs": 0.9913329999999974,
+      "recallHits": [
+        "must-hit-300"
+      ],
+      "recallMisses": [
+        "must-hit-50",
+        "must-hit-100",
+        "must-hit-150",
+        "must-hit-200",
+        "must-hit-250"
+      ],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-git-diff",
+      "group": "B",
+      "rawTokens": 389,
+      "outTokens": 389,
+      "latencyMs": 0.7143750000000182,
+      "recallHits": [
+        "budget increased for large outputs",
+        "new timeout handling",
+        "new protocol version handling"
+      ],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-test-output",
+      "group": "B",
+      "rawTokens": 187,
+      "outTokens": 187,
+      "latencyMs": 0.6849589999999921,
+      "recallHits": [
+        "degraded reason \"timeout\" at test line 15",
+        "compression ratio threshold 0.85"
+      ],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-noise",
+      "group": "B",
+      "rawTokens": 12118,
+      "outTokens": 416,
+      "latencyMs": 2.059249999999963,
+      "recallHits": [],
+      "recallMisses": [
+        "noise-marker-0",
+        "noise-marker-250",
+        "noise-marker-450"
+      ],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-ansi-colors",
+      "group": "B",
+      "rawTokens": 2499,
+      "outTokens": 614,
+      "latencyMs": 0.8816670000000499,
+      "recallHits": [
+        "ansi-marker-99"
+      ],
+      "recallMisses": [
+        "ansi-marker-0"
+      ],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-carriage-return",
+      "group": "B",
+      "rawTokens": 200,
+      "outTokens": 15,
+      "latencyMs": 0.6912080000000174,
+      "recallHits": [
+        "progress-complete"
+      ],
+      "recallMisses": [
+        "progress-0",
+        "progress-100"
+      ],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-backspace-corruption",
+      "group": "B",
+      "rawTokens": 1150,
+      "outTokens": 594,
+      "latencyMs": 0.8704999999999927,
+      "recallHits": [
+        "backspace-marker-49"
+      ],
+      "recallMisses": [
+        "backspace-marker-0"
+      ],
+      "degradedReason": null
+    },
+    {
+      "fixture": "long-session",
+      "group": "C",
+      "rawTokens": 51083,
+      "outTokens": 273,
+      "latencyMs": 47.36725000000001,
+      "recallHits": [
+        "user-query-0-authentication",
+        "user-query-1-database",
+        "assistant-response-2",
+        "must-hit-50",
+        "must-hit-100",
+        "must-hit-150",
+        "must-hit-200",
+        "must-hit-250",
+        "must-hit-300",
+        "user-query-3-frontend",
+        "user-query-4-testing",
+        "assistant-response-5",
+        "user-query-6-monitoring",
+        "user-query-7-security",
+        "assistant-response-8",
+        "budget increased for large outputs",
+        "new timeout handling",
+        "new protocol version handling",
+        "user-query-9-refactoring",
+        "user-query-10-authentication",
+        "assistant-response-11",
+        "user-query-12-api",
+        "user-query-13-frontend",
+        "assistant-response-14",
+        "degraded reason \"timeout\" at test line 15",
+        "compression ratio threshold 0.85",
+        "user-query-15-deployment",
+        "user-query-16-monitoring",
+        "assistant-response-17",
+        "user-query-18-performance",
+        "user-query-19-refactoring",
+        "assistant-response-20",
+        "user-query-21-database",
+        "user-query-22-api",
+        "assistant-response-23",
+        "user-query-24-testing",
+        "user-query-25-deployment",
+        "assistant-response-26",
+        "user-query-27-security",
+        "user-query-28-performance",
+        "assistant-response-29",
+        "user-query-30-authentication",
+        "user-query-31-database",
+        "assistant-response-32",
+        "user-query-33-frontend",
+        "user-query-34-testing",
+        "assistant-response-35",
+        "user-query-36-monitoring",
+        "user-query-37-security",
+        "assistant-response-38",
+        "user-query-39-refactoring",
+        "user-query-40-authentication",
+        "assistant-response-41",
+        "user-query-42-api",
+        "user-query-43-frontend",
+        "assistant-response-44",
+        "user-query-45-deployment",
+        "user-query-46-monitoring",
+        "assistant-response-47",
+        "user-query-48-performance"
+      ],
+      "recallMisses": [
+        "user-query-49-refactoring",
+        "assistant-response-50",
+        "user-query-51-database",
+        "user-query-52-api",
+        "assistant-response-53",
+        "user-query-54-testing"
+      ],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-ls-large",
+      "group": "C",
+      "rawTokens": 6579,
+      "outTokens": 6579,
+      "latencyMs": 0.270958999999948,
+      "recallHits": [
+        "file_0000.ts",
+        "file_0100.json",
+        "file_0219.ts"
+      ],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-grep-hits",
+      "group": "C",
+      "rawTokens": 1748,
+      "outTokens": 1748,
+      "latencyMs": 0.5947499999999764,
+      "recallHits": [
+        "compressHandler",
+        "fetchHandler",
+        "spawnHandler",
+        "timeoutHandler"
+      ],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-read-with-lines",
+      "group": "C",
+      "rawTokens": 4081,
+      "outTokens": 4081,
+      "latencyMs": 0.16291599999999562,
+      "recallHits": [
+        "must-hit-50",
+        "must-hit-100",
+        "must-hit-150",
+        "must-hit-200",
+        "must-hit-250",
+        "must-hit-300"
+      ],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-git-diff",
+      "group": "C",
+      "rawTokens": 389,
+      "outTokens": 389,
+      "latencyMs": 0.09241700000006858,
+      "recallHits": [
+        "budget increased for large outputs",
+        "new timeout handling",
+        "new protocol version handling"
+      ],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-test-output",
+      "group": "C",
+      "rawTokens": 187,
+      "outTokens": 187,
+      "latencyMs": 0.07362499999999272,
+      "recallHits": [
+        "degraded reason \"timeout\" at test line 15",
+        "compression ratio threshold 0.85"
+      ],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-noise",
+      "group": "C",
+      "rawTokens": 12118,
+      "outTokens": 12118,
+      "latencyMs": 0.27370799999994233,
+      "recallHits": [
+        "noise-marker-0",
+        "noise-marker-250",
+        "noise-marker-450"
+      ],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-ansi-colors",
+      "group": "C",
+      "rawTokens": 2499,
+      "outTokens": 2499,
+      "latencyMs": 0.4920839999999771,
+      "recallHits": [
+        "ansi-marker-0",
+        "ansi-marker-99"
+      ],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-carriage-return",
+      "group": "C",
+      "rawTokens": 200,
+      "outTokens": 200,
+      "latencyMs": 0.07966600000008839,
+      "recallHits": [
+        "progress-0",
+        "progress-100",
+        "progress-complete"
+      ],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-backspace-corruption",
+      "group": "C",
+      "rawTokens": 1150,
+      "outTokens": 1150,
+      "latencyMs": 0.07529199999999037,
+      "recallHits": [
+        "backspace-marker-0",
+        "backspace-marker-49"
+      ],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "long-session",
+      "group": "D",
+      "rawTokens": 51083,
+      "outTokens": 273,
+      "latencyMs": 27.902458999999908,
+      "recallHits": [
+        "user-query-0-authentication",
+        "user-query-1-database",
+        "assistant-response-2",
+        "must-hit-50",
+        "must-hit-100",
+        "must-hit-150",
+        "must-hit-200",
+        "must-hit-250",
+        "must-hit-300",
+        "user-query-3-frontend",
+        "user-query-4-testing",
+        "assistant-response-5",
+        "user-query-6-monitoring",
+        "user-query-7-security",
+        "assistant-response-8",
+        "budget increased for large outputs",
+        "new timeout handling",
+        "new protocol version handling",
+        "user-query-9-refactoring",
+        "user-query-10-authentication",
+        "assistant-response-11",
+        "user-query-12-api",
+        "user-query-13-frontend",
+        "assistant-response-14",
+        "degraded reason \"timeout\" at test line 15",
+        "compression ratio threshold 0.85",
+        "user-query-15-deployment",
+        "user-query-16-monitoring",
+        "assistant-response-17",
+        "user-query-18-performance",
+        "user-query-19-refactoring",
+        "assistant-response-20",
+        "user-query-21-database",
+        "user-query-22-api",
+        "assistant-response-23",
+        "user-query-24-testing",
+        "user-query-25-deployment",
+        "assistant-response-26",
+        "user-query-27-security",
+        "user-query-28-performance",
+        "assistant-response-29",
+        "user-query-30-authentication",
+        "user-query-31-database",
+        "assistant-response-32",
+        "user-query-33-frontend",
+        "user-query-34-testing",
+        "assistant-response-35",
+        "user-query-36-monitoring",
+        "user-query-37-security",
+        "assistant-response-38",
+        "user-query-39-refactoring",
+        "user-query-40-authentication",
+        "assistant-response-41",
+        "user-query-42-api",
+        "user-query-43-frontend",
+        "assistant-response-44",
+        "user-query-45-deployment",
+        "user-query-46-monitoring",
+        "assistant-response-47",
+        "user-query-48-performance"
+      ],
+      "recallMisses": [
+        "user-query-49-refactoring",
+        "assistant-response-50",
+        "user-query-51-database",
+        "user-query-52-api",
+        "assistant-response-53",
+        "user-query-54-testing"
+      ],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-ls-large",
+      "group": "D",
+      "rawTokens": 6579,
+      "outTokens": 3475,
+      "latencyMs": 1.505000999999993,
+      "recallHits": [
+        "file_0000.ts",
+        "file_0100.json"
+      ],
+      "recallMisses": [
+        "file_0219.ts"
+      ],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-grep-hits",
+      "group": "D",
+      "rawTokens": 1748,
+      "outTokens": 606,
+      "latencyMs": 1.1962489999998525,
+      "recallHits": [
+        "compressHandler",
+        "fetchHandler",
+        "timeoutHandler"
+      ],
+      "recallMisses": [
+        "spawnHandler"
+      ],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-read-with-lines",
+      "group": "D",
+      "rawTokens": 4081,
+      "outTokens": 654,
+      "latencyMs": 1.124583000000257,
+      "recallHits": [
+        "must-hit-300"
+      ],
+      "recallMisses": [
+        "must-hit-50",
+        "must-hit-100",
+        "must-hit-150",
+        "must-hit-200",
+        "must-hit-250"
+      ],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-git-diff",
+      "group": "D",
+      "rawTokens": 389,
+      "outTokens": 389,
+      "latencyMs": 0.8169579999998859,
+      "recallHits": [
+        "budget increased for large outputs",
+        "new timeout handling",
+        "new protocol version handling"
+      ],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-test-output",
+      "group": "D",
+      "rawTokens": 187,
+      "outTokens": 187,
+      "latencyMs": 0.7730009999997947,
+      "recallHits": [
+        "degraded reason \"timeout\" at test line 15",
+        "compression ratio threshold 0.85"
+      ],
+      "recallMisses": [],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-noise",
+      "group": "D",
+      "rawTokens": 12118,
+      "outTokens": 416,
+      "latencyMs": 2.4900420000001304,
+      "recallHits": [],
+      "recallMisses": [
+        "noise-marker-0",
+        "noise-marker-250",
+        "noise-marker-450"
+      ],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-ansi-colors",
+      "group": "D",
+      "rawTokens": 2499,
+      "outTokens": 614,
+      "latencyMs": 1.033916999999974,
+      "recallHits": [
+        "ansi-marker-99"
+      ],
+      "recallMisses": [
+        "ansi-marker-0"
+      ],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-carriage-return",
+      "group": "D",
+      "rawTokens": 200,
+      "outTokens": 15,
+      "latencyMs": 0.7169160000000829,
+      "recallHits": [
+        "progress-complete"
+      ],
+      "recallMisses": [
+        "progress-0",
+        "progress-100"
+      ],
+      "degradedReason": null
+    },
+    {
+      "fixture": "tool-backspace-corruption",
+      "group": "D",
+      "rawTokens": 1150,
+      "outTokens": 594,
+      "latencyMs": 0.9326240000000325,
+      "recallHits": [
+        "backspace-marker-49"
+      ],
+      "recallMisses": [
+        "backspace-marker-0"
+      ],
+      "degradedReason": null
+    }
+  ]
+}

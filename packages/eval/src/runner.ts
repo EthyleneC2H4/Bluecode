@@ -59,6 +59,56 @@ function extractAllText(messages: FixtureSample["messages"]): string {
   return parts.join("\n");
 }
 
+/**
+ * Recall evidence gathering. Fetch EVERY ref's content and probe one query
+ * per golden fact: "retrievable from headroomd" counts as "not lost" (that
+ * is the component's contract — details move out of context but stay
+ * reachable), so the probe must exercise the full retrieval surface rather
+ * than a single ref/fact sample.
+ *
+ * Runs OFF the latency clock — this is measurement overhead, not product
+ * latency.
+ */
+async function gatherRecallEvidence(
+  headroom: HeadroomClient,
+  sessionId: string,
+  refs: Array<{ contentHash: string }>,
+  facts: string[],
+): Promise<{ retrieveHits: RetrieveHit[]; fetchContent: string | null }> {
+  const chunks: string[] = [];
+  for (const ref of refs) {
+    try {
+      const byHash = await headroom.retrieve({
+        namespace: { projectId: "default", sessionId },
+        hash: ref.contentHash,
+      }) as RetrieveByHashResult;
+      if (byHash.found === true) chunks.push(byHash.content);
+    } catch {
+      // Unreachable ref contributes nothing to recall.
+    }
+  }
+
+  const retrieveHits: RetrieveHit[] = [];
+  for (const fact of facts) {
+    try {
+      const byQuery = await headroom.retrieve({
+        namespace: { projectId: "default", sessionId },
+        query: fact,
+        limit: 5,
+      });
+      if ("hits" in byQuery) retrieveHits.push(...byQuery.hits);
+    } catch {
+      // Query failure counts as a miss via absence of hits.
+    }
+  }
+
+  return { retrieveHits, fetchContent: chunks.length > 0 ? chunks.join("\n") : null };
+}
+
+function goldenFactsOf(fixture: FixtureSample): string[] {
+  return [...fixture.goldenFacts.mustHit, ...fixture.goldenFacts.niceToHave];
+}
+
 async function runGroupA(fixtures: FixtureSample[]): Promise<{
   perFixture: PerFixtureRecord[];
   latencies: LatencySample[];
@@ -113,7 +163,6 @@ async function runGroupB(fixtures: FixtureSample[], options: RunnerOptions): Pro
       let outputText = rawText;
       let degradedReason: "spawn_failed" | "timeout" | "crash" | "protocol" | "no_gain" | null = null;
       let totalOutTokens = 0;
-      let firstCompressedOutput = "";
 
       const start = performance.now();
 
@@ -130,16 +179,12 @@ async function runGroupB(fixtures: FixtureSample[], options: RunnerOptions): Pro
         };
 
         const outcome: CompressOutcome = await rtk.compress(input);
-        const elapsed = performance.now() - start;
 
         if (outcome.kind === "compressed") {
           if (toolOutput !== undefined) {
             outputText = outputText.replace(toolOutput, outcome.result.output);
           }
           totalOutTokens += outcome.result.outTokensEst;
-          if (firstCompressedOutput === "") {
-            firstCompressedOutput = outcome.result.output;
-          }
           if (outcome.result.degraded) {
             degradedReason = outcome.result.degraded.reason;
           }
@@ -156,7 +201,10 @@ async function runGroupB(fixtures: FixtureSample[], options: RunnerOptions): Pro
       const latencyMs = performance.now() - start;
       const outTokens = totalOutTokens || rawTokens;
 
-      const recall = evaluateRecall(fixture, "B", firstCompressedOutput || outputText, [], null);
+      // Recall is judged on the FULL post-compression context (every tool
+      // output replaced) — facts living in untouched message text must count
+      // as retained.
+      const recall = evaluateRecall(fixture, "B", outputText, [], null);
 
       perFixture.push(buildPerFixtureRecord(fixture, "B", rawText, outputText, latencyMs, recall.hits, recall.misses, degradedReason));
       latencies.push({ group: "B", fixture: fixture.name, latencyMs });
@@ -195,48 +243,21 @@ async function runGroupC(fixtures: FixtureSample[], options: RunnerOptions): Pro
       const rawTokens = tokenCounter.count(rawText);
 
       const params = fixturesToHeadroomParams(fixture, options.contextWindowTokens);
+      // Namespace per group: C runs before D against the same daemon and
+      // data dir; a shared session id would have D re-compress an already
+      // stored session instead of its own history.
+      params.sessionId = `${params.sessionId}-c`;
       const start = performance.now();
 
       let compressedOutput: string = "";
-      let retrieveHits: RetrieveHit[] = [];
-      let fetchContent: string | null = null;
+      let compactedRefs: Array<{ contentHash: string }> | null = null;
       let degradedReason: "spawn_failed" | "timeout" | "crash" | "protocol" | "no_gain" | null = null;
 
       try {
         const result = await headroom.compress(params);
         if (result.compacted) {
           compressedOutput = result.summary ?? "";
-          // Retrieve by hash for each ref
-          for (const ref of result.refs) {
-            try {
-              const fetchResult = await headroom.retrieve({
-                namespace: { projectId: "default", sessionId: params.sessionId },
-                hash: ref.contentHash,
-              }) as RetrieveByHashResult;
-              if (fetchResult.found === true) {
-                fetchContent = fetchResult.content;
-                break;
-              }
-            } catch {
-              // ignore fetch errors
-            }
-          }
-          // Also try query retrieve with first golden fact
-          if (fixture.goldenFacts.mustHit.length > 0) {
-            try {
-              const queryResult = await headroom.retrieve({
-                namespace: { projectId: "default", sessionId: params.sessionId },
-                // Length guard above guarantees the element exists.
-                query: fixture.goldenFacts.mustHit[0]!,
-                limit: 5,
-              });
-              if ("hits" in queryResult) {
-                retrieveHits = queryResult.hits;
-              }
-            } catch {
-              // ignore query errors
-            }
-          }
+          compactedRefs = result.refs;
         } else {
           compressedOutput = rawText;
         }
@@ -246,9 +267,15 @@ async function runGroupC(fixtures: FixtureSample[], options: RunnerOptions): Pro
       }
 
       const latencyMs = performance.now() - start;
+
+      // Recall probing runs off the clock — see gatherRecallEvidence.
+      const evidence = compactedRefs !== null
+        ? await gatherRecallEvidence(headroom, params.sessionId, compactedRefs, goldenFactsOf(fixture))
+        : { retrieveHits: [] as RetrieveHit[], fetchContent: null };
+
       const outTokens = tokenCounter.count(compressedOutput || rawText);
 
-      const recall = evaluateRecall(fixture, "C", compressedOutput || rawText, retrieveHits, fetchContent);
+      const recall = evaluateRecall(fixture, "C", compressedOutput || rawText, evidence.retrieveHits, evidence.fetchContent);
 
       perFixture.push(buildPerFixtureRecord(fixture, "C", rawText, compressedOutput || rawText, latencyMs, recall.hits, recall.misses, degradedReason));
       latencies.push({ group: "C", fixture: fixture.name, latencyMs });
@@ -300,7 +327,6 @@ async function runGroupD(fixtures: FixtureSample[], options: RunnerOptions): Pro
       let outputText = rawText;
       let degradedReason: "spawn_failed" | "timeout" | "crash" | "protocol" | "no_gain" | null = null;
       let totalOutTokens = 0;
-      let firstCompressedOutput = "";
 
       // Stage 1: Rtk compression on tool outputs
       const rtkStart = performance.now();
@@ -322,9 +348,6 @@ async function runGroupD(fixtures: FixtureSample[], options: RunnerOptions): Pro
             outputText = outputText.replace(toolOutput, outcome.result.output);
           }
           totalOutTokens += outcome.result.outTokensEst;
-          if (firstCompressedOutput === "") {
-            firstCompressedOutput = outcome.result.output;
-          }
           if (outcome.result.degraded) {
             degradedReason = outcome.result.degraded.reason;
           }
@@ -342,56 +365,34 @@ async function runGroupD(fixtures: FixtureSample[], options: RunnerOptions): Pro
       // Stage 2: Headroom compression on full message history
       const hrStart = performance.now();
       const params = fixturesToHeadroomParams(fixture, options.contextWindowTokens);
+      // Per-group namespace — see the matching note in runGroupC.
+      params.sessionId = `${params.sessionId}-d`;
 
-      let compressedOutput: string = firstCompressedOutput || outputText;
-      let retrieveHits: RetrieveHit[] = [];
-      let fetchContent: string | null = null;
+      // Without compaction the final context is the full rtk-processed text;
+      // with compaction the summary replaces it below.
+      let compressedOutput: string = outputText;
+      let compactedRefs: Array<{ contentHash: string }> | null = null;
 
       try {
         const result = await headroom.compress(params);
         if (result.compacted) {
           compressedOutput = result.summary ?? compressedOutput;
-          // Retrieve by hash for each ref
-          for (const ref of result.refs) {
-            try {
-              const fetchResult = await headroom.retrieve({
-                namespace: { projectId: "default", sessionId: params.sessionId },
-                hash: ref.contentHash,
-              }) as RetrieveByHashResult;
-              if (fetchResult.found === true) {
-                fetchContent = fetchResult.content;
-                break;
-              }
-            } catch {
-              // ignore fetch errors
-            }
-          }
-          // Query retrieve with first golden fact
-          if (fixture.goldenFacts.mustHit.length > 0) {
-            try {
-              const queryResult = await headroom.retrieve({
-                namespace: { projectId: "default", sessionId: params.sessionId },
-                // Length guard above guarantees the element exists.
-                query: fixture.goldenFacts.mustHit[0]!,
-                limit: 5,
-              });
-              if ("hits" in queryResult) {
-                retrieveHits = queryResult.hits;
-              }
-            } catch {
-              // ignore query errors
-            }
-          }
+          compactedRefs = result.refs;
         }
       } catch (err) {
         if (!degradedReason) degradedReason = "crash";
       }
       const hrLatencyMs = performance.now() - hrStart;
 
+      // Recall probing runs off the clock — see gatherRecallEvidence.
+      const evidence = compactedRefs !== null
+        ? await gatherRecallEvidence(headroom, params.sessionId, compactedRefs, goldenFactsOf(fixture))
+        : { retrieveHits: [] as RetrieveHit[], fetchContent: null };
+
       const latencyMs = rtkLatencyMs + hrLatencyMs;
       const outTokens = totalOutTokens || tokenCounter.count(compressedOutput);
 
-      const recall = evaluateRecall(fixture, "D", compressedOutput, retrieveHits, fetchContent);
+      const recall = evaluateRecall(fixture, "D", compressedOutput, evidence.retrieveHits, evidence.fetchContent);
 
       perFixture.push(buildPerFixtureRecord(fixture, "D", rawText, compressedOutput, latencyMs, recall.hits, recall.misses, degradedReason));
       latencies.push({ group: "D", fixture: fixture.name, latencyMs });
