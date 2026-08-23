@@ -1,2 +1,4 @@
-/** @bluecode/contracts - scaffold placeholder; implementation lands in a later milestone. */
-export const VERSION = "0.0.1" as const;
+/** @bluecode/contracts — shared wire schemas and types for all BlueCode protocols. */
+export * from "./errors";
+export * from "./rtk";
+export * from "./headroom";
