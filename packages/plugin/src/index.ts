@@ -25,6 +25,7 @@ import {
   clearPendingPlan,
 } from "./headroom";
 import { headroomRetrieveTool, setHeadroomClient } from "./retrieve-tool";
+import { resolveHeadroomEntry } from "./sidecar";
 import { HeadroomClient } from "@bluecode/headroomd";
 
 // Type for the SDK client (minimal projection to avoid importing opencode-dev)
@@ -56,23 +57,21 @@ export default async function bluecodePlugin(
   try {
     const dataDir = options.dataDir;
     const socketPath = options.headroom.socketPath;
-    const spawnEntry = options.headroom.entry;
-    const spawnCwd = process.cwd();
 
-    const spawnOptions = spawnEntry !== undefined ? { entry: spawnEntry, cwd: spawnCwd } : undefined;
+    // Always supply a spawn recipe (see sidecar.ts / headroom.ts rationale):
+    // without one, HeadroomClient.connect never spawns and a default-config
+    // install cannot self-heal a dead daemon.
+    const spawnOptions = { entry: resolveHeadroomEntry(options), cwd: process.cwd() };
 
-    if (spawnOptions !== undefined) {
-      process.env.BLUECODE_DATA_DIR = dataDir;
-    }
+    process.env.BLUECODE_DATA_DIR = dataDir;
 
     const connectOptions: {
       dataDir: string;
       socketPath?: string;
-      spawn?: { entry: string; cwd: string };
+      spawn: { entry: string; cwd: string };
       timeoutMs: number;
-    } = { dataDir, timeoutMs: 5000 };
+    } = { dataDir, spawn: spawnOptions, timeoutMs: 5000 };
     if (socketPath !== undefined) connectOptions.socketPath = socketPath;
-    if (spawnOptions !== undefined) connectOptions.spawn = spawnOptions;
 
     headroomClientInstance = await HeadroomClient.connect(connectOptions);
     setHeadroomClient(headroomClientInstance);

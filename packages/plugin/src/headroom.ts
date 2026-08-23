@@ -7,6 +7,7 @@ import type { ChatMessage, HeadroomCompressParams } from "@bluecode/contracts";
 import { COMPACTION_MARKER } from "@bluecode/headroomd";
 import { applyPlanInPlace, type CompactionPlan } from "./apply-plan";
 import type { PluginOptions } from "./config";
+import { resolveHeadroomEntry } from "./sidecar";
 
 interface PendingPlan {
   plan: CompactionPlan;
@@ -21,6 +22,9 @@ const inFlightCompress = new Map<string, Promise<void>>();
 
 // Pending plans waiting for messages.transform to consume
 const pendingPlans = new Map<string, PendingPlan>();
+
+/** Fallback context window when the SDK cannot report the model's real limit. */
+const DEFAULT_CONTEXT_WINDOW_TOKENS = 200000;
 
 // Session ID -> model context window cache
 const contextWindowCache = new Map<string, number>();
@@ -45,22 +49,21 @@ async function getHeadroomClient(
   try {
     const dataDir = options.dataDir;
     const socketPath = options.headroom.socketPath;
-    const spawnEntry = options.headroom.entry;
-    const spawnCwd = process.cwd();
 
-    // Prepare spawn options if entry is provided
-    const spawnOptions = spawnEntry !== undefined ? { entry: spawnEntry, cwd: spawnCwd } : undefined;
+    // Always supply a spawn recipe: HeadroomClient.connect only connects when
+    // none is given, so a default-config install could never self-heal a dead
+    // daemon. Resolver precedence: explicit option > BLUECODE_SIDECAR_DIR >
+    // package-relative fallback.
+    const spawnOptions = { entry: resolveHeadroomEntry(options), cwd: process.cwd() };
 
     // If spawning, ensure BLUECODE_DATA_DIR is set for the child
-    if (spawnOptions !== undefined) {
-      process.env.BLUECODE_DATA_DIR = dataDir;
-    }
+    process.env.BLUECODE_DATA_DIR = dataDir;
 
     headroomClient = await HeadroomClient.connect({
       dataDir,
       // exactOptionalPropertyTypes: absent options stay absent, not undefined.
       ...(socketPath !== undefined ? { socketPath } : {}),
-      ...(spawnOptions !== undefined ? { spawn: spawnOptions } : {}),
+      spawn: spawnOptions,
       timeoutMs: 5000,
     });
     return headroomClient;
@@ -134,9 +137,11 @@ async function fetchModelContextWindow(
 }
 
 /**
- * Check if compaction is already in progress for a session.
- * We detect this by checking for the compaction.started event or by
- * seeing if there's already a compaction part in recent messages.
+ * Check if compaction is already in progress (or recently done by us) for a
+ * session. Detection is strictly structural: an upstream compaction tool part,
+ * or our own COMPACTION_MARKER prefix on the latest user message. Never match
+ * free text — a user message merely mentioning "compaction" must not suppress
+ * waterlevel compression.
  */
 function isCompactionInProgress(messages: ChatMessage[]): boolean {
   // Check if the most recent user message has a compaction part
@@ -146,8 +151,8 @@ function isCompactionInProgress(messages: ChatMessage[]): boolean {
     if (msg.info.role === "user") {
       for (const part of msg.parts) {
         if (part.type === "tool" && part.tool === "compaction") return true;
-        // Check for compaction part type in metadata
-        if (part.type === "text" && part.text.includes("compaction")) return true;
+        // Our own applied replacement: role=user, text starts with the marker.
+        if (part.type === "text" && part.text.startsWith(COMPACTION_MARKER)) return true;
       }
       // If we hit a user message without compaction, we're not in compaction
       break;
@@ -208,7 +213,7 @@ export async function handleSessionIdle(
       // Get context window
       let contextWindow = contextWindowCache.get(sessionId);
       if (contextWindow === undefined) {
-        contextWindow = await fetchModelContextWindow(sdkClient, sessionId) ?? 200000; // Fallback
+        contextWindow = await fetchModelContextWindow(sdkClient, sessionId) ?? DEFAULT_CONTEXT_WINDOW_TOKENS;
         if (contextWindow > 0) contextWindowCache.set(sessionId, contextWindow);
       }
 
@@ -262,11 +267,18 @@ export async function handleMessagesTransform(
   const pending = pendingPlans.get(sessionId);
   if (!pending) return; // No plan to apply
 
-  // Apply plan in place (idempotent)
-  applyPlanInPlace(output.messages, pending.plan);
-
-  // Clear the plan after applying
-  pendingPlans.delete(sessionId);
+  // Apply plan in place (idempotent). Delete the plan ONLY when it was
+  // actually applied: the transform hook receives no sessionID (upstream
+  // passes {} at both call sites), so the factory iterates every pending
+  // session — a foreign session's message array matches none of this
+  // plan's replacedMessageIds (opencode message ids are globally unique),
+  // applyPlanInPlace returns false, and the plan must survive for its own
+  // session's next transform. Deleting unconditionally would let one
+  // session consume another's compression result.
+  const applied = applyPlanInPlace(output.messages, pending.plan);
+  if (applied) {
+    pendingPlans.delete(sessionId);
+  }
 }
 
 /**

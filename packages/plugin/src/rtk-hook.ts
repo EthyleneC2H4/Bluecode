@@ -9,6 +9,7 @@
  */
 import { RtkClient, type CompressInput, type CompressOutcome } from "@bluecode/rtk";
 import type { PluginOptions } from "./config";
+import { resolveRtkEntry } from "./sidecar";
 
 let rtkClient: RtkClient | null = null;
 let rtkDegraded = false;
@@ -34,8 +35,10 @@ async function getRtkClient(options: PluginOptions): Promise<RtkClient | null> {
       minBytes: options.rtk.minBytes,
       dataDir: options.dataDir,
     };
-    if (options.rtk.entry !== undefined) {
-      createOptions.entry = options.rtk.entry;
+    // Explicit option > BLUECODE_SIDECAR_DIR > undefined (client self-resolves).
+    const entry = resolveRtkEntry(options);
+    if (entry !== undefined) {
+      createOptions.entry = entry;
     }
     rtkClient = await RtkClient.create(createOptions);
     return rtkClient;

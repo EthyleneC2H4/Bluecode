@@ -91,17 +91,26 @@ describe("sidecar: resolveRtkEntry", () => {
     expect(resolveRtkEntry(options)).toBe("/env/sidecar/rtk/src/bin.ts");
   });
 
-  test("package-relative fallback when no explicit entry or env", () => {
+  test("returns undefined with no explicit entry or env (client self-resolves)", () => {
+    // RtkClient resolves its own module-sibling bin.ts — a plugin-relative
+    // guess would be strictly worse, so tier 3 is undefined by design.
     const options = parseOptions({});
-    const expected = path.resolve(__dirname, "../../rtk/src/bin.ts");
-    expect(resolveRtkEntry(options)).toBe(expected);
+    expect(resolveRtkEntry(options)).toBeUndefined();
   });
 
   test("result is cached", () => {
+    process.env.BLUECODE_SIDECAR_DIR = "/env/sidecar";
     const options = parseOptions({});
     const first = resolveRtkEntry(options);
     const second = resolveRtkEntry(options);
     expect(first).toBe(second);
+  });
+
+  test("cached undefined is also respected", () => {
+    const options = parseOptions({});
+    expect(resolveRtkEntry(options)).toBeUndefined();
+    // Second call must not re-resolve into a different shape.
+    expect(resolveRtkEntry(options)).toBeUndefined();
   });
 });
 

@@ -1,12 +1,24 @@
 /**
- * Sidecar binary location logic.
+ * Sidecar entry resolution.
  *
- * Resolution order (first match wins):
- * 1. Explicit option (rtk.entry / headroom.entry / sidecarDir)
+ * The two sidecars have DIFFERENT default-resolution semantics, so each gets
+ * its own resolver shape:
+ *
+ * - rtk (@bluecode/rtk RtkClient) self-resolves its entry as a sibling of its
+ *   own module ("stable regardless of the caller's layout"), so when neither
+ *   an explicit option nor BLUECODE_SIDECAR_DIR is set we return undefined and
+ *   let the client resolve — guessing a plugin-relative path here would be
+ *   strictly worse than the client's own default.
+ *
+ * - headroomd (HeadroomClient.connect) only connects when no spawn recipe is
+ *   given — it never launches a daemon by itself. The plugin must therefore
+ *   ALWAYS supply an entry for connect-or-spawn to self-heal, so this resolver
+ *   has a package-relative fallback instead of returning undefined.
+ *
+ * Shared precedence (first match wins):
+ * 1. Explicit option (rtk.entry / headroom.entry)
  * 2. Environment variable BLUECODE_SIDECAR_DIR
- * 3. Package-relative paths: ../../rtk/src/bin.ts and ../../headroomd/src/bin.ts
- *    (resolved relative to this file)
- * 4. Throw (caller degrades)
+ * 3. rtk: undefined (client self-resolves) / headroomd: package-relative path
  *
  * Results are cached per process.
  */
@@ -17,13 +29,14 @@ import type { PluginOptions } from "./config";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Cached resolution results
-let cachedRtkEntry: string | null = null;
+let cachedRtkEntry: string | undefined | null = null;
 let cachedHeadroomEntry: string | null = null;
 
 /**
- * Resolve the rtk sidecar entry point.
+ * Resolve the rtk server entry to pass to RtkClient.create.
+ * Returns undefined when the client should use its own module-sibling default.
  */
-export function resolveRtkEntry(options: PluginOptions): string {
+export function resolveRtkEntry(options: PluginOptions): string | undefined {
   if (cachedRtkEntry !== null) return cachedRtkEntry;
 
   // 1. Explicit rtk.entry option
@@ -39,13 +52,15 @@ export function resolveRtkEntry(options: PluginOptions): string {
     return cachedRtkEntry;
   }
 
-  // 3. Package-relative fallback
-  cachedRtkEntry = path.resolve(__dirname, "../../rtk/src/bin.ts");
-  return cachedRtkEntry;
+  // 3. Let RtkClient resolve its own bin (see module docstring).
+  cachedRtkEntry = undefined;
+  return undefined;
 }
 
 /**
- * Resolve the headroomd sidecar entry point.
+ * Resolve the headroomd daemon entry for HeadroomClient.connect's spawn recipe.
+ * Always returns a path: without it connect() never spawns, so a default-config
+ * install could never self-heal a dead daemon.
  */
 export function resolveHeadroomEntry(options: PluginOptions): string {
   if (cachedHeadroomEntry !== null) return cachedHeadroomEntry;

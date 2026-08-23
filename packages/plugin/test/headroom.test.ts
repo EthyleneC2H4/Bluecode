@@ -279,6 +279,77 @@ describe("headroom: messages.transform consumes plan", () => {
 
     expect(output.messages.length).toBe(lenAfterFirst);
   });
+
+  test("cross-session safety: a foreign session's transform retains this plan (no unconditional delete)", async () => {
+    // The transform hook receives no sessionID upstream, so the factory
+    // iterates every pending plan. Session B's transform must apply B's plan
+    // (ids match) while RETAINING session A's plan (no ids match), which A's
+    // own transform applies later.
+    const outputB = {
+      messages: [makeMsg("b-msg-1", "user", "B question"), makeMsg("b-msg-2", "assistant", "B answer")],
+    };
+    setPendingPlan("sess-a", {
+      refs: [],
+      summary: "A summary",
+      replacedMessageIds: ["a-msg-1", "a-msg-2"],
+      historyHash: "hash-a",
+    });
+    setPendingPlan("sess-b", {
+      refs: [],
+      summary: "B summary",
+      replacedMessageIds: ["b-msg-1", "b-msg-2"],
+      historyHash: "hash-b",
+    });
+
+    await handleMessagesTransform(outputB, "sess-b");
+
+    // B applied...
+    expect(outputB.messages.length).toBe(1);
+    // ...A retained (would have been destroyed by an unconditional delete).
+    const pendingA = getPendingPlan("sess-a");
+    if (pendingA === undefined || pendingA instanceof Map) {
+      throw new Error("sess-a plan was wrongly consumed by sess-b's transform");
+    }
+    expect(pendingA.plan.historyHash).toBe("hash-a");
+
+    // A's own transform still applies it.
+    const outputA = {
+      messages: [makeMsg("a-msg-1", "user", "A question"), makeMsg("a-msg-2", "assistant", "A answer")],
+    };
+    await handleMessagesTransform(outputA, "sess-a");
+    expect(outputA.messages.length).toBe(1);
+  });
+
+  test("waterlevel triggers even when a user message merely mentions 'compaction'", async () => {
+    // Regression for over-broad free-text matching in isCompactionInProgress:
+    // prose containing the word must not suppress compression.
+    const sdkClient = createMockSdkClient({
+      messages: [
+        makeSdkMsg("msg-1", "user", "Let's discuss compaction strategies for databases"),
+        makeSdkMsg("msg-2", "assistant", "Sure!", 150000), // >= 140k usable
+      ],
+      modelGet: { limit: { context: 200000 }, id: "claude-3", providerID: "anthropic" },
+    });
+
+    let compressCalled = false;
+    mockHeadroomCompressImpl = async () => {
+      compressCalled = true;
+      return {
+        compacted: true,
+        historyHash: "hist-hash",
+        summary: "Summary",
+        refs: [],
+        replacedMessageIds: ["msg-1", "msg-2"],
+        rawTokens: 150000,
+        summaryTokens: 1000,
+        freedTokens: 149000,
+      };
+    };
+
+    await handleSessionIdle({ sessionID: "sess-free-text" }, sdkClient, defaultOptions);
+
+    expect(compressCalled).toBe(true);
+  });
 });
 
 describe("headroom: compacting hook", () => {
