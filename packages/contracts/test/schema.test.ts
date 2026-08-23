@@ -19,6 +19,7 @@ import {
   requestSchema,
   responseSchema,
   retrieveByHashParamsSchema,
+  retrieveByHashResultSchema,
   retrieveByQueryParamsSchema,
   sha256RefSchema,
   statsResultSchema,
@@ -224,11 +225,17 @@ describe("headroomd protocol v1", () => {
       historyHash: SHA.slice("sha256:".length),
       summary: "sum",
       refs: [{ contentHash: SHA.slice("sha256:".length), role: "user" as const, turnIndex: 0 }],
+      replacedMessageIds: ["m1", "m2"],
       rawTokens: 1000,
       summaryTokens: 100,
       freedTokens: 900,
     };
     expect(headroomCompressResultSchema.parse(compacted).compacted).toBe(true);
+    // missing replacedMessageIds is invalid even when compacted
+    expect(
+      headroomCompressResultSchema.safeParse({ ...compacted, replacedMessageIds: undefined })
+        .success,
+    ).toBe(false);
     // inert result is valid
     expect(
       headroomCompressResultSchema.safeParse({
@@ -236,6 +243,7 @@ describe("headroomd protocol v1", () => {
         historyHash: null,
         summary: null,
         refs: [],
+        replacedMessageIds: [],
         rawTokens: 500,
         summaryTokens: 0,
         freedTokens: 0,
@@ -248,6 +256,7 @@ describe("headroomd protocol v1", () => {
         historyHash: null,
         summary: null,
         refs: [],
+        replacedMessageIds: [],
         rawTokens: 500,
         summaryTokens: 0,
         freedTokens: 12,
@@ -264,6 +273,11 @@ describe("headroomd protocol v1", () => {
     expect(retrieveByHashParamsSchema.safeParse({ namespace: ns, hash: "zz" }).success).toBe(
       false,
     );
+    // found:true requires content (Task 2 review finding, tightened in M4)
+    expect(retrieveByHashResultSchema.safeParse({ found: true }).success).toBe(false);
+    expect(retrieveByHashResultSchema.safeParse({ found: true, content: "raw text" }).success)
+      .toBe(true);
+    expect(retrieveByHashResultSchema.safeParse({ found: false }).success).toBe(true);
   });
 
   test("retrieve query mode fills limit default 5", () => {

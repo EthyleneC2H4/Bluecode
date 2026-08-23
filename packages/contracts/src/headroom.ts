@@ -61,22 +61,31 @@ export const headroomCompressResultSchema = z
     historyHash: z.string().nullable(),
     summary: z.string().nullable(),
     refs: z.array(compactionRefSchema),
+    /**
+     * `info.id` of every message covered by the compression (the turns that
+     * are NOT in the retained tail), in input message order. The plugin
+     * locates and replaces these messages in place via messages.transform;
+     * it must not re-derive turn segmentation itself (it cannot import
+     * daemon internals), so the daemon is the single source of this list.
+     */
+    replacedMessageIds: z.array(z.string()),
     rawTokens: z.number(),
     summaryTokens: z.number(),
     freedTokens: z.number(),
   })
   // Invariant: when nothing was compacted the result is fully inert —
-  // historyHash/summary are null, freedTokens is 0 and refs is empty.
+  // historyHash/summary are null, freedTokens is 0 and both lists are empty.
   .refine(
     (r) =>
       r.compacted ||
       (r.historyHash === null &&
         r.summary === null &&
         r.freedTokens === 0 &&
-        r.refs.length === 0),
+        r.refs.length === 0 &&
+        r.replacedMessageIds.length === 0),
     {
       message:
-        "compacted=false requires historyHash=null, summary=null, freedTokens=0 and refs=[]",
+        "compacted=false requires historyHash=null, summary=null, freedTokens=0, refs=[] and replacedMessageIds=[]",
     },
   );
 export type HeadroomCompressResult = z.infer<typeof headroomCompressResultSchema>;
@@ -119,10 +128,15 @@ export const headroomRetrieveParamsSchema = z.union([
 ]);
 export type HeadroomRetrieveParams = z.input<typeof headroomRetrieveParamsSchema>;
 
-export const retrieveByHashResultSchema = z.object({
-  found: z.boolean(),
-  content: z.string().optional(),
-});
+/**
+ * Discriminated union so `found:true` REQUIRES `content` (a Task 2 review
+ * finding: the loose `{found:boolean, content?}` shape let a found-hit omit
+ * its payload). `found:false` carries no content by construction.
+ */
+export const retrieveByHashResultSchema = z.discriminatedUnion("found", [
+  z.object({ found: z.literal(true), content: z.string() }),
+  z.object({ found: z.literal(false) }),
+]);
 export type RetrieveByHashResult = z.infer<typeof retrieveByHashResultSchema>;
 
 export const retrieveHitSchema = z.object({

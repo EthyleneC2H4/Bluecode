@@ -121,7 +121,8 @@ export const statsResultSchema = z.object({
 export type StatsResult = z.infer<typeof statsResultSchema>;
 
 // simulateCrash: empty params; ONLY effective when BLUECODE_TEST=1 is set in
-// the server environment — any other environment must answer E_INVALID_PARAMS.
+// the server environment — any other environment must answer E_PROTOCOL
+// (the op is gated, not the params: `{}` is valid input).
 // Implemented in M3; exists here so test harnesses can pin the wire shape.
 export const simulateCrashParamsSchema = z.object({});
 
