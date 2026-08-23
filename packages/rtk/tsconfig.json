@@ -1,4 +1,15 @@
 {
   "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      // Workspace packages ship no built declarations (noEmit everywhere), so
+      // map names straight to their sources for tsc. Bun resolves the same
+      // imports at runtime via workspace symlinks in node_modules.
+      "@bluecode/contracts": ["../contracts/src/index.ts"],
+      "@bluecode/shared": ["../shared/src/index.ts"],
+      "@bluecode/rtk-core": ["../rtk-core/src/index.ts"]
+    }
+  },
   "include": ["src/**/*.ts", "test/**/*.ts"]
 }

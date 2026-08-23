@@ -1,9 +1,14 @@
 {
-  "//": "Dependency direction: rtk-core <- rtk; @bluecode/rtk may depend on @bluecode/rtk-core (and transitively shared/contracts). No dependencies installed yet, by design.",
+  "//": "Dependency direction: rtk-core <- rtk; @bluecode/rtk may depend on @bluecode/contracts, @bluecode/shared and @bluecode/rtk-core. External runtime deps: none.",
   "name": "@bluecode/rtk",
   "version": "0.0.1",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bluecode/contracts": "workspace:^",
+    "@bluecode/shared": "workspace:^",
+    "@bluecode/rtk-core": "workspace:^"
   }
 }

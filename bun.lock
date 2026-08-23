@@ -32,6 +32,11 @@
     "packages/rtk": {
       "name": "@bluecode/rtk",
       "version": "0.0.1",
+      "dependencies": {
+        "@bluecode/contracts": "workspace:^",
+        "@bluecode/rtk-core": "workspace:^",
+        "@bluecode/shared": "workspace:^",
+      },
     },
     "packages/rtk-core": {
       "name": "@bluecode/rtk-core",
