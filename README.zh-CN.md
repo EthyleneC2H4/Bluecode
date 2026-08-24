@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Bun](https://img.shields.io/badge/Bun-%E2%89%A51.4-fbf0df?logo=bun&logoColor=black)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.base.json)
-[![Tests](https://img.shields.io/badge/tests-297%20passing-brightgreen)](#快速开始)
+[![Tests](https://img.shields.io/badge/tests-298%20passing-brightgreen)](#快速开始)
 
 [特性](#特性) · [架构](#架构) · [组件](#组件) · [快速开始](#快速开始) · [实测基线](#实测基线) · [文档](#文档)
 
