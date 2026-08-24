@@ -356,3 +356,15 @@
 - **根因**：修复改变了真实行为（如 diff 统计准确化、原型链守卫去误判、UTF-8 不再丢字符），基线反映的是修复前的「含 bug 行为」，非预期目标。
 - **解决方法**：跑 `bun run eval --update-baseline` 冻结新基线；check-baseline 测试组内部的受控场景（基线 0.5/1.0/100）依然全绿，证明门禁逻辑本身无误。
 - **教训**：基线是「当前可接受行为」的快照，而非「理想目标」——每次行为变更（无论是修复还是优化）都要显式 `update-baseline` 并审查 diff，确认变化在预期内；「忽略门禁」等于把质量红线当装饰。
+
+---
+
+## 2026-08-24 · 发布前全维审计与加固
+
+### 43. 五维审计 38 项确认问题的一次性清偿
+
+- **现象**：v1.0 推送后做发布前系统审计（正确性 / 健壮性 / 安全 / 测试缺口 / 文档一致性五维并行 + 对抗验证），38 项确认问题横跨全部七个包——其中四项 HIGH：①apply-plan 幂等守卫过宽，二次压缩被永久拒绝；②rtk 原文不可经 headroom_retrieve 取回（文档承诺落空）；③共享 tmpdir 跨账号可挂载他方 daemon socket；④headroomd 启动自愈遇损坏 CAS 对象会崩溃循环。
+- **根因**：共性有三。①守卫用「首元素」代表「全体」（apply-plan 只看第一条 located 消息）；②两个 sidecar 的存储互不知晓对方寻址空间，而桥接承诺写在工具层却无人实现；③「能跑」路径从未在对抗输入下压测（损坏对象、超限帧、跨账号挂载、boot 失败孤儿进程）。
+- **解决思路**：按包分治——四个包级修复代理各持文件权并行作业（rtk/rtk-core、headroomd、plugin、eval），基础原语先行收敛进 shared（bunSpawnArgv、defaultSidecarDataDir、FrameOverflowError、redactLocalPaths）；桥接明确落在插件工具层而非协议层，两个 daemon 保持互不知晓。
+- **解决方法**：守卫窄化为 every(isCompactionReplacement)；sha256: 前缀哈希在 retrieve-tool 直路由 rtk.fetch；dataDir 改 uid/XDG 命名空间 + dir 0o700 + socket 0o600；rebuildFromObjects try/catch 跳过损坏对象并记 skipped；index.db 加 rebuild_state(expected_chunks) 让自愈一轮收敛；boot 失败统一 settled-guarded fail()（SIGTERM + stderr 持续 drain + unref）；握手改字节级分帧（Bun 会静默丢弃 unshift 回灌的字节，改为 pending 缓冲同步回喂）；late-reply 环形缓冲让三次纯超时不再误杀健康子进程；retrieve limit 三层 clamp（contracts .max(50) → 插件截断 → engine Math.min）；模型可见错误经 redactLocalPaths 脱敏；zod 统一 v4。测试 261→298，基线重冻结后门禁全绿。
+- **教训**：审计的价值密度集中在「不变量被局部推理破坏」处（守卫、水位、幂等）与「承诺无实现」处（检索桥接）——后者只有拿文档逐条对质才会现形。多代理按包分治的关键是先冻结共享接口（contracts/shared 先行提交），让并行修复不互相踩踏；而「对抗验证」环节驳回了 2/40 的候选发现，避免了对幻影问题的无效返工。
