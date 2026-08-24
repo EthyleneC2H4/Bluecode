@@ -1,6 +1,18 @@
 {
   "//": "Dependency direction: contracts <- shared <- {rtk-core, headroomd, plugin, eval}; @bluecode/shared may depend on @bluecode/contracts only. External runtime deps: js-tiktoken (lazy-loaded, eval reports only).",
   "name": "@bluecode/shared",
+  "description": "Foundational utilities: JSONL framing, CAS storage, ANSI stripping, token counting, redaction hooks",
+  "keywords": [
+    "jsonl",
+    "cas",
+    "tokens"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EthyleneC2H4/Bluecode.git",
+    "directory": "packages/shared"
+  },
   "version": "0.0.1",
   "type": "module",
   "scripts": {

@@ -1,6 +1,18 @@
 {
   "//": "Dependency direction: bottom of the graph; @bluecode/contracts must not depend on any other bluecode package.",
   "name": "@bluecode/contracts",
+  "description": "Wire protocol schemas (zod) shared by the BlueCode plugin and its sidecars",
+  "keywords": [
+    "zod",
+    "protocol",
+    "schema"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EthyleneC2H4/Bluecode.git",
+    "directory": "packages/contracts"
+  },
   "version": "0.0.1",
   "type": "module",
   "scripts": {
