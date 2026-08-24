@@ -4,7 +4,7 @@
  * contract (delete index.db -> auto rebuild -> identical answers).
  */
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtemp, readdir, rm, stat, unlink } from "node:fs/promises";
+import { mkdtemp, readdir, rm, stat, unlink, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ChatMessage } from "@bluecode/contracts";
@@ -227,5 +227,103 @@ describe("rebuild consistency (mandatory)", () => {
       hash: compressed.refs[refIndex]!.contentHash,
     });
     expect(byHash).toEqual({ found: true, content: expect.any(String) });
+  });
+});
+
+describe("heal convergence (rebuild-state)", () => {
+  /** Capture console.warn around one createEngine boot; restore in finally. */
+  function captureWarns(): { lines: string[]; restore(): void } {
+    const lines: string[] = [];
+    const original = console.warn;
+    console.warn = (...parts: unknown[]) => lines.push(parts.map(String).join(" "));
+    return { lines, restore: () => (console.warn = original) };
+  }
+
+  test("deleted index.db heals exactly once — the next boot does not rebuild", async () => {
+    const { dir, engine } = await freshEngine();
+    await engine.compress({ ...BASE_PARAMS, messages: history(4) });
+    engine.close();
+    for (const suffix of ["", "-wal", "-shm"]) {
+      await unlink(path.join(dir, `index.db${suffix}`)).catch(() => {});
+    }
+
+    // Boot #1: fresh index.db → legacy fallback fires → rebuild + expectation recorded.
+    const boot1 = captureWarns();
+    let healed: Engine;
+    try {
+      healed = await createEngine({ dataDir: dir });
+      expect(boot1.lines.filter((l) => l.includes("rebuilt derived index")).length).toBe(1);
+    } finally {
+      boot1.restore();
+    }
+    engines.push(healed);
+    healed.close();
+
+    // Boot #2: expectation present and met → converged, no second rebuild.
+    const boot2 = captureWarns();
+    try {
+      const again = await createEngine({ dataDir: dir });
+      engines.push(again);
+      expect(boot2.lines.some((l) => l.includes("rebuilt derived index"))).toBe(false);
+      const hits = await again.retrieve({
+        namespace: { projectId: "p1", sessionId: "s1" },
+        query: "alpha",
+      });
+      if (!("hits" in hits)) throw new Error("expected by-query result");
+      expect(hits.hits.length).toBeGreaterThan(0);
+    } finally {
+      boot2.restore();
+    }
+  }, 15000);
+
+  test("a missing object converges instead of looping the healer", async () => {
+    const { dir, engine } = await freshEngine();
+    await engine.compress({ ...BASE_PARAMS, messages: history(4) });
+
+    // Remove ONE stored object, then force a heal (index.db wipe): the
+    // rebuild legitimately produces fewer chunks than cas_meta rows now —
+    // exactly the PERMANENT chunks<cas_meta state that made the old probe
+    // re-rebuild on every single boot.
+    const objectDir = path.join(dir, "objects");
+    const bucket = (await readdir(objectDir))[0]!;
+    const victim = (await readdir(path.join(objectDir, bucket)))[0]!;
+    await rm(path.join(objectDir, bucket, victim));
+    engine.close();
+    for (const suffix of ["", "-wal", "-shm"]) {
+      await unlink(path.join(dir, `index.db${suffix}`)).catch(() => {});
+    }
+
+    // Boot #1: heals (legacy fallback on the fresh index), one chunk short.
+    const boot1 = captureWarns();
+    let healed: Engine;
+    try {
+      healed = await createEngine({ dataDir: dir });
+      expect(boot1.lines.filter((l) => l.includes("rebuilt derived index")).length).toBe(1);
+    } finally {
+      boot1.restore();
+    }
+    engines.push(healed);
+    healed.close();
+
+    // Boot #2 must NOT heal again: the recorded expectation (original count
+    // minus the missing object) is met — divergence is recorded, not thrashed.
+    const boot2 = captureWarns();
+    try {
+      const again = await createEngine({ dataDir: dir });
+      engines.push(again);
+      expect(boot2.lines.some((l) => l.includes("rebuilt derived index"))).toBe(false);
+    } finally {
+      boot2.restore();
+    }
+  }, 15000);
+
+  test("dataDir is forced to 0700 whatever created it", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "bluecode-hd-perm-"));
+    dirs.push(dir);
+    // Loosen first: proves the chmod overrides an inherited permissive mode.
+    await chmod(dir, 0o755);
+    const engine = await createEngine({ dataDir: dir });
+    engines.push(engine);
+    expect((await stat(dir)).mode & 0o777).toBe(0o700);
   });
 });

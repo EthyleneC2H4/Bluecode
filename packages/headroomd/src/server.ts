@@ -23,7 +23,7 @@
  * 3. pid file records the winner; removed on graceful shutdown.
  */
 import net from "node:net";
-import { existsSync } from "node:fs";
+import { chmodSync, existsSync } from "node:fs";
 import { unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -37,7 +37,7 @@ import {
   type HeadroomResponse,
   type ProtocolError,
 } from "@bluecode/contracts";
-import { createLineReconstructor, encodeFrame } from "@bluecode/shared";
+import { createLineReconstructor, encodeFrame, FrameOverflowError } from "@bluecode/shared";
 import { createEngine, type Engine } from "./engine";
 
 export interface HeadroomServerOptions {
@@ -53,6 +53,12 @@ export interface HeadroomServerOptions {
    * when testMode is on; bin.ts sources it from BLUECODE_TEST_DELAY_MS.
    */
   responseDelayMs?: number;
+  /**
+   * Frame cap fed to each client's line reconstructor (shared default:
+   * 64 MiB). Exposing it lets overflow handling be unit-tested without
+   * 64 MiB buffers.
+   */
+  maxFrameBytes?: number;
 }
 
 export type HeadroomServerStart =
@@ -314,14 +320,37 @@ export async function startHeadroomServer(
     // Handshake first, always: {"proto":1,"pid":<pid>}
     client.write(frameFor({ proto: PROTOCOL_VERSION, pid: process.pid }));
 
-    const lines = createLineReconstructor();
+    const lines = createLineReconstructor(
+      // exactOptionalPropertyTypes: stay absent rather than undefined.
+      ...(options.maxFrameBytes !== undefined ? [{ maxFrameBytes: options.maxFrameBytes }] : []),
+    );
     const decoder = new TextDecoder();
     // Serialize per connection so one client's responses keep arrival order.
     let tail: Promise<void> = Promise.resolve();
 
     client.on("data", (chunk: Buffer) => {
-      for (const line of lines.push(decoder.decode(chunk, { stream: true }))) {
-        tail = tail.then(() => handleLine(client, line)).catch(() => {});
+      try {
+        for (const line of lines.push(decoder.decode(chunk, { stream: true }))) {
+          tail = tail.then(() => handleLine(client, line)).catch(() => {});
+        }
+      } catch (err) {
+        if (!(err instanceof FrameOverflowError)) throw err;
+        // A frame past the cap means the sender has already blown the framing
+        // contract; the reconstructor dropped its partial buffer, so frame
+        // boundaries can no longer be trusted. Answer best-effort — the
+        // socket may not accept writes anymore — then destroy. Logged with
+        // the cap so floods classify distinctly from ordinary E_PROTOCOLs.
+        log(`frame overflow past ${err.maxFrameBytes} bytes: destroying client`);
+        respond(client, {
+          v: PROTOCOL_VERSION,
+          id: UNKNOWN_ID,
+          ok: false,
+          error: {
+            code: ErrorCode.E_PROTOCOL,
+            message: `frame exceeded ${err.maxFrameBytes} bytes without a newline`,
+          },
+        });
+        client.destroy();
       }
     });
     client.on("error", () => {}); // ECONNRESET etc. — handled by close
@@ -352,6 +381,13 @@ export async function startHeadroomServer(
   }
 
   await writeFile(pidPath, String(process.pid), "utf8");
+  // Cross-account hardening: 0600 on the socket means only the daemon owner
+  // can attach (and only the owner could have bound/squatted this path).
+  // Complements the uid-namespaced default dirs in @bluecode/shared — the
+  // plugin may hand us an explicit dataDir, so chmod regardless. macOS
+  // tmpdir is already per-user; this closes Linux /tmp vectors regardless of
+  // umask.
+  chmodSync(socketPath, 0o600);
   armIdleTimer(); // born idle: exit timer starts with zero clients
 
   function shutdown(): void {

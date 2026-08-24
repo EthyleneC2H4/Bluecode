@@ -1,6 +1,19 @@
 {
   "//": "Dependency direction: contracts <- shared <- {rtk-core, headroomd, plugin, eval}; @bluecode/headroomd may depend on @bluecode/contracts and @bluecode/shared only. External runtime deps: none (bun:sqlite and node:zlib are built in).",
   "name": "@bluecode/headroomd",
+  "description": "Unix-domain-socket daemon for long-session history compaction with deterministic summaries and SQLite/CAS archival",
+  "keywords": [
+    "daemon",
+    "compaction",
+    "sqlite",
+    "fts5"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EthyleneC2H4/Bluecode.git",
+    "directory": "packages/headroomd"
+  },
   "version": "0.0.1",
   "type": "module",
   "scripts": {

@@ -13,6 +13,7 @@
  * version. The field rides along for forward compatibility only.
  */
 import { mkdir } from "node:fs/promises";
+import { chmodSync } from "node:fs";
 import type {
   ChatMessage,
   HeadroomCompressParamsParsed,
@@ -22,12 +23,11 @@ import type {
 } from "@bluecode/contracts";
 import { estimateTokens } from "@bluecode/shared";
 import {
-  countCasMeta,
-  countChunks,
   countSessions,
   ftsHealthy,
   getHistory,
   hasChunk,
+  indexLooksLost,
   insertCasMeta,
   openStore,
   rebuildFromObjects,
@@ -56,6 +56,9 @@ export interface EngineOptions {
   dataDir: string;
 }
 
+/** Mirrors retrieveByQueryParamsSchema's max(limit); see retrieve's clamp. */
+const RETRIEVE_LIMIT_CAP = 50;
+
 export interface Engine {
   readonly dataDir: string;
   compress(params: HeadroomCompressParamsParsed): Promise<HeadroomCompressResult>;
@@ -68,16 +71,26 @@ export interface Engine {
 export async function createEngine(options: EngineOptions): Promise<Engine> {
   const dataDir = options.dataDir;
   await mkdir(dataDir, { recursive: true });
+  // Cross-account hardening: the plugin may pass an explicit dataDir anywhere
+  // (shared's defaultSidecarDataDir uid-namespaces only its OWN defaults), so
+  // chmod regardless of how the dir got here. macOS tmpdirs are already
+  // per-user; this closes Linux /tmp attach/bind/squat vectors no matter what
+  // umask the spawning shell had.
+  chmodSync(dataDir, 0o700);
   const store = openStore(dataDir);
 
   // Self-heal on startup. The derived index is rebuilt from objects +
   // meta.cas_meta when it is corrupt, speaks a foreign schema version, or
-  // looks truncated (attribution rows exist that the index cannot account
-  // for — e.g. index.db was deleted; meta.db always outlives it).
-  const indexLooksLost =
-    countCasMeta(store.meta) > 0 && countChunks(store.index) < countCasMeta(store.meta);
-  if (schemaMismatch(store.index) || !ftsHealthy(store.index) || indexLooksLost) {
-    await rebuildFromObjects(dataDir, store.meta, store.index);
+  // looks lost (indexLooksLost: rows below the last rebuild's recorded
+  // expectation, with a legacy fallback for fresh/deleted index.dbs — see
+  // db.ts for why the naive chunks-vs-cas_meta comparison heal-thrashed).
+  if (schemaMismatch(store.index) || !ftsHealthy(store.index) || indexLooksLost(store.index, store.meta)) {
+    const healed = await rebuildFromObjects(dataDir, store.meta, store.index);
+    // A self-heal is an anomaly signal, not routine housekeeping — surface it
+    // so divergence and heal-thrash regressions are diagnosable from logs.
+    console.warn(
+      `[headroomd] rebuilt derived index: ${healed.chunks} chunks, ${healed.histories} histories, ${healed.skipped} objects skipped`,
+    );
   }
 
   return {
@@ -369,6 +382,14 @@ async function retrieve(
   const matchExpression = buildMatchQuery(params.query);
   if (matchExpression === null) return { hits: [] };
   return {
-    hits: searchChunks(index.db, params.namespace, matchExpression, params.limit ?? 5),
+    // Defense-in-depth against schema drift: contracts cap limit at 50, but
+    // direct UDS clients bypass the plugin tool, so clamp here too — one
+    // unbounded query must not dump the whole archive into model context.
+    hits: searchChunks(
+      index.db,
+      params.namespace,
+      matchExpression,
+      Math.min(params.limit ?? 5, RETRIEVE_LIMIT_CAP),
+    ),
   };
 }

@@ -68,6 +68,14 @@ CREATE TABLE IF NOT EXISTS chunks(
   raw_excerpt TEXT NOT NULL,
   keywords TEXT NOT NULL
 );
+-- One-row heal bookkeeping: the chunk count the last full rebuild produced.
+-- Without it, indexLooksLost's "chunks < cas_meta" probe stays true forever
+-- once any object goes missing (objects are truth, so a rebuild legitimately
+-- writes fewer chunks than cas_meta rows), and the daemon rebuilt on EVERY
+-- boot. Existing index.dbs gain the empty table automatically via IF NOT
+-- EXISTS; an absent row means "no recorded expectation" and falls back to the
+-- legacy comparison. See indexLooksLost.
+CREATE TABLE IF NOT EXISTS rebuild_state(expected_chunks INTEGER NOT NULL);
 `;
 
 function openDbWith(path: string, schema: string): HeadroomDb {
@@ -231,6 +239,27 @@ export function countChunks(handle: HeadroomDb): number {
   return (handle.db.prepare(`SELECT COUNT(*) AS n FROM chunks`).get() as { n: number }).n;
 }
 
+/**
+ * Whether index.db needs the startup rebuild, per the heal-thrash fix:
+ *
+ * - No rebuild_state row (fresh or deleted index.db — nothing recorded yet):
+ *   fall back to the legacy attribution-vs-chunks comparison.
+ * - Row present: fire only when chunks fell BELOW the last rebuild's
+ *   expectation (rows genuinely lost). Strictly less-than, so normal growth
+ *   never false-triggers and a missing OBJECT (a legitimate rebuild skip,
+ *   leaving chunks < cas_meta permanently) converges after one repair instead
+ *   of re-rebuilding every boot.
+ */
+export function indexLooksLost(indexHandle: HeadroomDb, metaHandle: HeadroomDb): boolean {
+  const recorded = indexHandle.db
+    .prepare(`SELECT expected_chunks AS n FROM rebuild_state`)
+    .get() as { n: number } | null;
+  if (recorded === null) {
+    return countCasMeta(metaHandle) > 0 && countChunks(indexHandle) < countCasMeta(metaHandle);
+  }
+  return countChunks(indexHandle) < recorded.n;
+}
+
 // ---------------------------------------------------------------------------
 // Rebuild: objects + cas_meta are facts; everything in index.db is derivable.
 // ---------------------------------------------------------------------------
@@ -255,13 +284,18 @@ interface CasMetaRow {
  * Two phases: async object prefetch OUTSIDE the transaction (bun:sqlite
  * transaction callbacks are synchronous), then one sync write transaction.
  * cas_meta rows whose object vanished are skipped — the object store is
- * truth.
+ * truth. A PRESENT but corrupt object (truncated gzip / bad JSON) is also
+ * skipped, counted and warned: readMessageObject throws on those, and the
+ * old bare await let one bad block escape the startup self-heal and crash-
+ * loop the daemon (devlog #37's scenario; #37's JSON.stringify re-validation
+ * was dead code — the throw happens inside the read, before any stringify).
+ * Objects and cas_meta rows are never deleted either way.
  */
 export async function rebuildFromObjects(
   dataDir: string,
   metaHandle: HeadroomDb,
   indexHandle: HeadroomDb,
-): Promise<{ chunks: number; histories: number }> {
+): Promise<{ chunks: number; histories: number; skipped: number }> {
   const metas = metaHandle.db
     .prepare(
       `SELECT hash, project_id, session_id, role, turn_index, msg_seq, history_hash, created_at
@@ -270,22 +304,21 @@ export async function rebuildFromObjects(
     .all() as CasMetaRow[];
 
   const resolved: Array<{ meta: CasMetaRow; message: ChatMessage }> = [];
+  let skipped = 0;
   for (const meta of metas) {
-    const projection = await readMessageObject(dataDir, meta.hash);
-    if (projection === null) continue;
-    resolved.push({ meta, message: { info: projection.info, parts: projection.parts } });
-  }
-
-  // Filter out any messages that fail to deserialize (corrupted objects)
-  const validResolved: typeof resolved = [];
-  for (const r of resolved) {
     try {
-      // Force re-serialize to validate the object is intact
-      JSON.stringify(r.message);
-      validResolved.push(r);
-    } catch {
-      // Corrupted object - skip it, log if needed
-      continue;
+      const projection = await readMessageObject(dataDir, meta.hash);
+      if (projection === null) continue; // vanished object: cas_meta outlives it
+      resolved.push({ meta, message: { info: projection.info, parts: projection.parts } });
+    } catch (err) {
+      // Corrupt stored object: degrade to "one item lost" instead of aborting
+      // the whole heal. Named hash + error keeps divergence diagnosable.
+      skipped += 1;
+      console.warn(
+        `[headroomd] rebuild: skipping corrupt object ${meta.hash}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
     }
   }
 
@@ -301,7 +334,7 @@ export async function rebuildFromObjects(
     }
   >();
 
-  for (const { meta, message } of validResolved) {
+  for (const { meta, message } of resolved) {
     const summaryText = messageSummary(message);
     const rawExcerpt = messageExcerpt(message);
     chunkWrites.push({
@@ -360,8 +393,15 @@ export async function rebuildFromObjects(
       // because cas_meta itself is the stable input.
       upsertHistory(indexHandle, write.row, write.createdAt);
     }
+    // Record the heal expectation INSIDE the same transaction as the rows it
+    // describes, so indexLooksLost can never observe one without the other
+    // (delete-then-insert: single-row table needs no unique constraint).
+    indexHandle.db.exec("DELETE FROM rebuild_state");
+    indexHandle.db
+      .prepare(`INSERT INTO rebuild_state(expected_chunks) VALUES (?)`)
+      .run(chunkWrites.length);
   });
   apply();
 
-  return { chunks: chunkWrites.length, histories: historyWrites.length };
+  return { chunks: chunkWrites.length, histories: historyWrites.length, skipped };
 }

@@ -1,14 +1,17 @@
 /**
  * HeadroomClient behavior: connect-or-spawn against a real bin.ts process,
- * per-request timeout (late frames dropped, connection retained), and
- * post-close rejection.
+ * per-request timeout (late frames dropped, connection retained), post-close
+ * rejection, spawn argv selection, byte-level handshake framing, boot-fail
+ * child cleanup, and frame-overflow teardown.
  */
 import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { HeadroomClient } from "../src/client";
+import net from "node:net";
+import { FrameOverflowError } from "@bluecode/shared";
+import { attemptConnect, daemonSpawnArgv, HeadroomClient } from "../src/client";
 import { startHeadroomServer } from "../src/server";
 
 const pkgRoot = path.resolve(import.meta.dir, "..");
@@ -30,6 +33,102 @@ async function freshDir(): Promise<string> {
   dirs.push(dir);
   return dir;
 }
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Scripted UDS peer running `script` per connection; closed in afterAll. */
+function serve(socketPath: string, script: (sock: net.Socket) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer((sock) => {
+      sock.on("error", () => {}); // client-side destroys surface here
+      script(sock);
+    });
+    stops.push(() => server.close());
+    server.once("error", reject);
+    server.listen(socketPath, () => resolve());
+  });
+}
+
+describe("spawn argv construction", () => {
+  test("bun runtime rides execPath through; compiled host falls back to PATH bun; args appended", () => {
+    // Real bun runtime: basename check passes, execPath stays.
+    expect(daemonSpawnArgv({ entry: "src/bin.ts" }, "/Users/x/.bun/bin/bun")).toEqual([
+      "/Users/x/.bun/bin/bun",
+      "run",
+      "src/bin.ts",
+    ]);
+    // Compiled host (M7 smoke / devlog #32): execPath is the host binary —
+    // must fall back to "bun" from PATH or the daemon never boots.
+    expect(daemonSpawnArgv({ entry: "src/bin.ts" }, "/usr/local/bin/opencode")).toEqual([
+      "bun",
+      "run",
+      "src/bin.ts",
+    ]);
+    // Caller args ride after the interpreter pair, never before it.
+    expect(
+      daemonSpawnArgv({ entry: "src/bin.ts", args: ["--flag", "v"] }, "/usr/local/bin/opencode"),
+    ).toEqual(["bun", "run", "src/bin.ts", "--flag", "v"]);
+  });
+});
+
+describe("handshake framing (byte-level)", () => {
+  test("handshake split across two chunks connects and loses nothing", async () => {
+    const socketPath = path.join(await freshDir(), "split.sock");
+    await serve(socketPath, (sock) => {
+      sock.write('{"proto":1,"pi');
+      setTimeout(() => sock.write('d":4242}\n'), 40);
+      setTimeout(() => sock.write(`${JSON.stringify({ later: true })}\n`), 140);
+    });
+    const { socket, pending } = await attemptConnect(socketPath);
+    // The handshake straddled two chunks; nothing else had arrived yet.
+    expect(pending.length).toBe(0);
+    let received = "";
+    socket.on("data", (chunk: Buffer) => {
+      received += chunk.toString("utf8");
+    });
+    await sleep(250);
+    // The post-handshake frame arrives whole and exactly once.
+    expect(received).toBe(`${JSON.stringify({ later: true })}\n`);
+    socket.destroy();
+  });
+
+  test("handshake plus following frames in one chunk hands them back via pending", async () => {
+    const socketPath = path.join(await freshDir(), "combined.sock");
+    const first = JSON.stringify({ seq: 1 });
+    const second = JSON.stringify({ seq: 2 });
+    await serve(socketPath, (sock) => {
+      sock.write(`{"proto":1,"pid":7}\n${first}\n${second}\n`);
+    });
+    const { socket, pending } = await attemptConnect(socketPath);
+    // Multi-line-first-chunk: everything past the handshake comes back as
+    // unconsumed bytes, byte-identical and in wire order.
+    expect(pending.toString("utf8")).toBe(`${first}\n${second}\n`);
+    // And they are NOT also re-emitted by the socket (no double delivery).
+    let received = "";
+    socket.on("data", (chunk: Buffer) => {
+      received += chunk.toString("utf8");
+    });
+    await sleep(80);
+    expect(received).toBe("");
+    socket.destroy();
+  });
+
+  test("incomplete handshake keeps waiting for the timeout instead of failing empty", async () => {
+    const socketPath = path.join(await freshDir(), "partial.sock");
+    await serve(socketPath, (sock) => {
+      sock.write('{"proto":1,'); // never completed by the server
+    });
+    let thrown: unknown;
+    try {
+      await attemptConnect(socketPath);
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as Error).message).toContain("connect timeout");
+  });
+});
 
 describe("connect-or-spawn", () => {
   test("spawns a daemon via the documented recipe and serves requests", async () => {
@@ -82,6 +181,69 @@ describe("connect-or-spawn", () => {
     }
     expect(thrown).toBeInstanceOf(Error);
     expect((thrown as Error).message).toContain("cannot connect");
+  });
+
+  test("boot failure kills the silent child gracefully — no orphan remains", async () => {
+    const workDir = await freshDir(); // holds the fake entry
+    const dataDir = await freshDir(); // socket never comes up here → spawn path
+    const sentinel = path.join(workDir, "sigterm-sentinel.txt");
+    // Fake daemon: prints one non-handshake line, then hangs forever — the
+    // exact shape that used to leak the child on the boot-validation reject
+    // paths. It writes a sentinel ONLY from its SIGTERM handler, so the
+    // sentinel's existence proves fail() killed it via graceful SIGTERM and
+    // the child actually exited (no orphan, no event-loop pin).
+    await writeFile(
+      path.join(workDir, "silent-daemon.ts"),
+      [
+        `import { writeFileSync } from "node:fs";`,
+        `process.on("SIGTERM", () => {`,
+        `  const p = process.env.HD_SENTINEL;`,
+        `  if (p) writeFileSync(p, String(process.pid));`,
+        `  process.exit(0);`,
+        `});`,
+        `process.stdout.write("starting up, but this is no handshake\\n");`,
+        `setInterval(() => {}, 1000);`,
+        ``,
+      ].join("\n"),
+    );
+    const previousSentinel = process.env.HD_SENTINEL;
+    process.env.HD_SENTINEL = sentinel; // client spreads process.env into the child
+    let thrown: unknown;
+    try {
+      await HeadroomClient.connect({
+        socketPath: path.join(dataDir, "absent.sock"),
+        spawn: { entry: "silent-daemon.ts", cwd: workDir },
+      });
+    } catch (err) {
+      thrown = err;
+    } finally {
+      if (previousSentinel === undefined) delete process.env.HD_SENTINEL;
+      else process.env.HD_SENTINEL = previousSentinel;
+    }
+    expect((thrown as Error).message).toContain("no handshake line");
+
+    for (let i = 0; i < 100 && !existsSync(sentinel); i++) {
+      await sleep(50);
+    }
+    expect(existsSync(sentinel)).toBe(true);
+  }, 15000);
+
+  test("oversized frame fails in-flight requests with FrameOverflowError and tears down", async () => {
+    const socketPath = path.join(await freshDir(), "overflow.sock");
+    await serve(socketPath, (sock) => {
+      sock.write('{"proto":1,"pid":9}\n');
+      setTimeout(() => sock.write("x".repeat(2048)), 40); // unterminated flood frame
+    });
+    const client = await HeadroomClient.connect({ socketPath, maxFrameBytes: 1024 });
+    let err: Error | null = null;
+    try {
+      await client.health();
+    } catch (caught) {
+      err = caught as Error;
+    }
+    expect(err).toBeInstanceOf(FrameOverflowError);
+    expect(err?.message).toContain("1024");
+    await client.close().catch(() => {});
   });
 });
 

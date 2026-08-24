@@ -4,7 +4,7 @@
  * rebuild determinism.
  */
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ChatMessage } from "@bluecode/contracts";
@@ -259,5 +259,61 @@ describe("db lifecycle + rebuild", () => {
     const result = await rebuildFromObjects(dir, meta, handle);
     expect(result.chunks).toBe(0);
     expect(result.histories).toBe(0);
+  });
+
+  test("one corrupt object among good ones is skipped and counted, rebuild still succeeds", async () => {
+    const { dir, meta, index: handle } = await freshDb("corrupt");
+    const good: ChatMessage[] = [
+      user("u1", "survives the corruption"),
+      user("u2", "also survives"),
+    ];
+    let seq = 0;
+    for (const [index, message] of good.entries()) {
+      const hash = await contentHash(message);
+      await writeMessageObject(dir, message, hash);
+      insertCasMeta(meta, {
+        hash,
+        projectId: "p",
+        sessionId: "s",
+        role: message.info.role,
+        turnIndex: index,
+        msgSeq: seq++,
+        historyHash: "hh",
+        createdAt: 10,
+      });
+    }
+
+    // Plant a PRESENT but corrupt object (valid-shaped hash, garbage body —
+    // readMessageObject throws inside gunzip/JSON.parse; a bare await used to
+    // abort the whole heal and crash-loop startup).
+    const badHash = "de" + "0".repeat(62);
+    const badDir = path.join(dir, "objects", "de");
+    await mkdir(badDir, { recursive: true });
+    await writeFile(path.join(badDir, badHash), Buffer.from("definitely-not-gzip"));
+    insertCasMeta(meta, {
+      hash: badHash,
+      projectId: "p",
+      sessionId: "s",
+      role: "assistant",
+      turnIndex: 9,
+      msgSeq: seq++,
+      historyHash: "hh",
+      createdAt: 11,
+    });
+
+    const warns: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...parts: unknown[]) => warns.push(parts.map(String).join(" "));
+    let result: Awaited<ReturnType<typeof rebuildFromObjects>>;
+    try {
+      result = await rebuildFromObjects(dir, meta, handle);
+    } finally {
+      console.warn = originalWarn;
+    }
+    // Exactly the corrupt one skipped; goods fully rebuilt; warn names the hash.
+    expect(result.skipped).toBe(1);
+    expect(result.chunks).toBe(good.length);
+    expect(warns.some((line) => line.includes("skipping corrupt object") && line.includes(badHash)))
+      .toBe(true);
   });
 });

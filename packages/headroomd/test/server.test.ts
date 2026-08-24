@@ -31,6 +31,8 @@ function user(id: string, text: string): ChatMessage {
 
 interface RawClient {
   pid: number;
+  /** Underlying socket, for asserting server-initiated teardown. */
+  socket: net.Socket;
   sendRaw(text: string): void;
   /** Send one request frame; resolve on the response carrying its id. */
   roundtrip(value: unknown, timeoutMs?: number): Promise<Record<string, unknown>>;
@@ -81,6 +83,7 @@ function rawConnect(socketPath: string): Promise<RawClient> {
           handshaken = true;
           resolve({
             pid: frame.pid,
+            socket,
             sendRaw: (text) => socket.write(text),
             roundtrip: (value, timeoutMs = 2000) =>
               new Promise((res, rej) => {
@@ -215,5 +218,28 @@ describe("socket protocol", () => {
       await new Promise((r) => setTimeout(r, 20));
     }
     expect(clean()).toBe(true);
+  });
+});
+
+describe("frame overflow handling", () => {
+  test("oversized frame answers best-effort E_PROTOCOL then destroys the client", async () => {
+    const dir = await freshDir();
+    const started = await startHeadroomServer({ dataDir: dir, maxFrameBytes: 1024 });
+    if (started.status !== "listening") throw new Error("expected listening");
+    stops.push(started.stop);
+
+    const client = await rawConnect(started.socketPath);
+    const closedByServer = new Promise<void>((resolve) => client.socket.once("close", resolve));
+
+    // One giant unterminated frame: past maxFrameBytes with no newline.
+    client.sendRaw("x".repeat(2000));
+
+    const overflow = await client.nextResponse();
+    expect(overflow.ok).toBe(false);
+    expect((overflow.error as Record<string, unknown>).code).toBe("E_PROTOCOL");
+    expect(String((overflow.error as Record<string, unknown>).message)).toContain("1024");
+
+    // The connection does not survive the overflow: server tore it down.
+    await closedByServer;
   });
 });
