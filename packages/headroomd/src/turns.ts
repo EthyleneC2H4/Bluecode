@@ -76,8 +76,12 @@ function canonicalValue(value: unknown): string {
   return JSON.stringify(String(value));
 }
 
-/** Hash input for one message: role + concatenated text + tool projections. */
+/** Hash input for one message: role + concatenated text + tool projections.
+ * Includes message.info.id to prevent cross-session collisions where
+ * byte-identical messages in different sessions would otherwise share
+ * the same contentHash (verified by adversarial review). */
 export function messageHashInput(message: ChatMessage): {
+  id: string;
   role: string;
   textParts: string;
   toolParts: Array<{ tool: string; output: string }>;
@@ -91,7 +95,7 @@ export function messageHashInput(message: ChatMessage): {
       toolParts.push({ tool: part.tool, output: part.state.output ?? "" });
     }
   }
-  return { role: message.info.role, textParts, toolParts };
+  return { id: message.info.id, role: message.info.role, textParts, toolParts };
 }
 
 /** Per-message content hash: sha256 of the canonical projection. */

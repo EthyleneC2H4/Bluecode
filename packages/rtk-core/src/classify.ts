@@ -30,8 +30,12 @@ const TOOL_STRATEGY: Record<string, StrategyName> = {
 const CONFIDENCE_THRESHOLD = 0.6;
 
 export function classify(tool: string, output: string): Classification {
-  const mapped = TOOL_STRATEGY[tool];
-  if (mapped !== undefined) {
+  // Guard against prototype pollution: Object.prototype properties
+  // (toString, constructor, valueOf, hasOwnProperty, __proto__) must not
+  // match explicit tool mappings. Use hasOwnProperty check.
+  if (Object.prototype.hasOwnProperty.call(TOOL_STRATEGY, tool)) {
+    // hasOwnProperty narrows the type, but TS doesn't know that — cast is safe.
+    const mapped = TOOL_STRATEGY[tool] as StrategyName;
     return { strategy: mapped, confidence: 1, signals: [`tool_id:${tool} -> ${mapped}`] };
   }
   return classifyByFeatures(tool, output);

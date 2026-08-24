@@ -18,6 +18,37 @@ interface PendingPlan {
 let headroomClient: HeadroomClient | null = null;
 let headroomDegraded = false;
 
+/**
+ * Set the shared HeadroomClient instance (called by plugin factory).
+ * This is the SINGLE client instance used by both headroom.ts and retrieve-tool.ts.
+ */
+export function setSharedHeadroomClient(client: HeadroomClient | null): void {
+  headroomClient = client;
+  if (client === null) headroomDegraded = false;
+}
+
+/**
+ * Get the shared HeadroomClient instance.
+ * Returns null if not initialized or degraded.
+ */
+export function getSharedHeadroomClient(): HeadroomClient | null {
+  return headroomClient;
+}
+
+/**
+ * Check if headroom is degraded (connection failed).
+ */
+export function isHeadroomDegraded(): boolean {
+  return headroomDegraded;
+}
+
+/**
+ * Mark headroom as degraded.
+ */
+export function setHeadroomDegraded(degraded: boolean): void {
+  headroomDegraded = degraded;
+}
+
 // In-flight compress guard per session - stores the promise of the in-flight operation
 const inFlightCompress = new Map<string, Promise<void>>();
 
@@ -37,42 +68,17 @@ interface ModelInfo {
 }
 
 /**
- * Get or create the HeadroomClient singleton.
- * On connection failure, logs and returns null (headroom disabled for this session).
+ * Get the shared HeadroomClient singleton.
+ * Returns the client initialized by the plugin factory, or null if not initialized/degraded.
+ * Does NOT create a new client - initialization happens once in the plugin factory.
  */
 async function getHeadroomClient(
-  options: PluginOptions,
-  sdkClient: ReturnType<typeof import("@opencode-ai/sdk").createOpencodeClient> | null,
+  _options: PluginOptions,
+  _sdkClient: ReturnType<typeof import("@opencode-ai/sdk").createOpencodeClient> | null,
 ): Promise<HeadroomClient | null> {
   if (headroomClient !== null) return headroomClient;
   if (headroomDegraded) return null;
-
-  try {
-    const dataDir = options.dataDir;
-    const socketPath = options.headroom.socketPath;
-
-    // Always supply a spawn recipe: HeadroomClient.connect only connects when
-    // none is given, so a default-config install could never self-heal a dead
-    // daemon. Resolver precedence: explicit option > BLUECODE_SIDECAR_DIR >
-    // package-relative fallback.
-    const spawnOptions = { entry: resolveHeadroomEntry(options), cwd: process.cwd() };
-
-    // If spawning, ensure BLUECODE_DATA_DIR is set for the child
-    process.env.BLUECODE_DATA_DIR = dataDir;
-
-    headroomClient = await HeadroomClient.connect({
-      dataDir,
-      // exactOptionalPropertyTypes: absent options stay absent, not undefined.
-      ...(socketPath !== undefined ? { socketPath } : {}),
-      spawn: spawnOptions,
-      timeoutMs: 5000,
-    });
-    return headroomClient;
-  } catch (err) {
-    headroomDegraded = true;
-    console.error(`[bluecode-plugin] headroom client connection failed, degrading: ${(err as Error).message}`);
-    return null;
-  }
+  return null; // Not initialized yet - plugin factory will initialize it
 }
 
 /**

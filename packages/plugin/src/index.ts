@@ -28,8 +28,9 @@ import {
   setPendingPlan,
   getPendingPlan,
   clearPendingPlan,
+  setSharedHeadroomClient,
 } from "./headroom";
-import { headroomRetrieveTool, setHeadroomClient } from "./retrieve-tool";
+import { headroomRetrieveTool } from "./retrieve-tool";
 import { resolveHeadroomEntry } from "./sidecar";
 import { HeadroomClient } from "@bluecode/headroomd";
 
@@ -79,7 +80,7 @@ export default async function bluecodePlugin(
     if (socketPath !== undefined) connectOptions.socketPath = socketPath;
 
     headroomClientInstance = await HeadroomClient.connect(connectOptions);
-    setHeadroomClient(headroomClientInstance);
+    setSharedHeadroomClient(headroomClientInstance);
   } catch (err) {
     console.error(`[bluecode-plugin] headroom client initialization failed: ${(err as Error).message}`);
     // Continue without headroom - rtk may still work
@@ -124,7 +125,7 @@ export default async function bluecodePlugin(
   const disposeHook = async () => {
     await shutdownRtk();
     await shutdownHeadroom();
-    setHeadroomClient(null);
+    setSharedHeadroomClient(null);
   };
 
   // Wrap tool.execute.after to capture options via closure (opencode only passes input, output)

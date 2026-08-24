@@ -56,6 +56,7 @@ function attemptConnect(socketPath: string): Promise<net.Socket> {
   return new Promise((resolve, reject) => {
     const socket = net.connect(socketPath);
     const lines = createLineReconstructor();
+    const decoder = new TextDecoder();
     const fail = (err: Error) => {
       socket.destroy();
       reject(err);
@@ -65,7 +66,7 @@ function attemptConnect(socketPath: string): Promise<net.Socket> {
     socket.once("error", (err) => fail(err));
     socket.once("data", (chunk: Buffer) => {
       socket.setTimeout(0);
-      const handshake = lines.push(chunk.toString("utf8"))[0];
+      const handshake = lines.push(decoder.decode(chunk, { stream: true }))[0];
       if (handshake === undefined) {
         fail(new Error("headroomd: empty handshake"));
         return;
@@ -82,7 +83,7 @@ function attemptConnect(socketPath: string): Promise<net.Socket> {
       }
       // Re-queue the remainder (anything past the handshake line) so the
       // main reader does not lose it.
-      const remainder = chunk.toString("utf8").slice(handshake.length + 1);
+      const remainder = decoder.decode(chunk, { stream: true }).slice(handshake.length + 1);
       if (remainder.length > 0) socket.unshift(Buffer.from(remainder, "utf8"));
       resolve(socket);
     });
@@ -98,6 +99,7 @@ export class HeadroomClient {
   private readonly timeoutMs: number;
   private readonly pending = new Map<string, PendingRequest>();
   private readonly lines = createLineReconstructor();
+  private readonly decoder = new TextDecoder();
   private closed = false;
 
   private constructor(socket: net.Socket, timeoutMs: number) {
@@ -124,7 +126,7 @@ export class HeadroomClient {
       connectError = err;
     }
 
-    const child = Bun.spawn(["bun", "run", options.spawn.entry], {
+    const child = Bun.spawn([process.execPath, "run", options.spawn.entry], {
       ...(options.spawn.cwd !== undefined ? { cwd: options.spawn.cwd } : {}),
       // Explicit pass-through: the daemon reads BLUECODE_DATA_DIR from here,
       // and relying on spawn's implicit env inheritance has proven flaky.
@@ -260,7 +262,7 @@ export class HeadroomClient {
   }
 
   private onData(chunk: Buffer): void {
-    for (const line of this.lines.push(chunk.toString("utf8"))) {
+    for (const line of this.lines.push(this.decoder.decode(chunk, { stream: true }))) {
       let parsed: unknown;
       try {
         parsed = JSON.parse(line);

@@ -315,11 +315,12 @@ export async function startHeadroomServer(
     client.write(frameFor({ proto: PROTOCOL_VERSION, pid: process.pid }));
 
     const lines = createLineReconstructor();
+    const decoder = new TextDecoder();
     // Serialize per connection so one client's responses keep arrival order.
     let tail: Promise<void> = Promise.resolve();
 
     client.on("data", (chunk: Buffer) => {
-      for (const line of lines.push(chunk.toString("utf8"))) {
+      for (const line of lines.push(decoder.decode(chunk, { stream: true }))) {
         tail = tail.then(() => handleLine(client, line)).catch(() => {});
       }
     });

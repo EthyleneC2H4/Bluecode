@@ -8,6 +8,7 @@ import {
   setPendingPlan,
   getPendingPlan,
   clearPendingPlan,
+  setSharedHeadroomClient,
 } from "../src/headroom";
 import { parseOptions } from "../src/config";
 import type { ChatMessage } from "@bluecode/contracts";
@@ -78,19 +79,18 @@ const originalHeadroomConnect = headroomModule.HeadroomClient.connect;
 beforeEach(() => {
   compressCallCount = 0;
   resetHeadroomState();
-  (headroomModule.HeadroomClient as any).connect = async () => {
-    console.error("[TEST] Mock HeadroomClient.connect called");
-    return {
-      compress: mockHeadroomCompress,
-      close: async () => {},
-      retrieve: async () => ({ found: false }),
-      health: async () => ({ ok: true, pid: 123, uptimeMs: 1000, sessions: 0 }),
-    };
-  };
+  // Set up shared mock client for getSharedHeadroomClient()
+  setSharedHeadroomClient({
+    compress: mockHeadroomCompress,
+    close: async () => {},
+    retrieve: async () => ({ found: false }),
+    health: async () => ({ ok: true, pid: 123, uptimeMs: 1000, sessions: 0 }),
+  } as any);
 });
 
 afterEach(async () => {
   (headroomModule.HeadroomClient as any).connect = originalHeadroomConnect;
+  setSharedHeadroomClient(null);
   await shutdownHeadroom();
 });
 

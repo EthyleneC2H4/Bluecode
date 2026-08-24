@@ -38,10 +38,16 @@ function collectStats(lines: string[]): Map<string, FileStats> {
       inHunk = false;
       continue;
     }
-    if (/^(---|\+\+\+) /.test(line)) {
-      inHunk = false;
-      continue;
-    }
+    // Match emission pass: only +++ is a file boundary, and only when
+  // not currently in a hunk. --- is the old-file marker, which precedes
+  // +++ and never starts a hunk on its own.
+  if (/^\+\+\+ /.test(line) && inHunk === false) {
+    // Already inHunk === false, nothing to do; keep for symmetry with emission
+    continue;
+  }
+  if (/^--- /.test(line)) {
+    continue;
+  }
     if (HUNK_RE.test(line)) {
       inHunk = true;
       continue;

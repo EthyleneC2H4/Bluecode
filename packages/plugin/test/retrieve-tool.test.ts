@@ -1,5 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { headroomRetrieveTool, setHeadroomClient } from "../src/retrieve-tool";
+import { headroomRetrieveTool } from "../src/retrieve-tool";
+import { setSharedHeadroomClient } from "../src/headroom";
 import { parseOptions } from "../src/config";
 import type { ToolContext } from "../src/tool";
 import { z } from "zod";
@@ -27,7 +28,7 @@ const mockContext: ToolContext = {
 };
 
 beforeEach(() => {
-  setHeadroomClient({
+  setSharedHeadroomClient({
     retrieve: mockRetrieve,
     close: async () => {},
     compress: async () => ({ compacted: false }),
@@ -36,7 +37,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  setHeadroomClient(null);
+  setSharedHeadroomClient(null);
 });
 
 describe("headroom_retrieve tool", () => {
@@ -103,7 +104,7 @@ describe("headroom_retrieve tool", () => {
   });
 
   test("client unavailable: returns error message", async () => {
-    setHeadroomClient(null);
+    setSharedHeadroomClient(null);
 
     const result = await headroomRetrieveTool.execute({
       hash: "a".repeat(64),

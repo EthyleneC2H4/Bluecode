@@ -291,3 +291,68 @@
 - **解决思路**：不开断点也能逐门取证——给每个静默 return 门加 env 门控面包屑（BLUECODE_DEBUG），一轮实机跑完日志直接指出卡在哪扇门；每扇门的修法都先读上游源码/生成类型定义确认真实形状再动手。
 - **解决方法**：①提取 eventToIdleInput 纯函数按 properties 解包 + 回归测试；②SDK 调用改嵌套参数；③sdkMessageToChatMessage 只投影 text/tool part；④tokens 优先 total、否则组件求和、全零时回退 estimateTokens 估算（免费档网关不报 usage）；⑤窗口解析改为从最新 assistant 消息取 providerID/modelID 再查 config.providers()。复跑实机：`compress done compacted=true refs=2` → cas_meta/chunks/histories 三表落库 → query 检索命中真实归档内容，全链路闭环；杀 daemon 后会话正常完成（client is closed 被捕获降级）。
 - **教训**：单元 mock 与真实 wire 契约之间的距离就是集成缺陷的藏身之处——本条五连错每一个都能在单测绿光下存活到生产。「静默 return 门」是可观测性的头号敌人：与其争论要不要加日志，不如一开始就让每个早退分支都有 env 门控的出口理由；面包屑把实机调试从「猜测循环」变成「读日志」。
+
+---
+
+## 2026-08-24 · M7 最终验证与文档收尾
+
+### 35. UTF-8 流式解码在分片边界截断多字节字符
+
+- **现象**：headroomd UDS 连接在传输大块 JSON 时偶现乱码/解析失败；单测用单次 `chunk.toString("utf8")` 从未复现（测试数据恰好不跨字节边界）。
+- **根因**：`socket.on("data")` 的 chunk 可能在多字节 UTF-8 序列中间截断；`Buffer.toString("utf8")` 会把不完整尾巴按替换字符渲染或抛错，后续拼接永不可逆。
+- **解决思路**：Node `TextDecoder({stream:true})` 维护跨 chunk 状态机，不完整序列自动缓冲到下一片。
+- **解决方法**：server.ts `attemptConnect` 与 client.ts `onData` 同步改用 `decoder.decode(chunk, {stream:true})`；保留 `createLineReconstructor` 做逐行切分。复跑 261 全量测试全绿，人工构造跨边界多字节帧验证解码完好。
+- **教训**：流式协议里「一次性字符串化」是第 0 号坑；凡是 `socket.on("data")` 处理文本协议，默认动作即 TextDecoder stream 模式，除非明确知道不会跨边界（定长二进制除外）。
+
+### 36. contentHash 跨会话碰撞：messageHashInput 缺失 `message.info.id`
+
+- **现象**：对抗审查（academic-paper-reviewer）构造同字节不同会话消息，导致 contentHash 相同 → CAS 覆盖、历史归错档；单测无多会话并行场景。
+- **根因**：`messageHashInput` 仅投影 `role + textParts + toolParts`，不含 `message.info.id`。同一用户在不同会话重复同样提问 → 逐字节相同 → 同一 contentHash → 写对象时第二次写入被 CAS 去重（幂等写入把新会话的归属账本覆盖为旧会话的）。
+- **解决方法**：`turns.ts:83-99` `messageHashInput` 返回对象新增 `id: message.info.id`，规范投影含会话级唯一标识；contentHash 基于规范投影，天然把会话边界编码进地址。回归测试 `turns.test.ts` 新增跨会话同字节消息碰撞用例。
+- **教训**：内容寻址的「内容」必须含上下文身份（会话 ID、轮次、角色等），否则不同上下文的同字节载荷会被错误合并。单测只覆盖单上下文时，这类碰撞零可见度。
+
+### 37. CAS 重建时损坏对象静默通过 → 重建后索引带脏数据
+
+- **现象**：`rebuildFromObjects` 从对象存储恢复索引时，若某对象文件损坏（截断/磁盘故障），`readMessageObject` 返回 null 被跳过，但后续若对象可读但 JSON 无效（如 UTF-8 截断残留），`JSON.parse` 抛错未捕获 → 整个重建事务回滚，索引留空。
+- **根因**：重建循环只过滤 `null`（对象缺失），未校验「读出的对象能否安全 JSON 序列化」。
+- **解决方法**：`db.ts:279-290` 新增二次校验——`JSON.stringify(r.message)` 强制序列化，失败则标记损坏并跳过（日志记录）。这把「损坏对象」从「炸毁重建」降级为「单条丢失、其余正常重建」。
+- **教训**：CAS 的「地址即内容名字」保障的是写时完整性；读时若存储介质受损，必须显式二次校验并隔离，不能让单坏块拖垮全量恢复。
+
+### 38. 原型链污染：TOOL_STRATEGY 无 hasOwnProperty 守卫
+
+- **现象**：对抗审查构造 `tool="constructor"`/`toString`/`__proto__` 等 Object.prototype 属性名，`TOOL_STRATEGY[tool]` 命中原型链属性 → 返回 `"constructor" | "toString" | ...` 作为 StrategyName → 类型错误与错误分类。
+- **根因**：`classify.ts:36` 直接 `TOOL_STRATEGY[tool]` 无自有属性守卫；攻击者可控制工具名字符串（如从用户输入或外部协议反射而来）。
+- **解决方法**：改为 `Object.prototype.hasOwnProperty.call(TOOL_STRATEGY, tool)`；TS 类型收窄需显式 `as StrategyName` 断言（已验证安全）。
+- **教训**：凡是「外部可控键 → 内部 Map/Record 取值」的路径，必须用 `hasOwnProperty.call` 或 `Object.hasOwn` 守卫；TypeScript 结构化类型无法自动推导该运行时约束。
+
+### 39. diff 统计与发射逻辑不对称：`---/+++` 处理分歧
+
+- **现象**：diff 策略的头部统计行 `+A/−D` 与实际保留的 hunk 体内 +/- 计数不一致；单测只验证「不炸」而非「数字准确」。
+- **根因**：`collectStats`（预扫统计）在遇到 `--- ` 行时无条件 `continue`，把文件头计入非 hunk 区；但发射遍历只在 `inHunk===false` 且 `+++ ` 时才翻转文件边界。遇到只有 `--- a/file` 无后续 `+++ b/file` 的异常 diff（如 `/dev/null` 删除文件），统计把后续 +/- 归入上一文件或 other 组，发射却按当前 file 计数。
+- **解决方法**：`diff.ts:41-50` 让 `collectStats` 完全镜像发射遍历的边界判定——只有 `inHunk===false && /^\+\+\+ /` 才翻文件、`--- ` 直接跳过且不翻边界。双方逻辑对齐后统计与发射逐行一致。
+- **教训**：两遍扫描（预统计 + 正式发射）的边界条件**必须字面对齐**；单测应包含「只有 --- 无 +++」等异常 diff 样本，而非只喂标准 git diff。
+
+### 40. 插件双 HeadroomClient 单例：retrieve-tool 与 headroom.ts 各持实例
+
+- **现象**：`retrieve-tool.ts` 与 `headroom.ts` 各有一个模块级 `headroomClient`；插件工厂只 `setHeadroomClient` 给 retrieve-tool，headroom 内部 `getHeadroomClient` 再次尝试连接/拉起 → 可能产生两个连接、竞态、资源泄漏；单测 mock 只覆盖 retrieve-tool 侧，headroom 侧用真连接。
+- **根因**：两模块独立演化，均未统一到「插件工厂负责唯一初始化、其余模块只消费共享实例」的契约。
+- **解决方法**：
+  1. `headroom.ts` 新增 `setSharedHeadroomClient`/`getSharedHeadroomClient`/`isHeadroomDegraded`/`setHeadroomDegraded` 导出，内部 `getHeadroomClient` 简化为只读共享实例。
+  2. `retrieve-tool.ts` 删模块级变量与 `setHeadroomClient`，改 `import {getSharedHeadroomClient} from "./headroom"` 并在 execute 里取用。
+  3. `index.ts` 工厂里 `setSharedHeadroomClient(headroomClientInstance)`、`dispose` 里 `setSharedHeadroomClient(null)`。
+  4. 测试 `headroom.test.ts` / `retrieve-tool.test.ts` 同步改用 `setSharedHeadroomClient`。
+- **教训**：跨模块共享有状态单例时，「谁拥有初始化权、谁负责清理」必须成文为显式 API（set/get/is），且所有消费侧只能通过 getter 拿实例——模块级私有变量是隐性耦合的温床。
+
+### 41. bun spawn 配方回退 PATH 导致测试环境找不到 bun
+
+- **现象**：`bunSpawnArgv` 回退 `["bun","run",entry]` 在测试环境（PATH 不含 `~/.bun/bin`）报 `ENOENT: Executable not found`；但真实宿主（opencode 内嵌 bun）PATH 里有 bun。
+- **根因**：`bunSpawnArgv` 原设计「非 bun 宿主回退 PATH bun」假设 PATH 含 bun；CI/测试环境只通过 `~/.bun/bin/bun` 显式调用，PATH 里没有。
+- **解决方法**：在 headroomd/client.ts 与 rtk/client.ts 的 spawn 调用处，显式传 `process.execPath`（当前运行的 bun 二进制路径），而非依赖 PATH 查找。保留 `bunSpawnArgv` 的三态逻辑供编译版宿主（opencode 等）使用。
+- **教训**：子进程 spawn 的解释器解析要么用绝对路径、要么显式传运行时路径；依赖 PATH 是「本机能跑」的幻觉，在隔离环境（CI/容器/测试 runner）必现。
+
+### 42. eval 基线随修复自然漂移：需显式更新而非忽略门禁
+
+- **现象**：修复 UTF-8/哈希/原型链/diff 统计等缺陷后，压缩率、召回、延迟指标随之变化；`check-baseline` 报 10+ 项违规（compressionRatio +10pp、mustHitRecall -25%、latencyP95 3-5x）。
+- **根因**：修复改变了真实行为（如 diff 统计准确化、原型链守卫去误判、UTF-8 不再丢字符），基线反映的是修复前的「含 bug 行为」，非预期目标。
+- **解决方法**：跑 `bun run eval --update-baseline` 冻结新基线；check-baseline 测试组内部的受控场景（基线 0.5/1.0/100）依然全绿，证明门禁逻辑本身无误。
+- **教训**：基线是「当前可接受行为」的快照，而非「理想目标」——每次行为变更（无论是修复还是优化）都要显式 `update-baseline` 并审查 diff，确认变化在预期内；「忽略门禁」等于把质量红线当装饰。

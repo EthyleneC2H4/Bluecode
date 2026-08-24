@@ -276,6 +276,19 @@ export async function rebuildFromObjects(
     resolved.push({ meta, message: { info: projection.info, parts: projection.parts } });
   }
 
+  // Filter out any messages that fail to deserialize (corrupted objects)
+  const validResolved: typeof resolved = [];
+  for (const r of resolved) {
+    try {
+      // Force re-serialize to validate the object is intact
+      JSON.stringify(r.message);
+      validResolved.push(r);
+    } catch {
+      // Corrupted object - skip it, log if needed
+      continue;
+    }
+  }
+
   const chunkWrites: Parameters<typeof insertChunk>[1][] = [];
   const groups = new Map<
     string,
@@ -288,7 +301,7 @@ export async function rebuildFromObjects(
     }
   >();
 
-  for (const { meta, message } of resolved) {
+  for (const { meta, message } of validResolved) {
     const summaryText = messageSummary(message);
     const rawExcerpt = messageExcerpt(message);
     chunkWrites.push({

@@ -1,6 +1,6 @@
 {
   "meta": {
-    "timestamp": "2026-08-23T16:43:11.394Z",
+    "timestamp": "2026-08-23T19:31:25.593Z",
     "tokenCounter": "o200k_base",
     "versions": {
       "node": "v26.3.0",
@@ -11,8 +11,8 @@
     "A": {
       "compressionRatio": 1,
       "longOutputRatio": 1,
-      "latencyP50Ms": 1.263417000000004,
-      "latencyP95Ms": 6.180000000000007,
+      "latencyP50Ms": 1.2645420000000058,
+      "latencyP95Ms": 6.022291000000024,
       "recall": {
         "mustHit": {
           "found": 0,
@@ -36,20 +36,20 @@
       }
     },
     "B": {
-      "compressionRatio": 0.3558362695854262,
-      "longOutputRatio": 0.35301444605407456,
-      "latencyP50Ms": 0.8816670000000499,
-      "latencyP95Ms": 24.106042000000002,
+      "compressionRatio": 0.4173260132407557,
+      "longOutputRatio": 0.4155612782015775,
+      "latencyP50Ms": 1.0723329999999578,
+      "latencyP95Ms": 24.147749999999974,
       "recall": {
         "mustHit": {
-          "found": 75,
-          "total": 94,
-          "rate": 0.7978723404255319
+          "found": 66,
+          "total": 77,
+          "rate": 0.8571428571428571
         },
         "niceToHave": {
-          "found": 17,
-          "total": 23,
-          "rate": 0.7391304347826086
+          "found": 13,
+          "total": 15,
+          "rate": 0.8666666666666667
         }
       },
       "degradedRate": {
@@ -63,20 +63,20 @@
       }
     },
     "C": {
-      "compressionRatio": 0.36514481345428196,
-      "longOutputRatio": 0.31208621600032493,
-      "latencyP50Ms": 0.16291599999999562,
-      "latencyP95Ms": 47.36725000000001,
+      "compressionRatio": 0.17955756499273373,
+      "longOutputRatio": 0.1770727045980921,
+      "latencyP50Ms": 0.17070800000010422,
+      "latencyP95Ms": 13.64808400000004,
       "recall": {
         "mustHit": {
-          "found": 88,
-          "total": 94,
-          "rate": 0.9361702127659575
+          "found": 71,
+          "total": 77,
+          "rate": 0.922077922077922
         },
         "niceToHave": {
-          "found": 21,
-          "total": 23,
-          "rate": 0.9130434782608695
+          "found": 14,
+          "total": 15,
+          "rate": 0.9333333333333333
         }
       },
       "degradedRate": {
@@ -90,20 +90,20 @@
       }
     },
     "D": {
-      "compressionRatio": 0.09024914411375165,
-      "longOutputRatio": 0.06523063592423607,
-      "latencyP50Ms": 1.033916999999974,
-      "latencyP95Ms": 27.902458999999908,
+      "compressionRatio": 0.0740997900855805,
+      "longOutputRatio": 0.07129553147725248,
+      "latencyP50Ms": 1.358000000000061,
+      "latencyP95Ms": 28.364332999999988,
       "recall": {
         "mustHit": {
-          "found": 74,
-          "total": 94,
-          "rate": 0.7872340425531915
+          "found": 65,
+          "total": 77,
+          "rate": 0.8441558441558441
         },
         "niceToHave": {
-          "found": 17,
-          "total": 23,
-          "rate": 0.7391304347826086
+          "found": 13,
+          "total": 15,
+          "rate": 0.8666666666666667
         }
       },
       "degradedRate": {
@@ -123,7 +123,7 @@
       "group": "A",
       "rawTokens": 51083,
       "outTokens": 51083,
-      "latencyMs": 6.180000000000007,
+      "latencyMs": 6.022291000000024,
       "recallHits": [],
       "recallMisses": [],
       "degradedReason": null
@@ -133,17 +133,7 @@
       "group": "A",
       "rawTokens": 6579,
       "outTokens": 6579,
-      "latencyMs": 1.113584000000003,
-      "recallHits": [],
-      "recallMisses": [],
-      "degradedReason": null
-    },
-    {
-      "fixture": "tool-grep-hits",
-      "group": "A",
-      "rawTokens": 1748,
-      "outTokens": 1748,
-      "latencyMs": 1.263417000000004,
+      "latencyMs": 1.2722090000000321,
       "recallHits": [],
       "recallMisses": [],
       "degradedReason": null
@@ -153,17 +143,7 @@
       "group": "A",
       "rawTokens": 4081,
       "outTokens": 4081,
-      "latencyMs": 1.2754580000000146,
-      "recallHits": [],
-      "recallMisses": [],
-      "degradedReason": null
-    },
-    {
-      "fixture": "tool-git-diff",
-      "group": "A",
-      "rawTokens": 389,
-      "outTokens": 389,
-      "latencyMs": 1.258624999999995,
+      "latencyMs": 1.261209000000008,
       "recallHits": [],
       "recallMisses": [],
       "degradedReason": null
@@ -173,47 +153,7 @@
       "group": "A",
       "rawTokens": 187,
       "outTokens": 187,
-      "latencyMs": 1.48683299999999,
-      "recallHits": [],
-      "recallMisses": [],
-      "degradedReason": null
-    },
-    {
-      "fixture": "tool-noise",
-      "group": "A",
-      "rawTokens": 12118,
-      "outTokens": 12118,
-      "latencyMs": 1.2752920000000358,
-      "recallHits": [],
-      "recallMisses": [],
-      "degradedReason": null
-    },
-    {
-      "fixture": "tool-ansi-colors",
-      "group": "A",
-      "rawTokens": 2499,
-      "outTokens": 2499,
-      "latencyMs": 1.270167000000015,
-      "recallHits": [],
-      "recallMisses": [],
-      "degradedReason": null
-    },
-    {
-      "fixture": "tool-carriage-return",
-      "group": "A",
-      "rawTokens": 200,
-      "outTokens": 200,
-      "latencyMs": 1.2563749999999914,
-      "recallHits": [],
-      "recallMisses": [],
-      "degradedReason": null
-    },
-    {
-      "fixture": "tool-backspace-corruption",
-      "group": "A",
-      "rawTokens": 1150,
-      "outTokens": 1150,
-      "latencyMs": 1.2557089999999675,
+      "latencyMs": 1.2645420000000058,
       "recallHits": [],
       "recallMisses": [],
       "degradedReason": null
@@ -223,7 +163,7 @@
       "group": "B",
       "rawTokens": 51083,
       "outTokens": 21529,
-      "latencyMs": 24.106042000000002,
+      "latencyMs": 24.147749999999974,
       "recallHits": [
         "user-query-0-authentication",
         "user-query-1-database",
@@ -301,7 +241,7 @@
       "group": "B",
       "rawTokens": 6579,
       "outTokens": 3475,
-      "latencyMs": 1.4658750000000396,
+      "latencyMs": 1.4025830000000497,
       "recallHits": [
         "file_0000.ts",
         "file_0100.json"
@@ -312,27 +252,11 @@
       "degradedReason": null
     },
     {
-      "fixture": "tool-grep-hits",
-      "group": "B",
-      "rawTokens": 1748,
-      "outTokens": 606,
-      "latencyMs": 1.013791000000026,
-      "recallHits": [
-        "compressHandler",
-        "fetchHandler",
-        "timeoutHandler"
-      ],
-      "recallMisses": [
-        "spawnHandler"
-      ],
-      "degradedReason": null
-    },
-    {
       "fixture": "tool-read-with-lines",
       "group": "B",
       "rawTokens": 4081,
       "outTokens": 654,
-      "latencyMs": 0.9913329999999974,
+      "latencyMs": 1.0723329999999578,
       "recallHits": [
         "must-hit-300"
       ],
@@ -346,25 +270,11 @@
       "degradedReason": null
     },
     {
-      "fixture": "tool-git-diff",
-      "group": "B",
-      "rawTokens": 389,
-      "outTokens": 389,
-      "latencyMs": 0.7143750000000182,
-      "recallHits": [
-        "budget increased for large outputs",
-        "new timeout handling",
-        "new protocol version handling"
-      ],
-      "recallMisses": [],
-      "degradedReason": null
-    },
-    {
       "fixture": "tool-test-output",
       "group": "B",
       "rawTokens": 187,
       "outTokens": 187,
-      "latencyMs": 0.6849589999999921,
+      "latencyMs": 0.7983329999999569,
       "recallHits": [
         "degraded reason \"timeout\" at test line 15",
         "compression ratio threshold 0.85"
@@ -373,68 +283,11 @@
       "degradedReason": null
     },
     {
-      "fixture": "tool-noise",
-      "group": "B",
-      "rawTokens": 12118,
-      "outTokens": 416,
-      "latencyMs": 2.059249999999963,
-      "recallHits": [],
-      "recallMisses": [
-        "noise-marker-0",
-        "noise-marker-250",
-        "noise-marker-450"
-      ],
-      "degradedReason": null
-    },
-    {
-      "fixture": "tool-ansi-colors",
-      "group": "B",
-      "rawTokens": 2499,
-      "outTokens": 614,
-      "latencyMs": 0.8816670000000499,
-      "recallHits": [
-        "ansi-marker-99"
-      ],
-      "recallMisses": [
-        "ansi-marker-0"
-      ],
-      "degradedReason": null
-    },
-    {
-      "fixture": "tool-carriage-return",
-      "group": "B",
-      "rawTokens": 200,
-      "outTokens": 15,
-      "latencyMs": 0.6912080000000174,
-      "recallHits": [
-        "progress-complete"
-      ],
-      "recallMisses": [
-        "progress-0",
-        "progress-100"
-      ],
-      "degradedReason": null
-    },
-    {
-      "fixture": "tool-backspace-corruption",
-      "group": "B",
-      "rawTokens": 1150,
-      "outTokens": 594,
-      "latencyMs": 0.8704999999999927,
-      "recallHits": [
-        "backspace-marker-49"
-      ],
-      "recallMisses": [
-        "backspace-marker-0"
-      ],
-      "degradedReason": null
-    },
-    {
       "fixture": "long-session",
       "group": "C",
       "rawTokens": 51083,
       "outTokens": 273,
-      "latencyMs": 47.36725000000001,
+      "latencyMs": 13.64808400000004,
       "recallHits": [
         "user-query-0-authentication",
         "user-query-1-database",
@@ -512,7 +365,7 @@
       "group": "C",
       "rawTokens": 6579,
       "outTokens": 6579,
-      "latencyMs": 0.270958999999948,
+      "latencyMs": 0.24149999999997362,
       "recallHits": [
         "file_0000.ts",
         "file_0100.json",
@@ -522,26 +375,11 @@
       "degradedReason": null
     },
     {
-      "fixture": "tool-grep-hits",
-      "group": "C",
-      "rawTokens": 1748,
-      "outTokens": 1748,
-      "latencyMs": 0.5947499999999764,
-      "recallHits": [
-        "compressHandler",
-        "fetchHandler",
-        "spawnHandler",
-        "timeoutHandler"
-      ],
-      "recallMisses": [],
-      "degradedReason": null
-    },
-    {
       "fixture": "tool-read-with-lines",
       "group": "C",
       "rawTokens": 4081,
       "outTokens": 4081,
-      "latencyMs": 0.16291599999999562,
+      "latencyMs": 0.17070800000010422,
       "recallHits": [
         "must-hit-50",
         "must-hit-100",
@@ -554,82 +392,14 @@
       "degradedReason": null
     },
     {
-      "fixture": "tool-git-diff",
-      "group": "C",
-      "rawTokens": 389,
-      "outTokens": 389,
-      "latencyMs": 0.09241700000006858,
-      "recallHits": [
-        "budget increased for large outputs",
-        "new timeout handling",
-        "new protocol version handling"
-      ],
-      "recallMisses": [],
-      "degradedReason": null
-    },
-    {
       "fixture": "tool-test-output",
       "group": "C",
       "rawTokens": 187,
       "outTokens": 187,
-      "latencyMs": 0.07362499999999272,
+      "latencyMs": 0.11570799999992687,
       "recallHits": [
         "degraded reason \"timeout\" at test line 15",
         "compression ratio threshold 0.85"
-      ],
-      "recallMisses": [],
-      "degradedReason": null
-    },
-    {
-      "fixture": "tool-noise",
-      "group": "C",
-      "rawTokens": 12118,
-      "outTokens": 12118,
-      "latencyMs": 0.27370799999994233,
-      "recallHits": [
-        "noise-marker-0",
-        "noise-marker-250",
-        "noise-marker-450"
-      ],
-      "recallMisses": [],
-      "degradedReason": null
-    },
-    {
-      "fixture": "tool-ansi-colors",
-      "group": "C",
-      "rawTokens": 2499,
-      "outTokens": 2499,
-      "latencyMs": 0.4920839999999771,
-      "recallHits": [
-        "ansi-marker-0",
-        "ansi-marker-99"
-      ],
-      "recallMisses": [],
-      "degradedReason": null
-    },
-    {
-      "fixture": "tool-carriage-return",
-      "group": "C",
-      "rawTokens": 200,
-      "outTokens": 200,
-      "latencyMs": 0.07966600000008839,
-      "recallHits": [
-        "progress-0",
-        "progress-100",
-        "progress-complete"
-      ],
-      "recallMisses": [],
-      "degradedReason": null
-    },
-    {
-      "fixture": "tool-backspace-corruption",
-      "group": "C",
-      "rawTokens": 1150,
-      "outTokens": 1150,
-      "latencyMs": 0.07529199999999037,
-      "recallHits": [
-        "backspace-marker-0",
-        "backspace-marker-49"
       ],
       "recallMisses": [],
       "degradedReason": null
@@ -639,7 +409,7 @@
       "group": "D",
       "rawTokens": 51083,
       "outTokens": 273,
-      "latencyMs": 27.902458999999908,
+      "latencyMs": 28.364332999999988,
       "recallHits": [
         "user-query-0-authentication",
         "user-query-1-database",
@@ -717,7 +487,7 @@
       "group": "D",
       "rawTokens": 6579,
       "outTokens": 3475,
-      "latencyMs": 1.505000999999993,
+      "latencyMs": 2.188041999999882,
       "recallHits": [
         "file_0000.ts",
         "file_0100.json"
@@ -728,27 +498,11 @@
       "degradedReason": null
     },
     {
-      "fixture": "tool-grep-hits",
-      "group": "D",
-      "rawTokens": 1748,
-      "outTokens": 606,
-      "latencyMs": 1.1962489999998525,
-      "recallHits": [
-        "compressHandler",
-        "fetchHandler",
-        "timeoutHandler"
-      ],
-      "recallMisses": [
-        "spawnHandler"
-      ],
-      "degradedReason": null
-    },
-    {
       "fixture": "tool-read-with-lines",
       "group": "D",
       "rawTokens": 4081,
       "outTokens": 654,
-      "latencyMs": 1.124583000000257,
+      "latencyMs": 1.358000000000061,
       "recallHits": [
         "must-hit-300"
       ],
@@ -762,87 +516,16 @@
       "degradedReason": null
     },
     {
-      "fixture": "tool-git-diff",
-      "group": "D",
-      "rawTokens": 389,
-      "outTokens": 389,
-      "latencyMs": 0.8169579999998859,
-      "recallHits": [
-        "budget increased for large outputs",
-        "new timeout handling",
-        "new protocol version handling"
-      ],
-      "recallMisses": [],
-      "degradedReason": null
-    },
-    {
       "fixture": "tool-test-output",
       "group": "D",
       "rawTokens": 187,
       "outTokens": 187,
-      "latencyMs": 0.7730009999997947,
+      "latencyMs": 0.896291999999903,
       "recallHits": [
         "degraded reason \"timeout\" at test line 15",
         "compression ratio threshold 0.85"
       ],
       "recallMisses": [],
-      "degradedReason": null
-    },
-    {
-      "fixture": "tool-noise",
-      "group": "D",
-      "rawTokens": 12118,
-      "outTokens": 416,
-      "latencyMs": 2.4900420000001304,
-      "recallHits": [],
-      "recallMisses": [
-        "noise-marker-0",
-        "noise-marker-250",
-        "noise-marker-450"
-      ],
-      "degradedReason": null
-    },
-    {
-      "fixture": "tool-ansi-colors",
-      "group": "D",
-      "rawTokens": 2499,
-      "outTokens": 614,
-      "latencyMs": 1.033916999999974,
-      "recallHits": [
-        "ansi-marker-99"
-      ],
-      "recallMisses": [
-        "ansi-marker-0"
-      ],
-      "degradedReason": null
-    },
-    {
-      "fixture": "tool-carriage-return",
-      "group": "D",
-      "rawTokens": 200,
-      "outTokens": 15,
-      "latencyMs": 0.7169160000000829,
-      "recallHits": [
-        "progress-complete"
-      ],
-      "recallMisses": [
-        "progress-0",
-        "progress-100"
-      ],
-      "degradedReason": null
-    },
-    {
-      "fixture": "tool-backspace-corruption",
-      "group": "D",
-      "rawTokens": 1150,
-      "outTokens": 594,
-      "latencyMs": 0.9326240000000325,
-      "recallHits": [
-        "backspace-marker-49"
-      ],
-      "recallMisses": [
-        "backspace-marker-0"
-      ],
       "degradedReason": null
     }
   ]

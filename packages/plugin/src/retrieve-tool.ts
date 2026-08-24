@@ -8,14 +8,13 @@ import { tool } from "./tool";
 import type { ToolContext, ToolResult } from "./tool";
 import { HeadroomClient } from "@bluecode/headroomd";
 import type { HeadroomRetrieveParams, HeadroomRetrieveResult, RetrieveByHashResult, RetrieveByQueryResult } from "@bluecode/contracts";
-
-let headroomClient: HeadroomClient | null = null;
+import { getSharedHeadroomClient } from "./headroom";
 
 /**
- * Get the headroom client instance (initialized by the plugin factory).
+ * Get the shared HeadroomClient instance (initialized by the plugin factory).
  */
-export function setHeadroomClient(client: HeadroomClient | null): void {
-  headroomClient = client;
+function getClient(): HeadroomClient | null {
+  return getSharedHeadroomClient();
 }
 
 const RetrieveArgsShape = {
@@ -46,7 +45,8 @@ export const headroomRetrieveTool = tool({
     // Enforces the refine (and the shape) — throws ZodError on violation.
     RetrieveArgsSchema.parse(args);
 
-    if (headroomClient === null) {
+    const client = getClient();
+    if (client === null) {
       return "Error: headroomd client not available. The history retrieval daemon is not connected.";
     }
 
@@ -62,7 +62,7 @@ export const headroomRetrieveTool = tool({
         ? { namespace, hash: args.hash }
         : { namespace, query: args.query!, limit: args.limit };
 
-      const result: HeadroomRetrieveResult = await headroomClient.retrieve(params);
+      const result: HeadroomRetrieveResult = await client.retrieve(params);
 
       // Type guard to distinguish between hash and query results.
       // Keyed on "found", not "content": the found:false union member carries
