@@ -20,11 +20,16 @@ import {
   createPipelineStats,
   type PipelineStatsSnapshot,
 } from "@bluecode/rtk-core";
-import { readObject, writeObject } from "@bluecode/shared";
-import { tmpdir } from "node:os";
+import { chmodSync, mkdirSync } from "node:fs";
+import { defaultSidecarDataDir, readObject, writeObject } from "@bluecode/shared";
 
-/** Fallback store root when BLUECODE_DATA_DIR is unset. */
-export const DEFAULT_DATA_DIR = `${tmpdir()}/bluecode-rtk`;
+/**
+ * Fallback store root when BLUECODE_DATA_DIR is unset. Namespaced per uid /
+ * XDG_RUNTIME_DIR by @bluecode/shared: a fixed <tmpdir>/bluecode-rtk is
+ * writable by every account on multi-user hosts, letting one account plant
+ * objects another account's fetch() would happily serve.
+ */
+export const DEFAULT_DATA_DIR = defaultSidecarDataDir("bluecode-rtk");
 
 /**
  * Production supplies the store root from plugin configuration via the
@@ -47,6 +52,13 @@ export interface RtkEngine {
 
 export function createEngine(options: { dataDir: string }): RtkEngine {
   const { dataDir } = options;
+  // Create the store root up front with owner-only permissions: the CAS layer
+  // mkdirs lazily without a mode, so on shared <tmpdir> targets (Linux) an
+  // attacker could otherwise create/plant objects first. chmod even when the
+  // dir already exists — test mkdtemp roots are already 0700; production
+  // injected paths may not be. macOS tmpdir is per-user; redundant but safe.
+  mkdirSync(dataDir, { recursive: true });
+  chmodSync(dataDir, 0o700);
   const stats = createPipelineStats();
   const decoder = new TextDecoder();
 

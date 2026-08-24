@@ -5,7 +5,9 @@
  * - pre-warmed spawn at create() time (never on the per-request path)
  * - client-side fast path below minBytes (no IPC at all)
  * - serial request/response with id correlation and late-response discard
- * - per-request timeout -> passthrough "timeout" (child stays up)
+ * - per-request timeout -> passthrough "timeout" (child stays up); a late
+ *   reply to a timed-out id is dropped via the late-reply ring and never
+ *   feeds the protocol streak — three timeouts alone cannot kill the child
  * - child crash -> in-flight "crash", exponential-backoff restart
  * - restart budget exhausted -> passthrough-only breaker, background probes
  * - protocol garbage streak -> same treatment as a crash
@@ -27,7 +29,14 @@ import {
   type RtkOp,
   type StatsResult,
 } from "@bluecode/contracts";
-import { bunSpawnArgv, createLineReconstructor, encodeFrame, newRequestId } from "@bluecode/shared";
+import {
+  bunSpawnArgv,
+  createLineReconstructor,
+  encodeFrame,
+  FrameOverflowError,
+  newRequestId,
+} from "@bluecode/shared";
+import { fileURLToPath } from "node:url";
 import { DEFAULT_DATA_DIR } from "./engine";
 
 export interface RtkClientOptions {
@@ -41,7 +50,7 @@ export interface RtkClientOptions {
   timeoutMs?: number;
   /** Outputs under this many bytes never reach the server. Default 512. */
   minBytes?: number;
-  /** CAS root passed to the child as BLUECODE_DATA_DIR. Default <tmpdir>/bluecode-rtk. */
+  /** CAS root passed to the child as BLUECODE_DATA_DIR. Default: per-uid sidecar dir. */
   dataDir?: string;
   /** Restart attempts before the breaker trips. Default 5. */
   maxRestartAttempts?: number;
@@ -54,6 +63,12 @@ export interface RtkClientOptions {
    * BLUECODE_TEST_DELAY_MS here without polluting their own environment).
    */
   serverEnv?: Record<string, string>;
+  /**
+   * Client-side frame-size ceiling for the stdout/stderr reconstructor
+   * (default 64 MiB, shared's own default). Test hook so the overflow ->
+   * protocol-failure mapping is exercisable without megabyte frames.
+   */
+  maxFrameBytes?: number;
 }
 
 const DEFAULTS = {
@@ -70,6 +85,14 @@ const RESTART_BACKOFF_MS = 250;
 const HANDSHAKE_TIMEOUT_MS = 10_000;
 /** SIGTERM grace before a shutdown escalates to SIGKILL. */
 const SHUTDOWN_GRACE_MS = 3_000;
+/**
+ * Ring size for recently timed-out request ids. A slow child's late replies
+ * arrive after their waiter gave up; counting them as protocol garbage would
+ * let three timeouts alone trip the SIGKILL, contradicting the "child stays
+ * up" timeout contract. The ring bounds memory while tolerating every reply
+ * a serial-queue client can legitimately have in flight.
+ */
+const LATE_REPLY_RING = 64;
 /**
  * Generous default for the ops/debug surface (ping/stats): these are
  * liveness calls, not compression calls, so they may outlive the tight
@@ -173,6 +196,7 @@ export class RtkClient {
     testMode: boolean;
     cwd: string | undefined;
     serverEnv: Record<string, string> | undefined;
+    maxFrameBytes: number | undefined;
   };
   private readonly entryPath: string;
   private readonly dataDir: string;
@@ -188,6 +212,8 @@ export class RtkClient {
   private restartTimer: ReturnType<typeof setTimeout> | null = null;
   private probeTimer: ReturnType<typeof setInterval> | null = null;
   private protocolStreak = 0;
+  /** Recently timed-out ids (insertion-ordered ring); see LATE_REPLY_RING. */
+  private readonly lateReplyIds = new Set<string>();
   private readonly pending = new Map<string, PendingRequest>();
   private chainTail: Promise<void> = Promise.resolve();
   private spawns = 0;
@@ -203,9 +229,13 @@ export class RtkClient {
       testMode: opts.testMode ?? false,
       cwd: opts.cwd,
       serverEnv: opts.serverEnv,
+      maxFrameBytes: opts.maxFrameBytes,
     };
     // Sibling of this module: stable regardless of the caller's layout.
-    this.entryPath = opts.entry ?? new URL("./bin.ts", import.meta.url).pathname;
+    // fileURLToPath over .pathname: .pathname keeps percent-encoding and, on
+    // Windows, yields "/C:/..." which neither Bun nor CreateProcess resolves —
+    // the compiled-host smoke (M7) class of silent spawn failure.
+    this.entryPath = opts.entry ?? fileURLToPath(new URL("./bin.ts", import.meta.url));
     this.dataDir = opts.dataDir ?? DEFAULT_DATA_DIR;
   }
 
@@ -347,6 +377,7 @@ export class RtkClient {
         }
         const timer = setTimeout(() => {
           this.pending.delete(id);
+          this.rememberLateReply(id);
           reject({ kind: "timeout" } satisfies PendingFailure);
         }, timeoutMs);
         this.pending.set(id, { op, resolve, reject, timer });
@@ -427,6 +458,7 @@ export class RtkClient {
       this.ready = true;
       this.restartAttempt = 0;
       this.protocolStreak = 0;
+      this.lateReplyIds.clear(); // a fresh child cannot answer the old one's requests
     } finally {
       this.spawning = false;
     }
@@ -435,21 +467,43 @@ export class RtkClient {
   private pumpStdout(proc: RtkProc, hello: { resolve: (v: { proto: 1; pid: number }) => void; reject: (e: unknown) => void }): void {
     void (async () => {
       const decoder = new TextDecoder();
-      const frames = createLineReconstructor();
+      const frames = createLineReconstructor(
+        this.opts.maxFrameBytes !== undefined ? { maxFrameBytes: this.opts.maxFrameBytes } : {},
+      );
       let helloDone = false;
-      try {
-        for await (const chunk of proc.stdout) {
-          const lines = frames.push(decoder.decode(chunk, { stream: true }));
-          for (let i = 0; i < lines.length; i++) {
-            const line = lines[i] as string;
-            if (!helloDone && this.proc === proc) {
-              helloDone = true;
-              this.consumeHello(line, hello);
-            } else {
-              this.onFrame(line);
-            }
+      // Feed one decoded chunk, keeping overflow LOCAL: an escaped throw would
+      // tear down the whole pump, capping the strike count at one.
+      const feed = (text: string): void => {
+        let lines: string[];
+        try {
+          lines = frames.push(text);
+        } catch (err) {
+          if (err instanceof FrameOverflowError) {
+            // Oversized frame poisons stream framing; the reconstructor has
+            // already dropped its buffer, so keep pumping and let the streak
+            // machinery own the child's fate (FIX 8 mapping).
+            this.protocolFailure(`response frame exceeded ${err.maxFrameBytes} bytes`);
+            return;
+          }
+          throw err;
+        }
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i] as string;
+          if (!helloDone && this.proc === proc) {
+            helloDone = true;
+            this.consumeHello(line, hello);
+          } else {
+            this.onFrame(line);
           }
         }
+      };
+      try {
+        for await (const chunk of proc.stdout) {
+          feed(decoder.decode(chunk, { stream: true }));
+        }
+        // Finalize the decoder before flushing: a multibyte char split at EOF
+        // lives in the decoder, not the reconstructor (devlog #35).
+        feed(decoder.decode());
         for (const line of frames.flush()) this.onFrame(line);
       } catch {
         // Stream died; the exited handler performs crash bookkeeping.
@@ -468,14 +522,29 @@ export class RtkClient {
   private pumpStderr(proc: RtkProc): void {
     void (async () => {
       const decoder = new TextDecoder();
-      const frames = createLineReconstructor();
+      const frames = createLineReconstructor(
+        this.opts.maxFrameBytes !== undefined ? { maxFrameBytes: this.opts.maxFrameBytes } : {},
+      );
+      const emit = (line: string): void => console.error(`[rtk-server ${proc.pid}] ${line}`);
       try {
         for await (const chunk of proc.stderr) {
-          for (const line of frames.push(decoder.decode(chunk, { stream: true }))) {
-            console.error(`[rtk-server ${proc.pid}] ${line}`);
+          let lines: string[];
+          try {
+            lines = frames.push(decoder.decode(chunk, { stream: true }));
+          } catch (err) {
+            if (err instanceof FrameOverflowError) {
+              // Diagnostics only: drop the oversized runt, never the pump.
+              emit(`<stderr frame overflow: >${err.maxFrameBytes} bytes dropped>`);
+              continue;
+            }
+            throw err;
           }
+          for (const line of lines) emit(line);
         }
-        for (const line of frames.flush()) console.error(`[rtk-server ${proc.pid}] ${line}`);
+        // Same EOF finalization as the stdout pump (devlog #35); stderr is
+        // diagnostics, so the tail lines just go to the console.
+        for (const line of frames.push(decoder.decode())) emit(line);
+        for (const line of frames.flush()) emit(line);
       } catch {
         // stderr is best effort.
       }
@@ -512,8 +581,10 @@ export class RtkClient {
 
     const pending = this.pending.get(msg.id);
     if (pending === undefined) {
-      // Late/duplicate response for an already-timed-out request: drop by id
-      // so it can never be attributed to the next exchange.
+      // A reply to a recently timed-out id is dropped by id (never attributed
+      // to the next exchange) WITHOUT feeding the protocol streak — slowness
+      // is not corruption. Unknown ids are genuine garbage: count them.
+      if (this.lateReplyIds.delete(msg.id)) return;
       this.protocolStreak += 1;
       this.checkProtocolStreak();
       return;
@@ -539,6 +610,15 @@ export class RtkClient {
     }
     this.protocolStreak += 1;
     this.checkProtocolStreak(message);
+  }
+
+  /** Record a timed-out id so its late reply is dropped instead of counted. */
+  private rememberLateReply(id: string): void {
+    this.lateReplyIds.add(id);
+    if (this.lateReplyIds.size > LATE_REPLY_RING) {
+      const oldest = this.lateReplyIds.values().next().value;
+      if (oldest !== undefined) this.lateReplyIds.delete(oldest);
+    }
   }
 
   private checkProtocolStreak(context?: string): void {

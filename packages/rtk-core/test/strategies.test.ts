@@ -195,6 +195,28 @@ describe("diff strategy structure", () => {
     expect(texts).toContain("+added fresh line 20");
     expect(texts).not.toContain("-removed old line 10");
   });
+
+  test("hunk-body lines starting ---/+++ count as changes, not file headers (devlog #39)", () => {
+    // Deleting a "- bullet" line yields a "--- ..." diff line INSIDE the hunk;
+    // adding a "+ bullet" yields "++ ...". Both must land in the +/- stats —
+    // the unconditional /^--- / skip used to drop the deletion side.
+    const text = [
+      "diff --git a/notes.md b/notes.md",
+      "--- a/notes.md",
+      "+++ b/notes.md",
+      "@@ -1,3 +1,3 @@",
+      " context",
+      "--- - bullet removed",
+      "++ + bullet added",
+      " trailing context",
+    ].join("\n");
+    const sr = diffStrategy({ text, toolId: "bash" });
+    const texts = sr.lines.map((l) => l.text);
+    expect(texts).toContain("[diff] notes.md +1/−1");
+    // Emission already classified both as hunk-body changes; stats now agree.
+    expect(texts).toContain("--- - bullet removed");
+    expect(texts).toContain("++ + bullet added");
+  });
 });
 
 describe("test strategy structure", () => {

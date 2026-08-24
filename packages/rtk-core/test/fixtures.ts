@@ -7,17 +7,17 @@
  */
 
 export const LS_LA = `total 48
-drwxr-xr-x@ 6 ethylene staff 192 Aug 23 10:00 .
-drwxr-xr-x@ 9 ethylene staff 288 Aug 22 09:00 ..
--rw-r--r--@ 1 ethylene staff 1201 Aug 23 10:00 README.md
--rw-r--r--@ 1 ethylene staff 301 Aug 22 09:00 package.json
--rw-r--r--@ 1 ethylene staff 4501 Aug 21 08:00 tsconfig.json
--rw-r--r--@ 1 ethylene staff 2201 Aug 21 07:00 bun.lockb
--rw-r--r--@ 1 ethylene staff 801 Aug 20 06:00 .gitignore
--rw-r--r--@ 1 ethylene staff 99 Aug 19 05:00 Makefile
--rw-r--r--@ 1 ethylene staff 55 Aug 18 04:00 LICENSE
--rw-r--r--@ 1 ethylene staff 4444 Aug 17 03:00 notes-v1.txt
--rw-r--r--@ 1 ethylene staff 3333 Aug 16 02:00 notes-v2.txt`;
+drwxr-xr-x@ 6 user staff 192 Aug 23 10:00 .
+drwxr-xr-x@ 9 user staff 288 Aug 22 09:00 ..
+-rw-r--r--@ 1 user staff 1201 Aug 23 10:00 README.md
+-rw-r--r--@ 1 user staff 301 Aug 22 09:00 package.json
+-rw-r--r--@ 1 user staff 4501 Aug 21 08:00 tsconfig.json
+-rw-r--r--@ 1 user staff 2201 Aug 21 07:00 bun.lockb
+-rw-r--r--@ 1 user staff 801 Aug 20 06:00 .gitignore
+-rw-r--r--@ 1 user staff 99 Aug 19 05:00 Makefile
+-rw-r--r--@ 1 user staff 55 Aug 18 04:00 LICENSE
+-rw-r--r--@ 1 user staff 4444 Aug 17 03:00 notes-v1.txt
+-rw-r--r--@ 1 user staff 3333 Aug 16 02:00 notes-v2.txt`;
 
 export const PATH_LIST = [
   "packages/core/src/",

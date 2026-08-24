@@ -6,11 +6,16 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 type RawProc = import("bun").Subprocess<"pipe", "pipe", "pipe">;
 
-/** Absolute path of the server entry used by every spawn in this suite. */
-export const BIN_TS = new URL("../src/bin.ts", import.meta.url).pathname;
+/**
+ * Absolute path of the server entry used by every spawn in this suite.
+ * fileURLToPath over .pathname for the same reason as RtkClient.entryPath:
+ * percent-decoding plus Windows drive-letter correctness.
+ */
+export const BIN_TS = fileURLToPath(new URL("../src/bin.ts", import.meta.url));
 
 let tmpSeq = 0;
 /** Unique per-call store root so tests never share CAS state. */
@@ -30,7 +35,7 @@ export function lsLaOutput(fileCount: number): string {
   for (let i = 0; i < fileCount; i++) {
     const name =
       i < 8 ? `kept-${i}.ts` : `generated-file-${String(i).padStart(4, "0")}.mod.ts`;
-    lines.push(`-rw-r--r--@ 1 ethylene staff ${(i + 1) * 137} Aug 23 10:00 ${name}`);
+    lines.push(`-rw-r--r--@ 1 user staff ${(i + 1) * 137} Aug 23 10:00 ${name}`);
   }
   return lines.join("\n");
 }

@@ -51,6 +51,12 @@ export interface RtkServerHandle {
   handleLine(line: string): Promise<void>;
   /** stdin reached EOF: report any residual half-line, then stop serving. */
   finish(): Promise<void>;
+  /**
+   * Best-effort E_PROTOCOL answer for a transport-level fault (frame overflow)
+   * that hits BETWEEN lines, where no request id exists to answer. The entry
+   * point exits after calling this — framing state is already discarded.
+   */
+  abortProtocol(message: string): Promise<void>;
   readonly pid: number;
 }
 
@@ -254,5 +260,13 @@ export function startServer(io: ServerIo, options: ServeOptions = {}): RtkServer
     io.log(`[rtk-server] stdin closed after ${elapsed}ms; shutting down cleanly`);
   }
 
-  return { handleLine, finish, pid: process.pid };
+  async function abortProtocol(message: string): Promise<void> {
+    await emitError(UNKNOWN_ID, {
+      code: ErrorCode.E_PROTOCOL,
+      message,
+      detail: { fatal: true },
+    });
+  }
+
+  return { handleLine, finish, abortProtocol, pid: process.pid };
 }

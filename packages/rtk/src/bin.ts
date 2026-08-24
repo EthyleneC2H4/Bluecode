@@ -7,14 +7,15 @@
  * process exits 0 once stdin reaches EOF (parent gone or graceful close).
  *
  * Environment:
- * - BLUECODE_DATA_DIR      CAS root (default <tmpdir>/bluecode-rtk; the
- *                          production path is injected by plugin config)
+ * - BLUECODE_DATA_DIR      CAS root (default: per-uid sidecar dir from
+ *                          @bluecode/shared; production injects the plugin-
+ *                          configured path)
  * - BLUECODE_TEST=1        enables test-only ops (simulateCrash) and the
  *                          artificial response delay below
  * - BLUECODE_TEST_DELAY_MS per-response latency, honored only when
  *                          BLUECODE_TEST=1 (timeout-path fault injection)
  */
-import { createLineReconstructor } from "@bluecode/shared";
+import { createLineReconstructor, FrameOverflowError } from "@bluecode/shared";
 import { startServer } from "./server";
 
 const io = {
@@ -33,7 +34,14 @@ const responseDelayMs = Number.isFinite(delayRaw) && delayRaw > 0 ? delayRaw : 0
 
 const server = startServer(io, { testMode, responseDelayMs });
 
-const frames = createLineReconstructor();
+// Test-only frame-size ceiling so the overflow path is exercisable without
+// streaming 64 MiB through a pipe; gated like BLUECODE_TEST_DELAY_MS.
+let maxFrameBytes: number | undefined;
+if (testMode) {
+  const rawMax = Number(process.env.BLUECODE_MAX_FRAME_BYTES ?? "");
+  if (Number.isInteger(rawMax) && rawMax > 0) maxFrameBytes = rawMax;
+}
+const frames = createLineReconstructor(maxFrameBytes !== undefined ? { maxFrameBytes } : {});
 const decoder = new TextDecoder();
 
 try {
@@ -43,7 +51,31 @@ try {
     }
   }
 } catch (err) {
+  if (err instanceof FrameOverflowError) {
+    // Best-effort E_PROTOCOL so a live parent learns why, then exit: the
+    // reconstructor dropped the oversized bytes, so continuing would re-frame
+    // the stream from an arbitrary mid-JSON offset.
+    io.log(`[rtk-server] stdin frame exceeded ${err.maxFrameBytes} bytes; aborting protocol`);
+    try {
+      await server.abortProtocol(`frame exceeded ${err.maxFrameBytes} bytes without a newline`);
+    } catch {
+      // Parent likely gone; nothing left to answer.
+    }
+    process.exit(0);
+  }
   io.log(`[rtk-server] stdin stream error: ${err instanceof Error ? err.message : String(err)}`);
+}
+
+// Final no-arg decode() flushes a multibyte char split across chunk boundaries
+// into the frame stream (devlog #35); without it, a code point ending exactly
+// at EOF is silently dropped. Outside the stdin try so the error path also
+// terminates cleanly.
+for (const line of frames.push(decoder.decode())) {
+  try {
+    await server.handleLine(line);
+  } catch {
+    // stdout is likely closed; nothing left to do.
+  }
 }
 
 // A trailing half-line on EOF is a protocol violation; answer E_PROTOCOL for

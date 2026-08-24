@@ -38,16 +38,11 @@ function collectStats(lines: string[]): Map<string, FileStats> {
       inHunk = false;
       continue;
     }
-    // Match emission pass: only +++ is a file boundary, and only when
-  // not currently in a hunk. --- is the old-file marker, which precedes
-  // +++ and never starts a hunk on its own.
-  if (/^\+\+\+ /.test(line) && inHunk === false) {
-    // Already inHunk === false, nothing to do; keep for symmetry with emission
-    continue;
-  }
-  if (/^--- /.test(line)) {
-    continue;
-  }
+    // No explicit ---/+++ skip branches (devlog #39): those headers only
+    // occur between the git header and the first hunk, where !inHunk below
+    // already ignores them. Skipping them unconditionally instead would also
+    // swallow hunk-body deletions of lines starting "-- " ("--- ..." inside a
+    // hunk) and undercount the very +/- totals the header summary reports.
     if (HUNK_RE.test(line)) {
       inHunk = true;
       continue;

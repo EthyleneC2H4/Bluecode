@@ -1,6 +1,18 @@
 {
   "//": "Dependency direction: rtk-core <- rtk; @bluecode/rtk may depend on @bluecode/contracts, @bluecode/shared and @bluecode/rtk-core. External runtime deps: none.",
   "name": "@bluecode/rtk",
+  "description": "stdio JSONL sidecar process that compresses coding-agent tool outputs on the hot path",
+  "keywords": [
+    "sidecar",
+    "jsonl",
+    "compression"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EthyleneC2H4/Bluecode.git",
+    "directory": "packages/rtk"
+  },
   "version": "0.0.1",
   "type": "module",
   "scripts": {
