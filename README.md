@@ -1,60 +1,293 @@
+<div align="center">
+
 # BlueCode
 
-基于 opencode 插件机制的 coding agent 上下文工程组件库：`rtk`（工具输出压缩）与 `headroomd`（长会话上下文守护进程）。
+**Context-engineering sidecars for [opencode](https://github.com/anomalyco/opencode)** —
+compress tool output in the hot path, archive long-session history behind a searchable store,
+and degrade to transparent passthrough instead of ever losing a byte.
 
-> **声明**：本文档及 `docs/` 下一切量化数字，以 `packages/eval` 产出的实测值为准；凡未实测处一律标注为「目标」，不得视为实测结论。
+[![CI](https://github.com/EthyleneC2H4/Bluecode/actions/workflows/ci.yml/badge.svg)](https://github.com/EthyleneC2H4/Bluecode/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Bun](https://img.shields.io/badge/Bun-%E2%89%A51.4-fbf0df?logo=bun&logoColor=black)](https://bun.sh)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.base.json)
+[![Tests](https://img.shields.io/badge/tests-261%20passing-brightgreen)](#quick-start)
 
-## 组件
+[Features](#features) · [Architecture](#architecture) · [Packages](#packages) · [Quick Start](#quick-start) · [Benchmarks](#benchmarks) · [Documentation](#documentation)
 
-| 组件 | 作用 | 路径 |
+English · [简体中文](README.zh-CN.md)
+
+</div>
+
+---
+
+## Why
+
+Long-running coding-agent sessions slowly drown their context window: every `ls`, `grep`,
+test run and log dump lands verbatim in the transcript, and turn history keeps piling up.
+Sooner or later the host silently truncates or compacts — and the detail your task still
+depends on vanishes mid-flight.
+
+BlueCode attacks both paths from a single opencode plugin, **with zero changes to the host core**:
+
+| Sidecar | Transport | Job |
 |---|---|---|
-| contracts | 两套 wire 协议的 zod schema 与消息投影契约 | `packages/contracts` |
-| shared | JSONL 分帧、CAS、ANSI 剥离、token 计数 | `packages/shared` |
-| rtk-core | 纯函数压缩管线：分类器 + 六策略 + 锚点保护 + 预算裁剪 | `packages/rtk-core` |
-| rtk | stdio JSONL sidecar + 客户端（预热/超时/重启/熔断） | `packages/rtk` |
-| headroomd | UDS 守护进程：轮次切分 + 确定性摘要 + SQLite/FTS 归档 | `packages/headroomd` |
-| plugin | opencode 插件：六类 hook 挂载两个 sidecar，零核心改动 | `packages/plugin` |
-| eval | 四组对照评测 harness + 基线门禁 | `packages/eval` |
+| **rtk** | stdio JSONL, pre-warmed resident process | Classify each tool result and compress it to a token budget — anchors preserved, byte-exact original stored for retrieval |
+| **headroomd** | Unix domain socket daemon | Watch a per-session token waterline; when it trips, replace aged turns with a deterministic summary backed by a SQLite/FTS archive |
 
-## 快速开始
+Every elided byte stays retrievable via the `headroom_retrieve` tool (exact hash lookup or
+BM25 full-text query), and every failure mode degrades to *unchanged passthrough* — never to
+silent data loss.
 
-```bash
-bun install
-bun run verify          # 全仓 typecheck + test（含 eval 门禁）
-bun run eval            # 产出评测报告
-bun run eval --quick    # 快速档
-bun run eval --check    # 对照已固化基线门禁
+## Features
+
+- **Zero-core-change mounting** — rides documented hook surfaces plus opencode's tuple-form
+  plugin options (`"plugin": [["file://…", options]]`). Six surfaces wired:
+  `tool.execute.after`, `experimental.chat.messages.transform`, `experimental.session.compacting`,
+  `event` (idle waterline), custom tool `headroom_retrieve`, and `dispose`.
+- **Hot-path compression (rtk)** — two-tier classifier picks one of six strategies
+  (`ls | grep | read | diff | test | fallback`), protects anchor lines by priority, trims to a
+  token budget, folds elided runs into `[+N lines elided …]` markers, and stamps
+  `metadata.bluecode { rawHash, strategy, compressed }` onto the rewritten output.
+- **Long-session daemon (headroomd)** — on `session.idle`, when projected tokens cross
+  `contextWindow × triggerRatio` (default `0.7`), turns are segmented, summarized by a fully
+  deterministic extractive summarizer (no LLM, no clock, no randomness — byte-stable), archived,
+  and replaced by a single `COMPACTION_MARKER` message carrying per-turn hash refs.
+- **Nothing-lost retrieval** — originals are kept byte-exact as gzip objects addressed by logical
+  content hash (CAS with atomic publish); retrieval supports exact-hash mode and FTS5 BM25 query
+  mode with CJK-aware pre-segmentation and session-scoped predicates.
+- **Failure containment matrix** — per-request timeout → crash detection → exponential restart
+  backoff → circuit breaker with periodic recovery probes; any failure yields unchanged
+  passthrough tagged `metadata.bluecode.degraded`. The conversation never notices.
+- **Rebuildable storage** — split-durability design: the ownership ledger (`meta.db`) is durable;
+  the derived search index (`index.db`) can be deleted at any time and self-heals on startup by
+  rebuilding from CAS objects.
+- **Reproducible eval harness + regression gate** — four controlled groups driving real sidecar
+  clients over deterministic seeded fixtures, exact o200k_base token counts, and a baseline gate
+  (`--check`) that fails CI on quality regressions.
+
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph HOST["opencode host (unmodified, tested on 1.18.x)"]
+        MODEL["LLM agent loop"]
+        TOOL["tool execution"]
+        MSGS["session messages"]
+        SDK["SDK client"]
+    end
+
+    subgraph PLUGIN["@bluecode/plugin — six hook surfaces"]
+        H1["tool.execute.after → rtk-hook"]
+        H4["event: session.idle → waterline check"]
+        H2["chat.messages.transform → apply-plan"]
+        H3["session.compacting → fallback context"]
+        H5["custom tool: headroom_retrieve"]
+    end
+
+    subgraph RTK["rtk sidecar (stdio JSONL, pre-warmed)"]
+        RS["JSONL server"]
+        RENG["classify → strategy → anchors → budget"]
+    end
+
+    subgraph HRD["headroomd daemon (Unix domain socket)"]
+        HS["UDS server"]
+        HENG["turns → deterministic summary"]
+        HRET["retrieve: hash ∨ BM25"]
+    end
+
+    subgraph STORE["dataDir (os-tmpdir/bluecode-headroom)"]
+        CAS["objects/ — contentHash → gzip JSON"]
+        META[("meta.db — cas_meta ledger")]
+        IDX[("index.db — histories / chunks / chunks_fts")]
+    end
+
+    TOOL -- "output" --> H1
+    H1 -- "compress" --> RS
+    RS --> RENG
+    RENG -- "rawHash object" --> CAS
+    H1 -- "in-place rewrite + metadata.bluecode" --> TOOL
+    TOOL --> MODEL
+    H4 -- "fetch recent msgs" --> SDK
+    H4 -- "compact?" --> HS
+    HS --> HENG
+    HENG -- "write order: objects → meta → index" --> CAS
+    HENG --> META
+    HENG --> IDX
+    H4 -- "pendingPlan" --> H2
+    H2 -- "COMPACTION_MARKER splice" --> MSGS
+    MODEL --> H5
+    H3 -- "upstream fallback context" --> MODEL
+    H5 -- "hash or query" --> HRET
+    HRET --> IDX
+    HRET -- "byte-exact original" --> CAS
+    H1 -. "timeout / crash / breaker OPEN → passthrough unchanged" .-> TOOL
+    H4 -. "daemon dead → session continues (degraded)" .-> MSGS
 ```
 
-插件接入真实 opencode：项目 `opencode.json` 以元组形式挂载本仓 plugin 包：
+Three data paths:
+
+1. **Hot path (synchronous)** — every finished tool call flows through rtk; compressed text is
+   rewritten in place before the model sees it. Outputs ≤ 512 bytes take a client-side fast path
+   with no IPC at all.
+2. **Idle path (asynchronous)** — when the session goes idle above the token waterline,
+   headroomd summarizes and archives aged turns; the plan is applied on the next message
+   transform.
+3. **Retrieval path** — the model calls `headroom_retrieve` with a rawHash (byte-exact original)
+   or a free-text query (ranked BM25 hits from the archive).
+
+If either sidecar dies mid-session, that path degrades gracefully — passthrough for rtk,
+compaction pause for headroomd — while the rest of the session carries on. Restart the host to
+recover the failed component.
+
+## Packages
+
+| Package | Role | Highlights |
+|---|---|---|
+| [`@bluecode/contracts`](packages/contracts) | Wire-protocol schemas & shared error codes | zod schemas for both protocols, ChatMessage projection |
+| [`@bluecode/shared`](packages/shared) | Primitives | JSONL framing, CAS, ANSI stripping, exact token counting, redaction hooks |
+| [`@bluecode/rtk-core`](packages/rtk-core) | Pure compression pipeline | classifier + six strategies + anchor protection + budget trimming (no I/O) |
+| [`@bluecode/rtk`](packages/rtk) | stdio JSONL sidecar | pre-warmed server + degradation-matrix client (warmup / timeout / restart / circuit breaker) |
+| [`@bluecode/headroomd`](packages/headroomd) | UDS history daemon | turn segmentation, deterministic summaries, SQLite/FTS archive, startup self-heal |
+| [`@bluecode/plugin`](packages/plugin) | opencode plugin | six hook surfaces wiring both sidecars — zero core changes |
+| [`@bluecode/eval`](packages/eval) | Evaluation harness | four-group A/B/C/D runner, golden-fact metrics, baseline freeze + gate |
+
+~8.1k lines of source, ~4.8k lines of tests across 35 test files. Dependency direction:
+`plugin → {rtk, headroomd} → {contracts, shared}` — leaf packages never depend on each other.
+
+## Quick Start
+
+Requires [Bun](https://bun.sh) ≥ 1.4 (tested on Bun 1.4.0). No LLM API key is needed to build,
+test or evaluate — only for live sessions.
+
+```bash
+git clone https://github.com/EthyleneC2H4/Bluecode.git bluecode
+cd bluecode
+bun install
+
+bun run verify            # typecheck all workspaces + full test suite
+bun run eval --quick      # reduced fixture set (harness smoke)
+bun run eval              # full A/B/C/D run → packages/eval/eval-report.json
+bun run eval --check      # regression gate vs packages/eval/baseline.json (exit 1 on violation)
+```
+
+### Mount into a real opencode project
+
+Add the tuple-form entry to your project's `opencode.json` (path must be an absolute `file://`
+URL pointing at the checked-out `packages/plugin`):
 
 ```jsonc
 {
   "plugin": [
-    ["file:///path/to/bluecode/packages/plugin", { "rtk": {…}, "headroom": {…} }]
+    [
+      "file:///absolute/path/to/bluecode/packages/plugin",
+      {
+        "enabled": true,
+        "rtk":      { "budgetTokens": 512, "timeoutMs": 40, "minBytes": 512 },
+        "headroom": { "triggerRatio": 0.7, "retainRecentTurns": 4, "fallback": "upstream" }
+      }
+    ]
   ]
 }
 ```
 
-实机冒烟清单见 `packages/plugin/scripts/smoke.md`。
+Then start opencode in a scratch directory. Live verification follows the ten-step checklist in
+[`scripts/smoke.md`](scripts/smoke.md).
 
-## 实测基线（packages/eval/baseline.json，2026-08-23 固化）
+> [!NOTE]
+> Hook compatibility is verified against **opencode 1.18.x**. Some mounted surfaces are
+> upstream `experimental.*` APIs and may change in future opencode releases.
 
-| 组 | 配置 | 压缩率（越低越省）¹ | 关键事实召回 | 降级率 |
-|---|---|---|---|---|
-| A | passthrough 基线 | 100% | — | 0 |
-| B | rtk only | **35.6%** | 75/94 must-hit | 0 |
-| C | headroomd only | **36.5%** | 88/94 must-hit | 0 |
-| D | combined | **9.0%** | 74/94 must-hit | 0 |
+## Benchmarks
 
-¹ 压缩率 = 最终上下文 token / 原始上下文 token（同一口径，四组可直接比较；o200k_base 计数）。已知近似：D 组对发生 compaction 的 fixture，摘要基于 rtk 处理**前**的历史计算（两阶段独立测量），而真实插件链路中 headroom 经 SDK 读到的是 rtk 改写后的会话——故 D 组数字是组合效果的下界近似。简历目标量级为**目标**值；上表为当前模板参数下的实测。
+Frozen eval baseline ([`packages/eval/baseline.json`](packages/eval/baseline.json), frozen
+2026-08-23): quick fixture set, exact o200k_base token counting, Bun 1.4.0. Regenerate anytime
+with `bun run eval --check`.
 
-<100% 召回的逐项 miss 清单与定性分析见 eval 报告 perFixture.recallMisses 与 devlog；harness 口径为「可检索 = 未丢失」（fetch 全部 refs + 逐事实 query 探查）。
+| Group | Configuration | Compression ratio¹ (lower = smaller context) | Must-hit recall² | Degraded rate |
+|---|---|---:|---:|---:|
+| A | passthrough baseline | 100% | — ⁵ | 0 |
+| B | rtk only | **41.7%** | 66/77 (85.7%) | 0 |
+| C | headroomd only | **18.0%** | 71/77 (92.2%) | 0 |
+| D | combined (rtk → headroomd) | **7.4%** ⁶ | 65/77 (84.4%) | 0 |
 
-## 文档
+On the long-session fixture, headroomd reduces accumulated history from **51,083 → 273 tokens**.
 
-- [docs/architecture.md](docs/architecture.md) — 包布局、数据流、关键设计决策
-- [docs/protocol.md](docs/protocol.md) — 两套 wire 协议规范
-- [docs/integration-notes.md](docs/integration-notes.md) — opencode 上游 hook 核实记录
-- [docs/devlog.md](docs/devlog.md) — 开发全程困难/错误与解决记录（#1-#34）
-- [opencode-dev/](opencode-dev/) — 上游快照（只读，零改动）
+<details>
+<summary><b>Methodology & caveats</b></summary>
+
+1. **Compression ratio** = Σ outTokens / Σ rawTokens, token-weighted across the group's fixtures,
+   exact o200k_base counts (raw total 61,930 tokens per group; B out 25,845, C out 11,120,
+   D out 4,589).
+2. **Recall** uses this project's deliberately generous definition — *"retrievable from
+   headroomd counts as not lost"*: a golden fact hits if it survives by substring in the
+   compressed output, in any retrieved snippet, or in its fetch-by-hash original. Per-item miss
+   lists live in `eval-report.json → perFixture[].recallMisses`. Residual B/D misses are a
+   deliberate middle-window truncation policy; C misses are tail turns newer than
+   `retainRecentTurns`.
+3. The frozen baseline covers the **quick fixture set** (4 deterministic fixtures per group).
+   Run the full fixture set with `bun run eval`.
+4. Latency was measured per-stage in-harness (IPC time on synthetic fixtures); it is reported in
+   the baseline JSON but deliberately **not** marketed as end-to-end agent speed-up. C's tiny
+   p50 reflects that single tool outputs rarely meet the compaction watermark — by design it
+   leaves small outputs untouched.
+5. Group A transforms nothing, so no golden facts are probed.
+6. **D is a lower-bound approximation**: the harness measures the two stages independently
+   (summary computed from pre-rtk history), whereas the real plugin chain lets headroomd read
+   the session *after* rtk rewrote it — real-world combined savings should be ≥ 7.4%.
+7. Every quantitative claim in this repository traces to
+   [`packages/eval/baseline.json`](packages/eval/baseline.json); aspirational numbers are always
+   labeled as targets and never mixed with measurements.
+
+</details>
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [`docs/architecture.md`](docs/architecture.md) | Package layout, rtk/headroomd data flows, key design decisions |
+| [`docs/protocol.md`](docs/protocol.md) | Wire specs: rtk over stdio JSONL, headroomd over UDS — framing, ops, errors |
+| [`docs/integration-notes.md`](docs/integration-notes.md) | Upstream hook verification records vs opencode v1.18.21 (exact file:line citations) |
+| [`docs/devlog.md`](docs/devlog.md) | All 34 development entries: hardest bugs, root causes, fixes, lessons |
+| [`scripts/smoke.md`](scripts/smoke.md) | Ten-step live-session verification checklist |
+| [`scripts/refresh-upstream.sh`](scripts/refresh-upstream.sh) | Re-sync the read-only opencode upstream snapshot used for hook verification |
+
+## Project layout
+
+```
+bluecode/
+├── package.json              # bun workspace root: test / typecheck / eval / verify
+├── tsconfig.base.json
+├── docs/                     # architecture, protocol, integration notes, devlog
+├── scripts/                  # smoke checklist + upstream snapshot refresher
+└── packages/
+    ├── contracts/            # wire-protocol zod schemas & error codes
+    ├── shared/               # JSONL framing, CAS, ANSI strip, token count
+    ├── rtk-core/             # pure compression pipeline
+    ├── rtk/                  # stdio sidecar server + client
+    ├── headroomd/            # UDS daemon + SQLite/FTS archive
+    ├── plugin/               # opencode plugin (six hooks)
+    └── eval/                 # A/B/C/D harness + baseline gate
+```
+
+## Contributing
+
+Issues and pull requests are welcome. Before submitting:
+
+```bash
+bun run verify          # typecheck + tests
+bun run eval --check    # benchmark regression gate
+```
+
+Please re-freeze the eval baseline (`bun run eval --update-baseline`) only for intentional
+behavior changes, and say so in the PR.
+
+## Acknowledgments
+
+- [opencode](https://github.com/anomalyco/opencode) — the open-source coding agent BlueCode
+  plugs into. The plugin mechanism, hook surfaces and SDK shapes it exposes made this
+  zero-core-change design possible.
+- Built with [Bun](https://bun.sh), TypeScript, zod and SQLite/FTS5.
+
+## License
+
+[MIT](LICENSE) © wangyixi
