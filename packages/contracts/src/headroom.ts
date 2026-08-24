@@ -123,7 +123,11 @@ export type RetrieveByHashParams = z.infer<typeof retrieveByHashParamsSchema>;
 export const retrieveByQueryParamsSchema = z.strictObject({
   namespace: namespaceSchema,
   query: z.string(),
-  limit: z.number().int().positive().default(5),
+  // Protocol hygiene cap: one unbounded query could dump the whole archive
+  // into model context (each hit carries a snippet). The plugin tool CLAMPS
+  // to this cap instead of mirroring it, so LLM callers see truncation rather
+  // than E_INVALID_PARAMS; direct UDS clients get the strict rejection.
+  limit: z.number().int().positive().max(50).default(5),
 });
 export type RetrieveByQueryParams = z.input<typeof retrieveByQueryParamsSchema>;
 export type RetrieveByQueryParamsParsed = z.output<typeof retrieveByQueryParamsSchema>;

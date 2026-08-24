@@ -5,3 +5,5 @@ export * from "./ansi";
 export * from "./tokens";
 export * from "./redact";
 export * from "./ids";
+export * from "./spawn";
+export * from "./paths";

@@ -31,7 +31,7 @@ export interface HeadroomClientOptions {
   dataDir?: string;
   socketPath?: string;
   /** Recipe for launching a fresh daemon when the socket is not answering. */
-  spawn?: { entry: string; cwd?: string };
+  spawn?: { entry: string; cwd?: string; args?: string[] };
   /** Per-request timeout. Default 5000ms. */
   timeoutMs?: number;
 }

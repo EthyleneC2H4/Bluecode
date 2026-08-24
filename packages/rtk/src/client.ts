@@ -27,7 +27,7 @@ import {
   type RtkOp,
   type StatsResult,
 } from "@bluecode/contracts";
-import { createLineReconstructor, encodeFrame, newRequestId } from "@bluecode/shared";
+import { bunSpawnArgv, createLineReconstructor, encodeFrame, newRequestId } from "@bluecode/shared";
 import { DEFAULT_DATA_DIR } from "./engine";
 
 export interface RtkClientOptions {
@@ -158,17 +158,10 @@ function sleep(ms: number): Promise<void> {
 /**
  * Build the interpreter argv that runs a TS entry file.
  *
- * process.execPath is only a valid script runner when the host IS the bun
- * runtime. Inside a compiled single-file executable (real-session smoke, M7:
- * opencode embeds bun), execPath is the host binary and `[execPath, entry]`
- * dies with "Failed to change directory to <entry>" — fall back to "bun"
- * from PATH there (mirrors HeadroomClient's spawn recipe).
+ * Lives in @bluecode/shared since the M7 compiled-host fix applies to every
+ * sidecar spawn; re-exported here for API compatibility.
  */
-export function bunSpawnArgv(entry: string, execPath: string = process.execPath): string[] {
-  const base = execPath.split(/[\\/]/).pop() ?? "";
-  if (base === "bun" || base.startsWith("bun-")) return [execPath, "run", entry];
-  return ["bun", "run", entry];
-}
+export { bunSpawnArgv };
 
 export class RtkClient {
   private readonly opts: {
