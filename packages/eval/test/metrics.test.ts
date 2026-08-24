@@ -115,6 +115,18 @@ describe("metrics: computeGroupMetrics", () => {
     expect(m.degradedRate.total).toBe(3);
     expect(m.degradedRate.rate).toBe(0.75);
   });
+
+  test("longOutputRatio threshold is strict >10KB at the boundary", () => {
+    // rawTokens*4 approximates bytes: 2560*4 = 10240 exactly, which is NOT
+    // > 10240, so that fixture stays out; 2561*4 crosses it and must be the
+    // sole contributor to the long-output ratio.
+    const perFixture: PerFixtureRecord[] = [
+      record({ fixture: "edge-exclude", group: "B", rawTokens: 2560, outTokens: 1000 }),
+      record({ fixture: "edge-include", group: "B", rawTokens: 2561, outTokens: 1000 }),
+    ];
+    const m = computeGroupMetrics("B", perFixture, [], []);
+    expect(m.longOutputRatio).toBe(1000 / 2561);
+  });
 });
 
 describe("metrics: evaluateRecall", () => {

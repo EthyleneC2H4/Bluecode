@@ -140,4 +140,72 @@ describe("check-baseline gate logic", () => {
     expect(metrics.has("mustHitRecall")).toBe(true);
     expect(metrics.has("latencyP95")).toBe(true);
   });
+
+  // --- skipLatency opt-out: ONLY the latencyP95 gate may be silenced -------
+
+  function withSkipLatencyEnv(run: () => void): void {
+    // Save / restore / delete so neither this suite nor sibling suites inherit
+    // an opt-out that was meant for a single case.
+    const prev = process.env.EVAL_SKIP_LATENCY;
+    try {
+      process.env.EVAL_SKIP_LATENCY = "1";
+      run();
+    } finally {
+      if (prev === undefined) delete process.env.EVAL_SKIP_LATENCY;
+      else process.env.EVAL_SKIP_LATENCY = prev;
+    }
+  }
+
+  test("p95 violation alone is suppressed under skipLatency flag", () => {
+    fs.writeFileSync(BASELINE_PATH, JSON.stringify(makeReport({})));
+    writeReport(makeReport({ p95: 300 })); // would fail without the opt-out
+    const r = checkBaseline(false, { skipLatency: true });
+    expect(r.passed).toBe(true);
+    expect(r.violations.filter((x) => x.metric === "latencyP95")).toEqual([]);
+  });
+
+  test("p95 violation alone is suppressed under EVAL_SKIP_LATENCY=1", () => {
+    fs.writeFileSync(BASELINE_PATH, JSON.stringify(makeReport({})));
+    writeReport(makeReport({ p95: 300 }));
+    let r!: ReturnType<typeof checkBaseline>;
+    withSkipLatencyEnv(() => {
+      r = checkBaseline(false);
+    });
+    expect(r.passed).toBe(true);
+    expect(r.violations.filter((x) => x.metric === "latencyP95")).toEqual([]);
+  });
+
+  test("compression and recall violations still fire under skipLatency", () => {
+    fs.writeFileSync(BASELINE_PATH, JSON.stringify(makeReport({})));
+    writeReport(makeReport({ dRatio: 0.9, mustHitRate: 0.5, p95: 500 }));
+    let r!: ReturnType<typeof checkBaseline>;
+    withSkipLatencyEnv(() => {
+      r = checkBaseline(false, { skipLatency: true });
+    });
+    expect(r.passed).toBe(false);
+    const metrics = new Set(r.violations.map((v) => v.metric));
+    expect(metrics.has("compressionRatio")).toBe(true);
+    expect(metrics.has("mustHitRecall")).toBe(true);
+    // The opt-out must not silently widen into a blanket pass.
+    expect(metrics.has("latencyP95")).toBe(false);
+  });
+
+  test("updateBaseline freeze is unaffected by skipLatency", () => {
+    if (fs.existsSync(BASELINE_PATH)) fs.unlinkSync(BASELINE_PATH);
+    // Even a maximally-violating report freezes fine — freezing never compares.
+    writeReport(makeReport({ dRatio: 0.9, mustHitRate: 0.25, p95: 9000 }));
+    const viaFlag = checkBaseline(true, { skipLatency: true });
+    expect(viaFlag.passed).toBe(true);
+    expect(JSON.parse(fs.readFileSync(BASELINE_PATH, "utf8")) as FullReport).toMatchObject({
+      groups: { A: { compressionRatio: 0.9 } },
+    });
+
+    fs.unlinkSync(BASELINE_PATH);
+    let viaEnv!: ReturnType<typeof checkBaseline>;
+    withSkipLatencyEnv(() => {
+      viaEnv = checkBaseline(true);
+    });
+    expect(viaEnv.passed).toBe(true);
+    expect(fs.existsSync(BASELINE_PATH)).toBe(true);
+  });
 });

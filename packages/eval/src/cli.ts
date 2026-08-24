@@ -24,6 +24,7 @@ interface CliOptions {
   quick: boolean;
   check: boolean;
   updateBaseline: boolean;
+  skipLatency: boolean;
   help: boolean;
 }
 
@@ -32,6 +33,7 @@ function parseArgs(argv: string[]): CliOptions {
     quick: false,
     check: false,
     updateBaseline: false,
+    skipLatency: false,
     help: false,
   };
 
@@ -45,6 +47,9 @@ function parseArgs(argv: string[]): CliOptions {
         break;
       case "--update-baseline":
         options.updateBaseline = true;
+        break;
+      case "--skip-latency":
+        options.skipLatency = true;
         break;
       case "--help":
       case "-h":
@@ -69,6 +74,8 @@ Options:
   --quick              Run with reduced fixture set (faster iteration)
   --check              Run regression gate against baseline.json (exit 0 on pass)
   --update-baseline    Write current eval-report.json as baseline.json
+  --skip-latency       Skip the p95 latency gate (for noisy shared CI runners
+                       where IPC timing makes >2x baseline flaky)
   --help, -h           Show this help
 
 Examples:
@@ -88,7 +95,7 @@ async function main(): Promise<number> {
   }
 
   if (options.check || options.updateBaseline) {
-    const result = checkBaseline(options.updateBaseline);
+    const result = checkBaseline(options.updateBaseline, { skipLatency: options.skipLatency });
     disposeReport();
     disposeMetrics();
     disposeRunner();
@@ -113,8 +120,8 @@ async function main(): Promise<number> {
     writeReport(report);
     printSummary(report);
 
-    // Also run baseline check if baseline exists
-    const baselineCheck = checkBaseline(false);
+    // Also run baseline check if baseline exists (warning-only; exit code stays 0)
+    const baselineCheck = checkBaseline(false, { skipLatency: options.skipLatency });
     if (!baselineCheck.passed) {
       console.error("[eval] WARNING: Current results violate baseline (run with --check to see details)");
     }
