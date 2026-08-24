@@ -6,17 +6,17 @@ This checklist validates the @bluecode/opencode-plugin-bluecode integration in a
 
 - opencode installed and on PATH
 - Model API key configured (for M7 execution)
-- BlueCode monorepo built: `bun run build` from repo root
+- Dependencies installed and workspace verified: `bun install && bun run verify` from repo root
+  (the plugin runs directly from TypeScript sources via Bun — there is no separate build step)
 
 ## Setup
 
 ```bash
 # From repo root
-cd /Users/ethylene/Learning/Work/Project/BlueCode/bluecode
-bun run build
+cd bluecode   # wherever you cloned this repository
 
 # Note the plugin path
-PLUGIN_PATH="file:///Users/ethylene/Learning/Work/Project/BlueCode/bluecode/packages/plugin"
+PLUGIN_PATH="file://$PWD/packages/plugin"
 ```
 
 ---
@@ -25,10 +25,10 @@ PLUGIN_PATH="file:///Users/ethylene/Learning/Work/Project/BlueCode/bluecode/pack
 
 **Action:** Add plugin to opencode.json
 
-```json
+```jsonc
 {
   "plugin": [
-    ["file:///Users/ethylene/Learning/Work/Project/BlueCode/bluecode/packages/plugin", {
+    ["file:///absolute/path/to/bluecode/packages/plugin", {
       "enabled": true,
       "rtk": { "budgetTokens": 512, "timeoutMs": 40, "minBytes": 512 },
       "headroom": { "triggerRatio": 0.7, "retainRecentTurns": 4, "fallback": "upstream" }
@@ -127,7 +127,8 @@ opencode
 **Action:** Check headroomd data directory after compaction
 
 ```bash
-ls -la ~/.tmp/bluecode-headroom/  # or custom dataDir
+DATA_DIR="${BLUECODE_DATA_DIR:-$(bun -e 'console.log(require("os").tmpdir())')/bluecode-headroom}"
+ls -la "$DATA_DIR"   # default is <os-tmpdir>/bluecode-headroom, override via dataDir option / BLUECODE_DATA_DIR
 # Should have:
 # - index.db (SQLite index)
 # - objects/00/... (CAS objects, sharded by hash prefix)
@@ -138,11 +139,11 @@ ls -la ~/.tmp/bluecode-headroom/  # or custom dataDir
 **Verification:**
 ```bash
 # Verify CAS objects exist
-find ~/.tmp/bluecode-headroom/objects -name "*.bin" | head -5
+find "$DATA_DIR/objects" -name "*.bin" | head -5
 # Should show content-addressable objects
 
 # Verify index has entries
-sqlite3 ~/.tmp/bluecode-headroom/index.db "SELECT count(*) FROM cas_meta;"
+sqlite3 "$DATA_DIR/index.db" "SELECT count(*) FROM cas_meta;"
 # Should return > 0
 ```
 
@@ -163,7 +164,7 @@ pkill -f "headroomd"
 - Session continues without crashing
 - rtk compression shows `metadata.bluecode.degraded: "spawn_failed"` or similar
 - headroom_retrieve returns friendly error message
-- New headroomd auto-spawns on next idle event (if spawn recipe configured)
+- The session keeps running in degraded mode; restart opencode to re-spawn the daemon
 
 ---
 
