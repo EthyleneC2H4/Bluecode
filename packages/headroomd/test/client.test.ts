@@ -304,4 +304,35 @@ describe("timeouts and lifecycle", () => {
     }
     expect((thrown as Error).message).toContain("closed");
   });
+
+  test("server vanishing mid-request fails in-flight requests, not silence", async () => {
+    // Real daemon, delayed responses: kill it while a request is outstanding.
+    // The close event must surface a connection error to every pending caller
+    // instead of leaving them to hang until their timeouts.
+    const dir = await freshDir();
+    const started = await startHeadroomServer({
+      dataDir: dir,
+      testMode: true,
+      responseDelayMs: 4000,
+    });
+    if (started.status !== "listening") throw new Error("expected listening");
+
+    const client = await HeadroomClient.connect({ dataDir: dir, timeoutMs: 30000 });
+
+    const inFlight = client.health();
+    await sleep(120); // let the request reach the (delayed) server
+    started.stop();
+
+    let thrown: unknown;
+    try {
+      await inFlight;
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toMatch(/connection closed|connection error/);
+
+    // Reap the client without waiting on its now-dead socket.
+    await client.close().catch(() => {});
+  }, 15000);
 });
