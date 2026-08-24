@@ -17,7 +17,11 @@ const VERSION = "0.0.1" as const;
 
 import type { PluginInput, PluginOptions, Hooks } from "@opencode-ai/plugin";
 import { parseOptions, type PluginOptions as InternalOptions } from "./config";
-import { handleToolExecuteAfter, shutdownRtk, resetRtkState } from "./rtk-hook";
+import {
+  handleToolExecuteAfter,
+  shutdownRtk,
+  resetRtkState,
+} from "./rtk-hook";
 import {
   handleSessionIdle,
   eventToIdleInput,

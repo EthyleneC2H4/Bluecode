@@ -1,6 +1,18 @@
 {
   "//": "Dependency direction: contracts <- shared <- {rtk-core, headroomd, plugin, eval}; plugin depends on contracts, shared, rtk, headroomd client surfaces only.",
   "name": "@bluecode/plugin",
+  "description": "opencode plugin that wires the rtk and headroomd sidecars into the coding session",
+  "keywords": [
+    "opencode",
+    "plugin",
+    "context-engineering"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EthyleneC2H4/Bluecode.git",
+    "directory": "packages/plugin"
+  },
   "version": "0.0.1",
   "type": "module",
   "main": "src/index.ts",
@@ -13,7 +25,7 @@
     "@bluecode/shared": "workspace:*",
     "@bluecode/rtk": "workspace:*",
     "@bluecode/headroomd": "workspace:*",
-    "zod": "^3.23.8"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@opencode-ai/plugin": "^1.18.21",

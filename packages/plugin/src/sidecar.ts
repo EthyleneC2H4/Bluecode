@@ -17,8 +17,9 @@
  *
  * Shared precedence (first match wins):
  * 1. Explicit option (rtk.entry / headroom.entry)
- * 2. Environment variable BLUECODE_SIDECAR_DIR
- * 3. rtk: undefined (client self-resolves) / headroomd: package-relative path
+ * 2. options.sidecarDir (<sidecarDir>/<rtk|headroomd>/src/bin.ts)
+ * 3. Environment variable BLUECODE_SIDECAR_DIR
+ * 4. rtk: undefined (client self-resolves) / headroomd: package-relative path
  *
  * Results are cached per process.
  */
@@ -45,14 +46,21 @@ export function resolveRtkEntry(options: PluginOptions): string | undefined {
     return cachedRtkEntry;
   }
 
-  // 2. BLUECODE_SIDECAR_DIR env
+  // 2. options.sidecarDir — repo-checkout layout for both sidecars; without
+  // this tier the validated option was parsed and then silently ignored.
+  if (options.sidecarDir !== undefined) {
+    cachedRtkEntry = path.join(options.sidecarDir, "rtk", "src", "bin.ts");
+    return cachedRtkEntry;
+  }
+
+  // 3. BLUECODE_SIDECAR_DIR env
   const envDir = process.env.BLUECODE_SIDECAR_DIR;
   if (envDir !== undefined) {
     cachedRtkEntry = path.join(envDir, "rtk", "src", "bin.ts");
     return cachedRtkEntry;
   }
 
-  // 3. Let RtkClient resolve its own bin (see module docstring).
+  // 4. Let RtkClient resolve its own bin (see module docstring).
   cachedRtkEntry = undefined;
   return undefined;
 }
@@ -71,14 +79,21 @@ export function resolveHeadroomEntry(options: PluginOptions): string {
     return cachedHeadroomEntry;
   }
 
-  // 2. BLUECODE_SIDECAR_DIR env
+  // 2. options.sidecarDir — mirrors the rtk resolver; the option must wire
+  // through or it is dead config.
+  if (options.sidecarDir !== undefined) {
+    cachedHeadroomEntry = path.join(options.sidecarDir, "headroomd", "src", "bin.ts");
+    return cachedHeadroomEntry;
+  }
+
+  // 3. BLUECODE_SIDECAR_DIR env
   const envDir = process.env.BLUECODE_SIDECAR_DIR;
   if (envDir !== undefined) {
     cachedHeadroomEntry = path.join(envDir, "headroomd", "src", "bin.ts");
     return cachedHeadroomEntry;
   }
 
-  // 3. Package-relative fallback
+  // 4. Package-relative fallback
   cachedHeadroomEntry = path.resolve(__dirname, "../../headroomd/src/bin.ts");
   return cachedHeadroomEntry;
 }

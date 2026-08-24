@@ -53,11 +53,17 @@ export function applyPlanInPlace(messages: ChatMessage[], plan: CompactionPlan):
 
   if (indices.length === 0) return false;
 
-  // Check idempotency: if the first message to be replaced is already a compaction marker, no-op
-  const firstIdx = indices[0];
-  if (firstIdx === undefined) return false;
-  // firstIdx came from findIndex over this same array, so the element exists.
-  if (isCompactionReplacement(messages[firstIdx]!)) {
+  // Idempotency guard, narrowed to ALL-located (devlog #43): the daemon feeds
+  // prior replacements into later plans as turn 0 (headroomd splitTurns hashes
+  // a replacement like any other user message), so every SECOND-and-later
+  // compaction leads its plan with the old replacement id. Refusing whenever
+  // the FIRST located message is a replacement made those plans no-ops
+  // forever and the session grew past the watermark permanently. Refuse only
+  // when EVERY located index points at a replacement — a replayed plan still
+  // exits earlier at indices.length === 0, and merging an old replacement
+  // into a new one is exactly the intended outcome.
+  const located = indices.map((i) => messages[i]!); // findIndex hits: element exists
+  if (located.length > 0 && located.every(isCompactionReplacement)) {
     return false;
   }
 

@@ -152,6 +152,68 @@ describe("applyPlanInPlace", () => {
     }
   });
 
+  test("second compaction merges the prior replacement into the new one (devlog #43)", () => {
+    // Regression for the over-broad idempotency guard: headroomd splitTurns
+    // hashes a prior replacement like any other user message, so a SECOND
+    // compaction plan leads with the old replacement's id. The guard must
+    // refuse only when EVERY located message is a replacement — here msg-4 is
+    // not, so the plan applies and both ranges merge into one new marker.
+    const plan1 = {
+      refs: [{ contentHash: "abc123", role: "user" as const, turnIndex: 0 }],
+      summary: "First summary",
+      replacedMessageIds: ["msg-1", "msg-2"],
+      historyHash: "hash-1",
+    };
+    expect(applyPlanInPlace(messages, plan1)).toBe(true);
+    const firstReplacementId = messages[0]?.info.id;
+    expect(firstReplacementId).toContain("compaction-");
+
+    // Plan 2 covers turn 0 (now the applied replacement) plus every remaining
+    // old turn msg-3/msg-4/msg-5.
+    const plan2 = {
+      refs: [{ contentHash: "def456", role: "user" as const, turnIndex: 1 }],
+      summary: "Second summary",
+      replacedMessageIds: [firstReplacementId!, "msg-3", "msg-4", "msg-5"].filter((id) =>
+        messages.some((m) => m.info.id === id),
+      ),
+      historyHash: "hash-2",
+    };
+
+    const result = applyPlanInPlace(messages, plan2);
+
+    expect(result).toBe(true); // was permanently false under the old guard
+    expect(messages.length).toBe(1); // merged into a single replacement
+    const part = messages[0]?.parts[0];
+    expect(part?.type).toBe("text");
+    if (part?.type === "text") {
+      expect(part.text).toContain(COMPACTION_MARKER);
+      expect(part.text).toContain("Second summary");
+      expect(part.text).toContain("hash-2");
+      // The stale first summary must not survive the merge.
+      expect(part.text).not.toContain("First summary");
+    }
+  });
+
+  test("plan whose ONLY located message is a replacement still refuses (single-id replay)", () => {
+    // Companion to the devlog #43 fix: same-plan replay matches zero ids and
+    // exits at indices.length === 0; a single-replacement-id hit remains a
+    // no-op because every located message is a replacement.
+    const plan = {
+      refs: [],
+      summary: "Summary",
+      replacedMessageIds: ["msg-1", "msg-2"],
+      historyHash: "history-hash-123",
+    };
+    expect(applyPlanInPlace(messages, plan)).toBe(true);
+    const replacementId = messages[0]?.info.id;
+    const lenAfterFirst = messages.length;
+
+    const replay = applyPlanInPlace(messages, { ...plan, replacedMessageIds: [replacementId!] });
+
+    expect(replay).toBe(false);
+    expect(messages.length).toBe(lenAfterFirst);
+  });
+
   test("replacement message has correct structure", () => {
     const plan = {
       refs: [{ contentHash: "hash1", role: "user" as const, turnIndex: 0 }],

@@ -15,6 +15,24 @@ let rtkClient: RtkClient | null = null;
 let rtkDegraded = false;
 
 /**
+ * Set the shared RtkClient instance. Mirrors setSharedHeadroomClient so the
+ * retrieval bridge in retrieve-tool.ts can reach the client that compressed a
+ * tool output — headroomd's store cannot read rtk CAS objects (devlog #44).
+ */
+export function setSharedRtkClient(client: RtkClient | null): void {
+  rtkClient = client;
+  if (client === null) rtkDegraded = false;
+}
+
+/**
+ * Get the shared RtkClient instance.
+ * Returns null if not initialized or degraded.
+ */
+export function getSharedRtkClient(): RtkClient | null {
+  return rtkClient;
+}
+
+/**
  * Get or create the RtkClient singleton.
  * On creation failure, logs and returns null (rtk disabled for this session).
  */
@@ -35,13 +53,17 @@ async function getRtkClient(options: PluginOptions): Promise<RtkClient | null> {
       minBytes: options.rtk.minBytes,
       dataDir: options.dataDir,
     };
-    // Explicit option > BLUECODE_SIDECAR_DIR > undefined (client self-resolves).
+    // Explicit option > sidecarDir > BLUECODE_SIDECAR_DIR > undefined
+    // (client self-resolves); see sidecar.ts precedence.
     const entry = resolveRtkEntry(options);
     if (entry !== undefined) {
       createOptions.entry = entry;
     }
-    rtkClient = await RtkClient.create(createOptions);
-    return rtkClient;
+    const client = await RtkClient.create(createOptions);
+    // Publish for cross-module consumers (retrieve-tool bridge) even when
+    // creation happened lazily here instead of in the plugin factory.
+    setSharedRtkClient(client);
+    return client;
   } catch (err) {
     rtkDegraded = true;
     console.error(`[bluecode-plugin] rtk client creation failed, degrading to passthrough: ${(err as Error).message}`);

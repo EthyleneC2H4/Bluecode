@@ -2,13 +2,23 @@
  * headroom_retrieve custom tool definition.
  *
  * Allows retrieving original conversation content by hash or query.
+ *
+ * Hash forms (the retrieval bridge — headroomd's reader cannot decode rtk's
+ * CAS objects and vice versa, so the ROUTING lives here at the tool layer):
+ * - `sha256:<64 hex>` → rtk CAS (original bytes of a compressed tool output)
+ * - `<64 hex>` bare   → headroomd archive (history turns)
  */
 import { z } from "zod";
 import { tool } from "./tool";
 import type { ToolContext, ToolResult } from "./tool";
 import { HeadroomClient } from "@bluecode/headroomd";
 import type { HeadroomRetrieveParams, HeadroomRetrieveResult, RetrieveByHashResult, RetrieveByQueryResult } from "@bluecode/contracts";
+import { redactLocalPaths } from "@bluecode/shared";
 import { getSharedHeadroomClient } from "./headroom";
+import { getSharedRtkClient } from "./rtk-hook";
+
+/** Protocol hygiene cap on query hits; truncate rather than error for LLM callers. */
+const MAX_QUERY_LIMIT = 50;
 
 /**
  * Get the shared HeadroomClient instance (initialized by the plugin factory).
@@ -18,7 +28,10 @@ function getClient(): HeadroomClient | null {
 }
 
 const RetrieveArgsShape = {
-  hash: z.string().regex(/^[0-9a-f]{64}$/, "hash must be 64 lowercase hex chars").optional(),
+  hash: z
+    .string()
+    .regex(/^(?:sha256:)?[0-9a-f]{64}$/, "hash must be [\"sha256:\"] + 64 lowercase hex chars")
+    .optional(),
   query: z.string().optional(),
   // LLM clients routinely stringify numerics (M7 real-session smoke: the
   // model sent limit="2" and strict zod rejected it) — coerce instead.
@@ -39,7 +52,9 @@ const RetrieveArgsSchema = z
   });
 
 export const headroomRetrieveTool = tool({
-  description: "Retrieve original conversation content from headroomd history store by content hash or search query.",
+  description:
+    "Retrieve original conversation content from headroomd history store by content hash or search query. " +
+    "Hash forms: bare 64-hex searches the history archive; \"sha256:\"-prefixed 64-hex fetches an original tool output that compression stored.",
   args: RetrieveArgsShape,
   execute: async (args: RetrieveArgs, context: ToolContext): Promise<ToolResult> => {
     // Enforces the refine (and the shape) — throws ZodError on violation.
@@ -48,6 +63,37 @@ export const headroomRetrieveTool = tool({
     const client = getClient();
     if (client === null) {
       return "Error: headroomd client not available. The history retrieval daemon is not connected.";
+    }
+
+    // Clamp at the tool boundary: contracts reject limit > 50 with
+    // E_INVALID_PARAMS, but an LLM caller asking for 200 hits wants its first
+    // 50, not a protocol error. Direct UDS callers keep the strict rejection.
+    const limit = Math.min(args.limit ?? 5, MAX_QUERY_LIMIT);
+
+    // Retrieval bridge: sha256:-prefixed hashes address rtk's CAS of
+    // tool-output originals. Route BEFORE touching headroomd — its reader
+    // throws on foreign objects (devlog #44). Bare hex falls through to the
+    // headroomd archive unchanged.
+    if (args.hash !== undefined && args.hash.startsWith("sha256:")) {
+      const rtk = getSharedRtkClient();
+      if (rtk === null) {
+        return "Error: rtk client not available. Tool-output originals are only retrievable while output compression is connected.";
+      }
+      try {
+        // rtk's wire form IS the prefixed hash — pass through verbatim.
+        const outcome = await rtk.fetch(args.hash);
+        switch (outcome.kind) {
+          case "found":
+            return `**Historical content retrieved (hash: \`${args.hash}\`):**\n\n${outcome.content}`;
+          case "missing":
+            return `**No content found** for hash: \`${args.hash}\``;
+          case "unavailable":
+            // rtk's DegradedReason is the bare enum string itself.
+            return `Error retrieving history: rtk degraded (${outcome.degraded}); original unavailable.`;
+        }
+      } catch (err) {
+        return `Error retrieving history: ${redactLocalPaths((err as Error).message)}`;
+      }
     }
 
     // Query mode is namespace-scoped server-side, so the session must be the
@@ -60,7 +106,7 @@ export const headroomRetrieveTool = tool({
     try {
       const params: HeadroomRetrieveParams = args.hash !== undefined
         ? { namespace, hash: args.hash }
-        : { namespace, query: args.query!, limit: args.limit };
+        : { namespace, query: args.query!, limit };
 
       const result: HeadroomRetrieveResult = await client.retrieve(params);
 
@@ -96,7 +142,9 @@ export const headroomRetrieveTool = tool({
       // Fallback for unexpected result type
       return "Error retrieving history: Unexpected result format";
     } catch (err) {
-      return `Error retrieving history: ${(err as Error).message}`;
+      // Egress scrub: connect/spawn errors embed local absolute paths
+      // (socket path, entry path) — never leak them into model context.
+      return `Error retrieving history: ${redactLocalPaths((err as Error).message)}`;
     }
   },
 });

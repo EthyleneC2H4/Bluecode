@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { headroomRetrieveTool } from "../src/retrieve-tool";
 import { setSharedHeadroomClient } from "../src/headroom";
+import { setSharedRtkClient } from "../src/rtk-hook";
 import { parseOptions } from "../src/config";
 import type { ToolContext } from "../src/tool";
 import { z } from "zod";
@@ -38,6 +39,7 @@ beforeEach(() => {
 
 afterEach(() => {
   setSharedHeadroomClient(null);
+  setSharedRtkClient(null);
 });
 
 describe("headroom_retrieve tool", () => {
@@ -132,7 +134,7 @@ describe("headroom_retrieve tool", () => {
       expect(false).toBe(true); // Should not reach
     } catch (err: any) {
       expect(err).toBeInstanceOf(z.ZodError);
-      expect(err.errors[0].message).toContain("Either 'hash' or 'query' must be provided");
+      expect(err.issues[0].message).toContain("Either 'hash' or 'query' must be provided");
     }
   });
 
@@ -142,7 +144,8 @@ describe("headroom_retrieve tool", () => {
       expect(false).toBe(true);
     } catch (err: any) {
       expect(err).toBeInstanceOf(z.ZodError);
-      expect(err.errors[0].message).toContain("hash must be 64 lowercase hex chars");
+      // Matches both accepted forms' description ("[sha256:] + 64 lowercase hex").
+      expect(err.issues[0].message).toContain("64 lowercase hex");
     }
   });
 
@@ -169,5 +172,120 @@ describe("headroom_retrieve tool", () => {
     await headroomRetrieveTool.execute({ query: "test", limit: "2" as unknown as number }, mockContext);
 
     expect(capturedParams.limit).toBe(2);
+  });
+});
+
+describe("retrieval bridge (sha256: → rtk CAS)", () => {
+  const RAW_HASH = "e".repeat(64);
+  // The exact wire form compress stamps into metadata.bluecode.rawHash
+  // (contracts: sha256RefSchema — prefixed).
+  const PREFIXED = `sha256:${RAW_HASH}`;
+
+  let headroomCalls = 0;
+  let rtkFetches: string[] = [];
+
+  beforeEach(() => {
+    headroomCalls = 0;
+    rtkFetches = [];
+    mockRetrieveImpl = async () => {
+      headroomCalls++;
+      return { found: false };
+    };
+    setSharedHeadroomClient({
+      retrieve: mockRetrieve,
+      close: async () => {},
+      compress: async () => ({ compacted: false }),
+      health: async () => ({ ok: true, pid: 123, uptimeMs: 1000, sessions: 0 }),
+    } as any);
+    setSharedRtkClient({
+      fetch: async (hash: string) => {
+        rtkFetches.push(hash);
+        return { kind: "found", content: "ORIGINAL TOOL OUTPUT BYTES" };
+      },
+    } as any);
+  });
+
+  test("prefixed hash routes to rtk.fetch verbatim, never touches headroomd", async () => {
+    const result = await headroomRetrieveTool.execute({ hash: PREFIXED }, mockContext);
+
+    expect(rtkFetches).toEqual([PREFIXED]);
+    expect(headroomCalls).toBe(0);
+    expect(result).toContain("Historical content retrieved");
+    expect(result).toContain("ORIGINAL TOOL OUTPUT BYTES");
+  });
+
+  test("bare hex never reaches the rtk client (headroomd namespace unchanged)", async () => {
+    await headroomRetrieveTool.execute({ hash: RAW_HASH }, mockContext);
+
+    expect(rtkFetches).toEqual([]);
+    expect(headroomCalls).toBe(1);
+  });
+
+  test("rtk miss formats the friendly not-found message", async () => {
+    setSharedRtkClient({
+      fetch: async () => ({ kind: "missing" }),
+    } as any);
+
+    const result = await headroomRetrieveTool.execute({ hash: PREFIXED }, mockContext);
+
+    expect(result).toContain("No content found");
+    expect(result).toContain(PREFIXED);
+  });
+
+  test("degraded rtk surfaces the reason instead of throwing", async () => {
+    setSharedRtkClient({
+      fetch: async () => ({ kind: "unavailable", degraded: "spawn_failed" }),
+    } as any);
+
+    const result = await headroomRetrieveTool.execute({ hash: PREFIXED }, mockContext);
+
+    expect(result).toContain("Error retrieving history");
+    expect(result).toContain("spawn_failed");
+  });
+
+  test("null rtk client yields a distinct error (bridge unavailable ≠ daemon down)", async () => {
+    setSharedRtkClient(null);
+
+    const result = await headroomRetrieveTool.execute({ hash: PREFIXED }, mockContext);
+
+    expect(result).toContain("rtk client not available");
+    expect(headroomCalls).toBe(0);
+  });
+
+  test("end-to-end shape: prefixed hash survives validation and returns original bytes", async () => {
+    // Regression for the audit HIGH finding: before the bridge, this input was
+    // rejected by the bare-hex regex, so a rawHash handed back by compress
+    // could never be fetched through the tool that docs promised would work.
+    const result = await headroomRetrieveTool.execute(
+      { hash: `sha256:${RAW_HASH}`, limit: 5 },
+      mockContext,
+    );
+
+    expect(typeof result === "string" && result.startsWith("**Historical content retrieved")).toBe(
+      true,
+    );
+    expect(result).toContain(PREFIXED);
+    expect(result).toContain("ORIGINAL TOOL OUTPUT BYTES");
+  });
+});
+
+describe("query limit clamp at tool boundary", () => {
+  test("oversized limit is clamped to 50 instead of E_INVALID_PARAMS", async () => {
+    let capturedParams: any = null;
+    setSharedRtkClient(null);
+    mockRetrieveImpl = async (params) => {
+      capturedParams = params;
+      return { hits: [] };
+    };
+    setSharedHeadroomClient({
+      retrieve: mockRetrieve,
+      close: async () => {},
+      compress: async () => ({ compacted: false }),
+      health: async () => ({ ok: true, pid: 123, uptimeMs: 1000, sessions: 0 }),
+    } as any);
+
+    await headroomRetrieveTool.execute({ query: "test", limit: 200 }, mockContext);
+
+    expect(capturedParams.limit).toBe(50);
   });
 });

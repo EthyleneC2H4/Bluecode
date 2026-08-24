@@ -96,7 +96,11 @@ function getLatestAssistantTokens(messages: ChatMessage[]): number | null {
       const tokens = (msg.info as { tokens?: Record<string, unknown> }).tokens;
       if (typeof tokens !== "object" || tokens === null) continue;
       const total = tokens.total;
-      if (typeof total === "number") return total;
+      // total:0 is a zero-reporting provider, not a real reading — treating
+      // it as present would bypass the estimator fallback below that exists
+      // precisely for such providers (M7 smoke: free-tier gateway reports
+      // zeros). Only a positive total counts as reported usage.
+      if (typeof total === "number" && total > 0) return total;
 
       const cache = (tokens.cache ?? {}) as { read?: unknown; write?: unknown };
       const num = (v: unknown): number => (typeof v === "number" ? v : 0);
@@ -178,7 +182,13 @@ async function fetchModelContextWindow(
 
     const provider = providers.find((p: any) => p.id === providerId);
     const model = provider?.models?.[modelId];
-    return model?.limit?.context ?? null;
+    const context = model?.limit?.context;
+    // A misconfigured provider limit can report 0; callers treat the return
+    // as a valid window, so 0 would zero out `usable` and compress every
+    // idle cycle. Non-positive = unresolved: fall back to
+    // DEFAULT_CONTEXT_WINDOW_TOKENS and keep it out of the cache.
+    if (typeof context !== "number" || context <= 0) return null;
+    return context;
   } catch {
     return null;
   }
