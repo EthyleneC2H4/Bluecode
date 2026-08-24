@@ -10,7 +10,7 @@ and degrade to transparent passthrough instead of ever losing a byte.
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Bun](https://img.shields.io/badge/Bun-%E2%89%A51.4-fbf0df?logo=bun&logoColor=black)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.base.json)
-[![Tests](https://img.shields.io/badge/tests-261%20passing-brightgreen)](#quick-start)
+[![Tests](https://img.shields.io/badge/tests-297%20passing-brightgreen)](#quick-start)
 
 [Features](#features) · [Architecture](#architecture) · [Packages](#packages) · [Quick Start](#quick-start) · [Benchmarks](#benchmarks) · [Documentation](#documentation)
 
@@ -45,7 +45,8 @@ silent data loss.
   `tool.execute.after`, `experimental.chat.messages.transform`, `experimental.session.compacting`,
   `event` (idle waterline), custom tool `headroom_retrieve`, and `dispose`.
 - **Hot-path compression (rtk)** — two-tier classifier picks one of six strategies
-  (`ls | grep | read | diff | test | fallback`), protects anchor lines by priority, trims to a
+  (`ls | grep | read | diff | test`, plus a never-discards fallback for unknown shapes),
+  protects anchor lines by priority, trims to a
   token budget, folds elided runs into `[+N lines elided …]` markers, and stamps
   `metadata.bluecode { rawHash, strategy, compressed }` onto the rewritten output.
 - **Long-session daemon (headroomd)** — on `session.idle`, when projected tokens cross
@@ -95,7 +96,7 @@ flowchart TB
         HRET["retrieve: hash ∨ BM25"]
     end
 
-    subgraph STORE["dataDir (os-tmpdir/bluecode-headroom)"]
+    subgraph STORE["dataDir (per-user tmpdir, uid-namespaced)"]
         CAS["objects/ — contentHash → gzip JSON"]
         META[("meta.db — cas_meta ledger")]
         IDX[("index.db — histories / chunks / chunks_fts")]
@@ -151,7 +152,7 @@ recover the failed component.
 | [`@bluecode/plugin`](packages/plugin) | opencode plugin | six hook surfaces wiring both sidecars — zero core changes |
 | [`@bluecode/eval`](packages/eval) | Evaluation harness | four-group A/B/C/D runner, golden-fact metrics, baseline freeze + gate |
 
-~8.1k lines of source, ~4.8k lines of tests across 35 test files. Dependency direction:
+~8.7k lines of source, ~6.0k lines of tests across 37 test files. Dependency direction:
 `plugin → {rtk, headroomd} → {contracts, shared}` — leaf packages never depend on each other.
 
 ## Quick Start
@@ -200,15 +201,15 @@ Then start opencode in a scratch directory. Live verification follows the ten-st
 ## Benchmarks
 
 Frozen eval baseline ([`packages/eval/baseline.json`](packages/eval/baseline.json), frozen
-2026-08-23): quick fixture set, exact o200k_base token counting, Bun 1.4.0. Regenerate anytime
-with `bun run eval --check`.
+2026-08-24): full fixture set (10 deterministic fixtures per group), exact o200k_base token
+counting, Bun 1.4.0. Regenerate anytime with `bun run eval --check`.
 
 | Group | Configuration | Compression ratio¹ (lower = smaller context) | Must-hit recall² | Degraded rate |
 |---|---|---:|---:|---:|
 | A | passthrough baseline | 100% | — ⁵ | 0 |
-| B | rtk only | **41.7%** | 66/77 (85.7%) | 0 |
-| C | headroomd only | **18.0%** | 71/77 (92.2%) | 0 |
-| D | combined (rtk → headroomd) | **7.4%** ⁶ | 65/77 (84.4%) | 0 |
+| B | rtk only | **35.6%** | 75/94 (79.8%) | 0 |
+| C | headroomd only | **36.5%** | 88/94 (93.6%) | 0 |
+| D | combined (rtk → headroomd) | **9.0%** ⁶ | 74/94 (78.7%) | 0 |
 
 On the long-session fixture, headroomd reduces accumulated history from **51,083 → 273 tokens**.
 
@@ -216,16 +217,17 @@ On the long-session fixture, headroomd reduces accumulated history from **51,083
 <summary><b>Methodology & caveats</b></summary>
 
 1. **Compression ratio** = Σ outTokens / Σ rawTokens, token-weighted across the group's fixtures,
-   exact o200k_base counts (raw total 61,930 tokens per group; B out 25,845, C out 11,120,
-   D out 4,589).
+   exact o200k_base counts (raw total 80,034 tokens per group; B out 28,479, C out 29,224,
+   D out 7,223).
 2. **Recall** uses this project's deliberately generous definition — *"retrievable from
    headroomd counts as not lost"*: a golden fact hits if it survives by substring in the
    compressed output, in any retrieved snippet, or in its fetch-by-hash original. Per-item miss
-   lists live in `eval-report.json → perFixture[].recallMisses`. Residual B/D misses are a
-   deliberate middle-window truncation policy; C misses are tail turns newer than
-   `retainRecentTurns`.
-3. The frozen baseline covers the **quick fixture set** (4 deterministic fixtures per group).
-   Run the full fixture set with `bun run eval`.
+   lists live in `eval-report.json → perFixture[].recallMisses`. Nice-to-have recall:
+   B 17/23, C 21/23, D 17/23. Residual B/D misses are a deliberate middle-window truncation
+   policy; C misses are tail turns newer than `retainRecentTurns`.
+3. The frozen baseline covers the **full fixture set** (10 deterministic fixtures per group,
+   seeded via mulberry32 for byte-identical regeneration). `bun run eval --quick` runs a
+   reduced smoke set instead.
 4. Latency was measured per-stage in-harness (IPC time on synthetic fixtures); it is reported in
    the baseline JSON but deliberately **not** marketed as end-to-end agent speed-up. C's tiny
    p50 reflects that single tool outputs rarely meet the compaction watermark — by design it
@@ -233,7 +235,7 @@ On the long-session fixture, headroomd reduces accumulated history from **51,083
 5. Group A transforms nothing, so no golden facts are probed.
 6. **D is a lower-bound approximation**: the harness measures the two stages independently
    (summary computed from pre-rtk history), whereas the real plugin chain lets headroomd read
-   the session *after* rtk rewrote it — real-world combined savings should be ≥ 7.4%.
+   the session *after* rtk rewrote it — real-world combined savings should be ≥ 9.0%.
 7. Every quantitative claim in this repository traces to
    [`packages/eval/baseline.json`](packages/eval/baseline.json); aspirational numbers are always
    labeled as targets and never mixed with measurements.
@@ -247,7 +249,7 @@ On the long-session fixture, headroomd reduces accumulated history from **51,083
 | [`docs/architecture.md`](docs/architecture.md) | Package layout, rtk/headroomd data flows, key design decisions |
 | [`docs/protocol.md`](docs/protocol.md) | Wire specs: rtk over stdio JSONL, headroomd over UDS — framing, ops, errors |
 | [`docs/integration-notes.md`](docs/integration-notes.md) | Upstream hook verification records vs opencode v1.18.21 (exact file:line citations) |
-| [`docs/devlog.md`](docs/devlog.md) | All 34 development entries: hardest bugs, root causes, fixes, lessons |
+| [`docs/devlog.md`](docs/devlog.md) | Development log: hardest bugs, root causes, fixes, lessons |
 | [`scripts/smoke.md`](scripts/smoke.md) | Ten-step live-session verification checklist |
 | [`scripts/refresh-upstream.sh`](scripts/refresh-upstream.sh) | Re-sync the read-only opencode upstream snapshot used for hook verification |
 

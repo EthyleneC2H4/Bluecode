@@ -22,8 +22,9 @@ packages/
 ### rtk：工具输出压缩（同步热路径）
 
 ```
-tool.execute.after ──> RtkClient（常驻预热进程池）
-                        │ classify → strategy ∈ {read, ls/glob, grep, bash, stream, noise}
+tool.execute.after ──> RtkClient（常驻预热子进程）
+                        │ classify → strategy ∈ {ls, grep, read, diff, test, unknown}
+                        │           （unknown = 永不丢弃的兜底实现）
                         │ anchor 保护关键行 → budget 裁剪至预算 token
                         └─> 原地改写 output + metadata.bluecode{rawHash,strategy,…}
 ```

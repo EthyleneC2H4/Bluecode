@@ -39,15 +39,19 @@
 | op | params → result | 备注 |
 |---|---|---|
 | `compress` | `{ sessionId, projectId, messages: ChatMessage[], contextWindowTokens, triggerRatio, retainRecentTurns }` → `{ compacted, historyHash, summary, refs[], replacedMessageIds[], rawTokens, summaryTokens, freedTokens }` | 水位不足或保留轮不足时 `compacted:false` 零副作用返回 |
-| `retrieve` | hash 模式 `{ namespace:{projectId,sessionId}, hash }` → `{ found, content? }`；query 模式 `{ namespace, query, limit? }` → `{ hits: [{ role, turnIndex, score, snippet }] }` | 二选一，都缺/都有 → E_INVALID_PARAMS |
+| `retrieve` | hash 模式 `{ namespace:{projectId,sessionId}, hash }`（裸 hex）→ `{ found, content? }`；query 模式 `{ namespace, query, limit? }`（默认 5，协议上限 50，越界 → E_INVALID_PARAMS）→ `{ hits: [{ score, hash, projectId, sessionId, turnIndex, role, snippet }] }` | 二选一，都缺/都有 → E_INVALID_PARAMS；插件工具层把 LLM 传入的 limit clamp 到 50（截断而非报错） |
 | `health` | 空 → `{ ok, pid, uptimeMs, sessions }` | 插件热路径禁用（同 ping/stats 裁决） |
 
-## 哈希命名空间（两协议不互通，各自语义正确）
+## 哈希命名空间（wire 层不互通；插件工具层桥接）
 
 | 组件 | 形式 | 寻址语义 |
 |---|---|---|
 | rtk | `sha256:` 前缀 + 64 位小写 hex | gzip 字节摘要寻址 |
 | headroomd | 裸 64 位小写 hex | 内容逻辑寻址（对象存储编码为 gzip，完整性靠 gzip CRC + JSON.parse） |
+
+两个 daemon 各自只认自己的形式（跨协议寻址会得到 found:false 或报错）。桥接发生在 `headroom_retrieve`
+工具层：带 `sha256:` 前缀的 hash 直接路由给 rtk 的 `fetch`，裸 hash 走 headroomd——LLM 用单一工具即可
+回取两类原文，无需感知底层归属。
 
 ## 消息投影契约（ChatMessage）
 

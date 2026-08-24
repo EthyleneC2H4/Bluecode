@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or discussion
+    url: https://github.com/EthyleneC2H4/Bluecode/discussions
+    about: Usage questions and ideas — please don't open issues for these.

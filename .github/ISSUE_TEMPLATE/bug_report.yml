@@ -1,0 +1,50 @@
+name: Bug report
+description: Something broke or behaved unexpectedly
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. If this is security-sensitive (e.g. another
+        local account can reach the daemon socket or stored content), use
+        [private vulnerability reporting](https://github.com/EthyleneC2H4/Bluecode/security/advisories/new)
+        instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Expected vs actual. Include relevant log lines.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Configure opencode.json with …
+        2. Run a tool that outputs …
+        3. Observe …
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - plugin (opencode integration)
+        - rtk (tool-output compression)
+        - headroomd (history compaction)
+        - headroom_retrieve tool
+        - eval harness / baseline gates
+        - docs
+        - other
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Bun version (`bun --version`), opencode version, OS
+      placeholder: bun 1.4.0, opencode 1.18.x, macOS 15 / Ubuntu 24.04
+    validations:
+      required: true

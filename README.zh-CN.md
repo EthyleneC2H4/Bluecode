@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Bun](https://img.shields.io/badge/Bun-%E2%89%A51.4-fbf0df?logo=bun&logoColor=black)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.base.json)
-[![Tests](https://img.shields.io/badge/tests-261%20passing-brightgreen)](#快速开始)
+[![Tests](https://img.shields.io/badge/tests-297%20passing-brightgreen)](#快速开始)
 
 [特性](#特性) · [架构](#架构) · [组件](#组件) · [快速开始](#快速开始) · [实测基线](#实测基线) · [文档](#文档)
 
@@ -42,7 +42,8 @@ BlueCode 通过单个 opencode 插件同时处理这两条路径，**对宿主�
   （`"plugin": [["file://…", options]]`）。共挂载六类表面：`tool.execute.after`、
   `experimental.chat.messages.transform`、`experimental.session.compacting`、
   `event`（空闲水位）、自定义工具 `headroom_retrieve`、以及 `dispose`。
-- **热路径压缩（rtk）** —— 两级分类器从六种策略（`ls | grep | read | diff | test | fallback`）
+- **热路径压缩（rtk）** —— 两级分类器从六种策略
+  （`ls | grep | read | diff | test`，外加对未知形态永不丢弃的兜底实现）
   中择一，按优先级保护锚点行、裁剪到 token 预算、把被省略的区段折叠为 `[+N lines elided …]`
   标记，并在改写结果上打 `metadata.bluecode { rawHash, strategy, compressed }` 标签。
 - **长会话守护进程（headroomd）** —— 在 `session.idle` 时，若预估 token 超过
@@ -88,7 +89,7 @@ flowchart TB
         HRET["retrieve: hash ∨ BM25"]
     end
 
-    subgraph STORE["dataDir（os-tmpdir/bluecode-headroom）"]
+    subgraph STORE["dataDir（每用户 tmpdir，uid 命名空间）"]
         CAS["objects/ — contentHash → gzip JSON"]
         META[("meta.db — cas_meta 台账")]
         IDX[("index.db — histories / chunks / chunks_fts")]
@@ -141,7 +142,7 @@ flowchart TB
 | [`@bluecode/plugin`](packages/plugin) | opencode 插件 | 六类 hook 表面接入两个 sidecar——零核心改动 |
 | [`@bluecode/eval`](packages/eval) | 评测 harness | A/B/C/D 四组 runner、golden-fact 指标、基线固化 + 门禁 |
 
-源码约 8.1k 行，测试约 4.8k 行、35 个测试文件。依赖方向：
+源码约 8.7k 行，测试约 6.0k 行、37 个测试文件。依赖方向：
 `plugin → {rtk, headroomd} → {contracts, shared}`——叶子包互不依赖。
 
 ## 快速开始
@@ -188,15 +189,16 @@ bun run eval --check      # 对照 packages/eval/baseline.json 的回归门禁�
 
 ## 实测基线
 
-冻结评测基线（[`packages/eval/baseline.json`](packages/eval/baseline.json)，固化于 2026-08-23）：
-quick fixture 集、精确 o200k_base 计数、Bun 1.4.0。随时可用 `bun run eval --check` 复现。
+冻结评测基线（[`packages/eval/baseline.json`](packages/eval/baseline.json)，固化于 2026-08-24）：
+完整 fixture 集（每组 10 个确定性 fixture）、精确 o200k_base 计数、Bun 1.4.0。随时可用
+`bun run eval --check` 复现。
 
 | 组 | 配置 | 压缩率¹（越低 = 上下文越小） | 关键事实召回² | 降级率 |
 |---|---|---:|---:|---:|
 | A | passthrough 基线 | 100% | — ⁵ | 0 |
-| B | rtk only | **41.7%** | 66/77（85.7%） | 0 |
-| C | headroomd only | **18.0%** | 71/77（92.2%） | 0 |
-| D | combined（rtk → headroomd） | **7.4%** ⁶ | 65/77（84.4%） | 0 |
+| B | rtk only | **35.6%** | 75/94（79.8%） | 0 |
+| C | headroomd only | **36.5%** | 88/94（93.6%） | 0 |
+| D | combined（rtk → headroomd） | **9.0%** ⁶ | 74/94（78.7%） | 0 |
 
 长会话 fixture 上，headroomd 将累计历史从 **51,083 → 273 tokens**。
 
@@ -204,19 +206,19 @@ quick fixture 集、精确 o200k_base 计数、Bun 1.4.0。随时可用 `bun run
 <summary><b>方法论与注意事项</b></summary>
 
 1. **压缩率** = Σ outTokens / Σ rawTokens，按组内 fixture 做 token 加权，精确 o200k_base 计数
-   （每组原始总量 61,930 tokens；B 输出 25,845、C 输出 11,120、D 输出 4,589）。
+   （每组原始总量 80,034 tokens；B 输出 28,479、C 输出 29,224、D 输出 7,223）。
 2. **召回**采用本项目刻意宽松的定义——*"能从 headroomd 取回即视为未丢失"*：golden fact 只要在
    压缩输出、任一检索片段或其按哈希取回的原文中以子串形式出现即算命中。逐项 miss 清单见
-   `eval-report.json → perFixture[].recallMisses`。B/D 的残余 miss 是刻意的中间窗口截断策略；
-   C 的残余 miss 是新于 `retainRecentTurns` 的尾部轮次。
-3. 冻结基线覆盖 **quick fixture 集**（每组 4 个确定性 fixture）。完整 fixture 集用
-   `bun run eval` 运行。
+   `eval-report.json → perFixture[].recallMisses`。次重要召回：B 17/23、C 21/23、D 17/23。
+   B/D 的残余 miss 是刻意的中间窗口截断策略；C 的残余 miss 是新于 `retainRecentTurns` 的尾部轮次。
+3. 冻结基线覆盖 **完整 fixture 集**（每组 10 个确定性 fixture，mulberry32 播种，可字节级复现）。
+   `bun run eval --quick` 跑缩减冒烟集。
 4. 延迟为 harness 内分阶段测量（合成 fixture 上的 IPC 耗时），数值收录于 baseline JSON，
    但刻意**不**宣传为端到端提速。C 的极小 p50 是因为单条工具输出几乎不会触及压缩水位——
    设计如此，小输出本就不该动。
 5. A 组不做任何变换，因此不探测 golden fact。
 6. **D 为下界近似**：harness 对两个阶段独立测量（摘要基于 rtk 处理前的历史计算），
-   而真实插件链路中 headroom 经 SDK 读到的是 rtk 改写后的会话——实际组合收益应 ≥ 7.4%。
+   而真实插件链路中 headroom 经 SDK 读到的是 rtk 改写后的会话——实际组合收益应 ≥ 9.0%。
 7. 本仓库的一切量化主张均可追溯至 [`packages/eval/baseline.json`](packages/eval/baseline.json)；
    期望值一律标注「目标」，绝不与实测混排。
 
@@ -229,7 +231,7 @@ quick fixture 集、精确 o200k_base 计数、Bun 1.4.0。随时可用 `bun run
 | [`docs/architecture.md`](docs/architecture.md) | 包布局、rtk/headroomd 数据流、关键设计决策 |
 | [`docs/protocol.md`](docs/protocol.md) | wire 协议规范：rtk over stdio JSONL、headroomd over UDS——帧格式、操作、错误 |
 | [`docs/integration-notes.md`](docs/integration-notes.md) | opencode v1.18.21 上游 hook 核实记录（精确 file:line 引证） |
-| [`docs/devlog.md`](docs/devlog.md) | 全部 34 篇开发日志：最难 bug、根因、修复与教训 |
+| [`docs/devlog.md`](docs/devlog.md) | 开发日志：最难 bug、根因、修复与教训 |
 | [`scripts/smoke.md`](scripts/smoke.md) | 十步实机会话验证清单 |
 | [`scripts/refresh-upstream.sh`](scripts/refresh-upstream.sh) | 刷新用于 hook 核实的只读 opencode 上游快照 |
 

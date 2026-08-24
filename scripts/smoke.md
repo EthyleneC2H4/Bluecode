@@ -127,10 +127,17 @@ opencode
 **Action:** Check headroomd data directory after compaction
 
 ```bash
-DATA_DIR="${BLUECODE_DATA_DIR:-$(bun -e 'console.log(require("os").tmpdir())')/bluecode-headroom}"
-ls -la "$DATA_DIR"   # default is <os-tmpdir>/bluecode-headroom, override via dataDir option / BLUECODE_DATA_DIR
+# Resolve the effective store dir. The dataDir option in opencode.json wins;
+# the default is per-user namespaced (<XDG_RUNTIME_DIR | os-tmpdir>/bluecode-headroom-<uid>).
+# NOTE: exporting BLUECODE_DATA_DIR yourself does NOT relocate the store —
+# it is an OUTPUT of the plugin (set right before the daemon is spawned so
+# the child inherits the plugin's dir), not an input.
+DATA_DIR="$(bun -e 'import { defaultSidecarDataDir } from "./packages/shared/src/paths.ts";
+console.log(defaultSidecarDataDir("bluecode-headroom"))')"
+ls -la "$DATA_DIR"
 # Should have:
-# - index.db (SQLite index)
+# - index.db (SQLite index: chunks, histories, FTS)
+# - meta.db (SQLite attribution ledger: cas_meta)
 # - objects/00/... (CAS objects, sharded by hash prefix)
 # - headroomd.sock (daemon socket)
 # - headroomd.pid (daemon PID file)
@@ -138,12 +145,13 @@ ls -la "$DATA_DIR"   # default is <os-tmpdir>/bluecode-headroom, override via da
 
 **Verification:**
 ```bash
-# Verify CAS objects exist
-find "$DATA_DIR/objects" -name "*.bin" | head -5
-# Should show content-addressable objects
+# Verify CAS objects exist (content-addressed, extensionless; .tmp-* are
+# in-flight writes and should be ignored)
+find "$DATA_DIR/objects" -type f ! -name ".tmp-*" | head -5
 
-# Verify index has entries
-sqlite3 "$DATA_DIR/index.db" "SELECT count(*) FROM cas_meta;"
+# Verify the attribution ledger has entries (cas_meta lives in meta.db,
+# NOT index.db — index.db holds only derived data: chunks/histories/FTS)
+sqlite3 "$DATA_DIR/meta.db" "SELECT count(*) FROM cas_meta;"
 # Should return > 0
 ```
 
@@ -223,15 +231,16 @@ grep -r "bluecode-plugin" ~/.local/share/opencode/logs/
 # Check rtk metadata in session
 # (Inspect tool call metadata in opencode UI)
 
-# Check headroomd store
-ls -la $BLUECODE_DATA_DIR/  # or ~/.tmp/bluecode-headroom/
+# Check headroomd store ($DATA_DIR as resolved in Step 7 — the plugin's
+# dataDir option wins; default is per-user namespaced)
+ls -la "$DATA_DIR"/
 
 # Check CAS objects
-find $BLUECODE_DATA_DIR/objects -type f | wc -l
+find "$DATA_DIR"/objects -type f ! -name ".tmp-*" | wc -l
 
-# Check SQLite index
-sqlite3 $BLUECODE_DATA_DIR/index.db ".tables"
-sqlite3 $BLUECODE_DATA_DIR/index.db "SELECT * FROM cas_meta LIMIT 5;"
+# Check SQLite databases (meta.db owns cas_meta; index.db is derived)
+sqlite3 "$DATA_DIR/index.db" ".tables"
+sqlite3 "$DATA_DIR/meta.db" "SELECT * FROM cas_meta LIMIT 5;"
 
 # Check daemon process
 ps aux | grep headroomd
