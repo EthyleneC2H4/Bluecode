@@ -128,6 +128,23 @@ describe("handshake framing (byte-level)", () => {
     }
     expect((thrown as Error).message).toContain("connect timeout");
   });
+
+  test("handshake accumulator caps out instead of buffering an unbounded flood", async () => {
+    // Audit round 2: a rogue listener writing forever without a newline grew
+    // client memory without bound while the timeout clock ran. Just over the
+    // cap must fail fast with a specific error.
+    const socketPath = path.join(await freshDir(), "flood.sock");
+    await serve(socketPath, (sock) => {
+      sock.write(Buffer.alloc(64 * 1024 + 1, 0x61));
+    });
+    let thrown: unknown;
+    try {
+      await attemptConnect(socketPath);
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as Error).message).toContain("without a newline");
+  });
 });
 
 describe("connect-or-spawn", () => {

@@ -70,6 +70,13 @@ interface PendingRequest {
 
 const CONNECT_TIMEOUT_MS = 1000;
 const MAX_RECONNECT_ATTEMPTS = 5;
+/**
+ * A real daemon's handshake is one short JSON line; anything near this size
+ * without a newline is not speaking our protocol. Caps the pre-handshake
+ * accumulator so a rogue listener on the socket path cannot grow client
+ * memory without bound while the timeout clock runs.
+ */
+const MAX_HANDSHAKE_BYTES = 64 * 1024;
 
 function defaultSocketPath(options: HeadroomClientOptions): string {
   if (options.socketPath !== undefined) return options.socketPath;
@@ -115,7 +122,17 @@ export function attemptConnect(socketPath: string): Promise<AttemptedConnection>
     const handler = (chunk: Buffer): void => {
       acc = acc.length === 0 ? chunk : Buffer.concat([acc, chunk]);
       const nl = acc.indexOf(0x0a);
-      if (nl === -1) return; // keep waiting; CONNECT_TIMEOUT_MS is the bound
+      if (nl === -1) {
+        // The accumulator used to be unbounded while the timeout clock ran.
+        if (acc.length > MAX_HANDSHAKE_BYTES) {
+          fail(
+            new Error(
+              `headroomd: handshake exceeded ${MAX_HANDSHAKE_BYTES} bytes without a newline`,
+            ),
+          );
+        }
+        return; // keep waiting; CONNECT_TIMEOUT_MS is the bound
+      }
       const handshakeBytes = acc.subarray(0, nl);
       const rest = acc.subarray(nl + 1);
       let handshake = "";
