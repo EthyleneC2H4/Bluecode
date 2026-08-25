@@ -5,7 +5,7 @@ import { RtkClient, type CompressInput, type CompressOutcome } from "@bluecode/r
 import { HeadroomClient, type HeadroomClientOptions } from "@bluecode/headroomd";
 import { allFixtures, quickFixtures, fixturesToHeadroomParams, type FixtureSample } from "./fixtures";
 import { evaluateRecall, buildPerFixtureRecord, type LatencySample, type RecallResult, type PerFixtureRecord } from "./metrics";
-import { createExactTokenCounter } from "@bluecode/shared";
+import { createExactTokenCounter, defaultSidecarDataDir } from "@bluecode/shared";
 import { randomUUID } from "node:crypto";
 import type { RetrieveHit, RetrieveByHashResult, HeadroomCompressParams, HeadroomRetrieveParams } from "@bluecode/contracts";
 
@@ -222,7 +222,7 @@ async function runGroupC(fixtures: FixtureSample[], options: RunnerOptions): Pro
   latencies: LatencySample[];
   recallResults: RecallResult[];
 }> {
-  const dataDir = options.dataDir ?? "/tmp/bluecode-eval-headroomd";
+  const dataDir = options.dataDir ?? defaultSidecarDataDir("bluecode-eval-headroomd");
   // exactOptionalPropertyTypes: absent options stay absent, not undefined.
   const headroomOptions: HeadroomClientOptions = {
     dataDir,
@@ -293,7 +293,7 @@ async function runGroupD(fixtures: FixtureSample[], options: RunnerOptions): Pro
   latencies: LatencySample[];
   recallResults: RecallResult[];
 }> {
-  const dataDir = options.dataDir ?? "/tmp/bluecode-eval-headroomd";
+  const dataDir = options.dataDir ?? defaultSidecarDataDir("bluecode-eval-headroomd");
   // exactOptionalPropertyTypes: absent options stay absent, not undefined.
   const rtk = await RtkClient.create({
     cwd: process.cwd(),

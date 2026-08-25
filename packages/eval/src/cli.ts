@@ -9,6 +9,7 @@
  *   bun run src/cli.ts --update-baseline  # write current report as baseline
  */
 import path from "node:path";
+import { defaultSidecarDataDir } from "@bluecode/shared";
 import { runEvaluation, dispose as disposeRunner } from "./runner";
 import { aggregateReport, dispose as disposeMetrics } from "./metrics";
 import { writeReport, printSummary, dispose as disposeReport } from "./report";
@@ -106,7 +107,10 @@ async function main(): Promise<number> {
   // The spawned headroomd reads its data dir from this env var (the client
   // passes no CLI args — see headroomd/src/client.ts). Default mirrors the
   // runner's own fallback so a plain `bun run eval` works standalone.
-  process.env.BLUECODE_DATA_DIR ??= "/tmp/bluecode-eval-headroomd";
+  // uid-namespaced runtime dir (same policy as the plugin) instead of a fixed
+  // /tmp path: parallel eval runs by different users stop colliding, and a
+  // same-uid second run reuses the winner's daemon rather than fighting it.
+  process.env.BLUECODE_DATA_DIR ??= defaultSidecarDataDir("bluecode-eval-headroomd");
   console.error("[eval] Starting evaluation...");
 
   try {
