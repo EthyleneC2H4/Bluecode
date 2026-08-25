@@ -13,7 +13,6 @@
  * version. The field rides along for forward compatibility only.
  */
 import { mkdir } from "node:fs/promises";
-import { chmodSync } from "node:fs";
 import type {
   ChatMessage,
   HeadroomCompressParamsParsed,
@@ -38,6 +37,7 @@ import {
 } from "./store/db";
 import { buildMatchQuery, insertChunk, searchChunks, type InsertChunkInput } from "./store/fts";
 import { readMessageObject, renderProjection, writeMessageObject } from "./store/objects";
+import { hardenPath } from "./perms";
 import {
   historySummary,
   keywords as keywordize,
@@ -75,8 +75,9 @@ export async function createEngine(options: EngineOptions): Promise<Engine> {
   // (shared's defaultSidecarDataDir uid-namespaces only its OWN defaults), so
   // chmod regardless of how the dir got here. macOS tmpdirs are already
   // per-user; this closes Linux /tmp attach/bind/squat vectors no matter what
-  // umask the spawning shell had.
-  chmodSync(dataDir, 0o700);
+  // umask the spawning shell had. Best-effort: a chmod failure (root-owned
+  // leftover, exotic mount) must not kill startup — see hardenPath.
+  hardenPath(dataDir, 0o700);
   const store = openStore(dataDir);
 
   // Self-heal on startup. The derived index is rebuilt from objects +

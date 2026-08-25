@@ -76,8 +76,9 @@ if (args.version) {
   process.exit(0);
 }
 
-// The client's spawn recipe cannot pass CLI flags, so a spawned daemon takes
-// its data dir from the environment; --dataDir wins when both are present.
+// The plugin forwards --socketPath/--idleExitMs through the spawn recipe's
+// args channel; a spawned daemon's data dir still rides the environment
+// (BLUECODE_DATA_DIR), with --dataDir winning when both are present.
 const dataDir = args.dataDir ?? process.env.BLUECODE_DATA_DIR;
 if (dataDir === undefined || dataDir.length === 0) {
   process.stderr.write("[headroomd] --dataDir (or BLUECODE_DATA_DIR) is required\n");

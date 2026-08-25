@@ -47,6 +47,12 @@ CREATE TABLE IF NOT EXISTS cas_meta(
 CREATE INDEX IF NOT EXISTS cas_meta_session ON cas_meta(project_id, session_id);
 `;
 
+/** Single source of truth for the heal-bookkeeping table (schema + migration). */
+const REBUILD_STATE_DDL = `CREATE TABLE IF NOT EXISTS rebuild_state(
+  expected_chunks INTEGER NOT NULL,
+  skipped INTEGER NOT NULL DEFAULT 0
+)`;
+
 const INDEX_SCHEMA = `
 CREATE TABLE IF NOT EXISTS histories(
   history_hash TEXT PRIMARY KEY,
@@ -68,14 +74,17 @@ CREATE TABLE IF NOT EXISTS chunks(
   raw_excerpt TEXT NOT NULL,
   keywords TEXT NOT NULL
 );
--- One-row heal bookkeeping: the chunk count the last full rebuild produced.
--- Without it, indexLooksLost's "chunks < cas_meta" probe stays true forever
--- once any object goes missing (objects are truth, so a rebuild legitimately
--- writes fewer chunks than cas_meta rows), and the daemon rebuilt on EVERY
--- boot. Existing index.dbs gain the empty table automatically via IF NOT
--- EXISTS; an absent row means "no recorded expectation" and falls back to the
--- legacy comparison. See indexLooksLost.
-CREATE TABLE IF NOT EXISTS rebuild_state(expected_chunks INTEGER NOT NULL);
+-- One-row heal bookkeeping from the last full rebuild:
+--   expected_chunks — chunk rows the rebuild wrote;
+--   skipped         — cas_meta rows it could NOT index (object missing or
+--                     corrupt), i.e. the permanent gap between cas_meta and
+--                     chunks. Without recording it, any chunks-vs-cas_meta
+--                     probe stays true forever once an object goes missing
+--                     (objects are truth, so that gap is legitimate), and the
+--                     daemon rebuilt on EVERY boot. An absent row means "no
+--                     recorded expectation" and falls back to the legacy
+--                     comparison. See indexLooksLost and migrateRebuildState.
+${REBUILD_STATE_DDL}
 `;
 
 function openDbWith(path: string, schema: string): HeadroomDb {
@@ -100,7 +109,23 @@ export function openIndexDb(path: string): HeadroomDb {
   handle.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     content_hash UNINDEXED, summary_text, raw_excerpt, keywords
   )`);
+  migrateRebuildState(handle.db);
   return handle;
+}
+
+/**
+ * One-time migration for index.dbs written before the `skipped` column:
+ * CREATE TABLE IF NOT EXISTS cannot widen the old single-column table, so it
+ * must be dropped and recreated. Losing the bookkeeping row is cheap — an
+ * absent row only falls back to the legacy comparison (see indexLooksLost),
+ * and the next heal re-records fresh state and converges.
+ */
+function migrateRebuildState(db: Database): void {
+  const columns = db.prepare(`PRAGMA table_info(rebuild_state)`).all() as Array<{ name: string }>;
+  if (columns.length > 0 && !columns.some((column) => column.name === "skipped")) {
+    db.exec(`DROP TABLE rebuild_state`);
+    db.exec(REBUILD_STATE_DDL);
+  }
 }
 
 /** The pair of databases one daemon instance works against. */
@@ -240,24 +265,31 @@ export function countChunks(handle: HeadroomDb): number {
 }
 
 /**
- * Whether index.db needs the startup rebuild, per the heal-thrash fix:
+ * Whether index.db needs the startup rebuild:
  *
  * - No rebuild_state row (fresh or deleted index.db — nothing recorded yet):
  *   fall back to the legacy attribution-vs-chunks comparison.
- * - Row present: fire only when chunks fell BELOW the last rebuild's
- *   expectation (rows genuinely lost). Strictly less-than, so normal growth
- *   never false-triggers and a missing OBJECT (a legitimate rebuild skip,
- *   leaving chunks < cas_meta permanently) converges after one repair instead
- *   of re-rebuilding every boot.
+ * - Row present, two failure shapes (both strictly-less-than so normal growth
+ *   never false-triggers and a converged state stays converged):
+ *   1. chunks BELOW expectation — committed chunk rows were genuinely lost.
+ *   2. chunks + skipped BELOW cas_meta — the steady-state invariant
+ *      `chunks == cas_meta - skipped` broke with both sides above the
+ *      recorded counts. That is meta.db ahead of index.db: WAL + NORMAL
+ *      synchronous can roll the two files back to DIFFERENT checkpoints on
+ *      power loss (or crash between the meta and index write transactions),
+ *      stranding cas_meta rows whose chunk writes never landed even though
+ *      neither file dropped below its baseline. Without disjunct 2 the old
+ *      `chunks < expected_chunks` probe stayed false forever in that window.
  */
 export function indexLooksLost(indexHandle: HeadroomDb, metaHandle: HeadroomDb): boolean {
   const recorded = indexHandle.db
-    .prepare(`SELECT expected_chunks AS n FROM rebuild_state`)
-    .get() as { n: number } | null;
+    .prepare(`SELECT expected_chunks AS expectedChunks, skipped FROM rebuild_state`)
+    .get() as { expectedChunks: number; skipped: number } | null;
   if (recorded === null) {
     return countCasMeta(metaHandle) > 0 && countChunks(indexHandle) < countCasMeta(metaHandle);
   }
-  return countChunks(indexHandle) < recorded.n;
+  const chunks = countChunks(indexHandle);
+  return chunks < recorded.expectedChunks || chunks + recorded.skipped < countCasMeta(metaHandle);
 }
 
 // ---------------------------------------------------------------------------
@@ -308,7 +340,14 @@ export async function rebuildFromObjects(
   for (const meta of metas) {
     try {
       const projection = await readMessageObject(dataDir, meta.hash);
-      if (projection === null) continue; // vanished object: cas_meta outlives it
+      if (projection === null) {
+        // Vanished object: cas_meta outlives it. Deliberately not warned
+        // (unlike the corrupt branch), but COUNTED — `skipped` means "cas_meta
+        // rows this rebuild could not index", and recording the full permanent
+        // gap is what lets indexLooksLost converge instead of heal-thrashing.
+        skipped += 1;
+        continue;
+      }
       resolved.push({ meta, message: { info: projection.info, parts: projection.parts } });
     } catch (err) {
       // Corrupt stored object: degrade to "one item lost" instead of aborting
@@ -396,10 +435,12 @@ export async function rebuildFromObjects(
     // Record the heal expectation INSIDE the same transaction as the rows it
     // describes, so indexLooksLost can never observe one without the other
     // (delete-then-insert: single-row table needs no unique constraint).
+    // skipped rides along: it is the legitimate cas_meta-vs-chunks gap this
+    // rebuild converged to, and indexLooksLost subtracts it from cas_meta.
     indexHandle.db.exec("DELETE FROM rebuild_state");
     indexHandle.db
-      .prepare(`INSERT INTO rebuild_state(expected_chunks) VALUES (?)`)
-      .run(chunkWrites.length);
+      .prepare(`INSERT INTO rebuild_state(expected_chunks, skipped) VALUES (?, ?)`)
+      .run(chunkWrites.length, skipped);
   });
   apply();
 

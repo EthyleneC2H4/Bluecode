@@ -23,7 +23,7 @@
  * 3. pid file records the winner; removed on graceful shutdown.
  */
 import net from "node:net";
-import { chmodSync, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -39,6 +39,7 @@ import {
 } from "@bluecode/contracts";
 import { createLineReconstructor, encodeFrame, FrameOverflowError } from "@bluecode/shared";
 import { createEngine, type Engine } from "./engine";
+import { hardenPath } from "./perms";
 
 export interface HeadroomServerOptions {
   dataDir: string;
@@ -386,8 +387,9 @@ export async function startHeadroomServer(
   // Complements the uid-namespaced default dirs in @bluecode/shared — the
   // plugin may hand us an explicit dataDir, so chmod regardless. macOS
   // tmpdir is already per-user; this closes Linux /tmp vectors regardless of
-  // umask.
-  chmodSync(socketPath, 0o600);
+  // umask. Best-effort (see hardenPath): a failed chmod warns and continues
+  // rather than crashing a daemon that is already listening.
+  hardenPath(socketPath, 0o600);
   armIdleTimer(); // born idle: exit timer starts with zero clients
 
   function shutdown(): void {

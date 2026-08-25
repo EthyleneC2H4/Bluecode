@@ -24,6 +24,7 @@ import { contentHash } from "../src/turns";
 import {
   countChunks,
   ftsHealthy,
+  indexLooksLost,
   openIndexDb,
   openMetaDb,
   rebuildFromObjects,
@@ -315,5 +316,143 @@ describe("db lifecycle + rebuild", () => {
     expect(result.chunks).toBe(good.length);
     expect(warns.some((line) => line.includes("skipping corrupt object") && line.includes(badHash)))
       .toBe(true);
+  });
+
+  test("rebuild records skipped alongside expectation (single-row bookkeeping)", async () => {
+    // One corrupt object among three: recorded state must capture BOTH the
+    // written-chunk count AND the permanent gap it leaves vs cas_meta.
+    const { dir, meta, index: handle } = await freshDb("record");
+    const good = user("u1", "recorded correctly");
+    const hash = await contentHash(good);
+    await writeMessageObject(dir, good, hash);
+    const badHash = "ca" + "0".repeat(62);
+    await mkdir(path.join(dir, "objects", "ca"), { recursive: true });
+    await writeFile(path.join(path.join(dir, "objects", "ca"), badHash), Buffer.from("junk"));
+    for (const [seq, h] of [hash, badHash].entries()) {
+      insertCasMeta(meta, {
+        hash: h, projectId: "p", sessionId: "s",
+        role: seq === 0 ? "user" : "assistant",
+        turnIndex: seq, msgSeq: seq, historyHash: "hh", createdAt: 5,
+      });
+    }
+
+    const warns: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...parts: unknown[]) => warns.push(parts.map(String).join(" "));
+    let result: Awaited<ReturnType<typeof rebuildFromObjects>>;
+    try {
+      result = await rebuildFromObjects(dir, meta, handle);
+    } finally {
+      console.warn = originalWarn;
+    }
+    expect(result.skipped).toBe(1);
+
+    const row = handle.db
+      .prepare(`SELECT expected_chunks AS expectedChunks, skipped FROM rebuild_state`)
+      .get() as { expectedChunks: number; skipped: number };
+    expect(row.expectedChunks).toBe(1);
+    expect(row.skipped).toBe(1);
+    // Convergence: the legitimate gap no longer reads as a lost index.
+    expect(indexLooksLost(handle, meta)).toBe(false);
+  });
+});
+
+describe("indexLooksLost failure shapes", () => {
+  let nextChunk = 0;
+  let nextMeta = 0;
+  function addChunks(handle: HeadroomDb, n: number): void {
+    for (let i = 0; i < n; i++) {
+      insertChunk(handle.db, {
+        contentHash: `${(nextChunk++).toString().padStart(2, "0")}`.padEnd(64, "a"),
+        projectId: "p", sessionId: "s", role: "user", turnIndex: i,
+        historyHash: "hh", summaryText: "t", rawExcerpt: "e", keywords: "t",
+      });
+    }
+  }
+  function addCasMeta(meta: HeadroomDb, n: number): void {
+    for (let i = 0; i < n; i++) {
+      // INSERT OR IGNORE dedups on hash PK — the counter keeps every row live.
+      insertCasMeta(meta, {
+        hash: `m${nextMeta++}`.padEnd(64, "b"),
+        projectId: "p", sessionId: "s", role: "user",
+        turnIndex: i, msgSeq: nextMeta, historyHash: "hh", createdAt: 1,
+      });
+    }
+  }
+  function record(index: HeadroomDb, expectedChunks: number, skipped: number): void {
+    index.db.exec(`DELETE FROM rebuild_state`);
+    index.db.prepare(`INSERT INTO rebuild_state(expected_chunks, skipped) VALUES (?, ?)`).run(
+      expectedChunks,
+      skipped,
+    );
+  }
+
+  test("no row: legacy comparison still guards a fresh/deleted index.db", async () => {
+    const { meta, index: handle } = await freshDb("lost-legacy");
+    expect(indexLooksLost(handle, meta)).toBe(false); // nothing archived yet
+    addCasMeta(meta, 3);
+    expect(indexLooksLost(handle, meta)).toBe(true); // attribution without chunks
+  });
+
+  test("row present: chunks below expectation fires (rows genuinely lost)", async () => {
+    const { meta, index: handle } = await freshDb("lost-below");
+    addCasMeta(meta, 5);
+    addChunks(handle, 5);
+    record(handle, 5, 0);
+    expect(indexLooksLost(handle, meta)).toBe(false);
+    // Five committed chunk rows vanish (rollback / manual tampering).
+    handle.db.exec(`DELETE FROM chunks WHERE content_hash LIKE '00%'`);
+    expect(indexLooksLost(handle, meta)).toBe(true);
+  });
+
+  test("row present: meta ahead of index fires even with both sides above baseline", async () => {
+    // Audit round 2 finding: WAL checkpoint divergence rolls meta.db back LESS
+    // far than index.db. Baseline expected=3/skipped=1 survives on both sides,
+    // but two stranded cas_meta rows never got their chunk writes.
+    const { meta, index: handle } = await freshDb("lost-ahead");
+    addCasMeta(meta, 6);
+    addChunks(handle, 4);
+    record(handle, 3, 1); // invariant at rebuild time: 3 chunks == 4 meta - 1 skip
+    // Old probe (chunks < expected): 4 >= 3 → silent. New disjunct: 4+1 < 6.
+    expect(indexLooksLost(handle, meta)).toBe(true);
+  });
+
+  test("row present: normal growth above the baseline never false-fires", async () => {
+    const { meta, index: handle } = await freshDb("lost-growth");
+    addCasMeta(meta, 8);
+    addChunks(handle, 7); // 7 == 8 - 1 skipped
+    record(handle, 3, 1);
+    expect(indexLooksLost(handle, meta)).toBe(false);
+  });
+
+  test("legacy single-column rebuild_state is migrated away on reopen", async () => {
+    const { dir } = await freshDb("migrate");
+    const indexPath = path.join(dir, "index.db");
+    // Hand-craft the pre-skipped shape, then close both handles so reopening
+    // exercises openIndexDb's migration, not IF NOT EXISTS.
+    dbs.at(-1)?.close();
+    dbs.at(-2)?.close();
+    dbs.length -= 2;
+    const legacy = openIndexDb(indexPath);
+    legacy.db.exec(`DROP TABLE rebuild_state`);
+    legacy.db.exec(`CREATE TABLE rebuild_state(expected_chunks INTEGER NOT NULL)`);
+    legacy.close();
+
+    const reopened = openIndexDb(indexPath);
+    dbs.push(reopened);
+    const columns = reopened.db.prepare(`PRAGMA table_info(rebuild_state)`).all() as Array<{
+      name: string;
+    }>;
+    expect(columns.map((c) => c.name)).toContain("skipped");
+    // The migrated table accepts the full two-column bookkeeping row.
+    reopened.db.prepare(`INSERT INTO rebuild_state(expected_chunks, skipped) VALUES (?, ?)`).run(
+      3,
+      1,
+    );
+    const row = reopened.db
+      .prepare(`SELECT expected_chunks AS e, skipped FROM rebuild_state`)
+      .get() as { e: number; skipped: number };
+    expect(row.e).toBe(3);
+    expect(row.skipped).toBe(1);
   });
 });
