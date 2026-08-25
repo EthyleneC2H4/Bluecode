@@ -37,6 +37,11 @@ jobs:
       - name: Test (all packages)
         run: bun test
 
+      # Workspace package graph must match the documented dependency
+      # direction exactly (CONTRIBUTING.md); cheap enough to run every push.
+      - name: Dependency direction
+        run: bun scripts/check-dependency-direction.ts
+
       # Full eval run against the frozen baseline. Compression-ratio and
       # recall gates are enforced; the p95-latency gate is skipped because
       # shared runners are too noisy for a 2x wall-clock bound.
