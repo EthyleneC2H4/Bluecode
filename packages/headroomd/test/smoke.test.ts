@@ -3,6 +3,6 @@ import { VERSION } from "../src/index";
 
 describe("@bluecode/headroomd", () => {
   test("scaffold placeholder exposes its version", () => {
-    expect(VERSION).toBe("0.0.1");
+    expect(VERSION).toBe("0.1.0");
   });
 });

@@ -5,7 +5,7 @@
  * spawned by the client itself. Wire schemas live in @bluecode/contracts,
  * the compression pipeline in @bluecode/rtk-core.
  */
-export const VERSION = "0.0.1" as const;
+export const VERSION = "0.1.0" as const;
 
 export {
   RtkClient,

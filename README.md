@@ -160,6 +160,11 @@ recover the failed component.
 Requires [Bun](https://bun.sh) ≥ 1.4 (tested on Bun 1.4.0). No LLM API key is needed to build,
 test or evaluate — only for live sessions.
 
+> [!IMPORTANT]
+> **POSIX only.** headroomd communicates over a Unix domain socket and both sidecars rely on
+> POSIX permissions (socket `0600`, data-dir `0700`), so Linux and macOS are supported;
+> **Windows is not** (no WSL workaround — the socket path is a filesystem path by design).
+
 ```bash
 git clone https://github.com/EthyleneC2H4/Bluecode.git bluecode
 cd bluecode

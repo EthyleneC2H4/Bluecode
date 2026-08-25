@@ -15,4 +15,4 @@ export * from "./runner";
 export { writeReport, readReport, printSummary, dispose as disposeReport } from "./report";
 export * from "./check-baseline";
 
-export const VERSION = "0.0.1" as const;
+export const VERSION = "0.1.0" as const;

@@ -150,6 +150,11 @@ flowchart TB
 需要 [Bun](https://bun.sh) ≥ 1.4（实测于 Bun 1.4.0）。构建、测试、评测均无需 LLM API key，
 仅真实会话需要。
 
+> [!IMPORTANT]
+> **仅支持 POSIX。** headroomd 通过 Unix domain socket 通信，两个 sidecar 均依赖 POSIX
+> 权限模型（socket `0600`、数据目录 `0700`），因此支持 Linux 与 macOS；**不支持 Windows**
+> （WSL 也不行——socket 路径按设计就是文件系统路径）。
+
 ```bash
 git clone https://github.com/EthyleneC2H4/Bluecode.git bluecode
 cd bluecode

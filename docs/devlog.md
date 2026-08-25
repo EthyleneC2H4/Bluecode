@@ -368,3 +368,14 @@
 - **解决思路**：按包分治——四个包级修复代理各持文件权并行作业（rtk/rtk-core、headroomd、plugin、eval），基础原语先行收敛进 shared（bunSpawnArgv、defaultSidecarDataDir、FrameOverflowError、redactLocalPaths）；桥接明确落在插件工具层而非协议层，两个 daemon 保持互不知晓。
 - **解决方法**：守卫窄化为 every(isCompactionReplacement)；sha256: 前缀哈希在 retrieve-tool 直路由 rtk.fetch；dataDir 改 uid/XDG 命名空间 + dir 0o700 + socket 0o600；rebuildFromObjects try/catch 跳过损坏对象并记 skipped；index.db 加 rebuild_state(expected_chunks) 让自愈一轮收敛；boot 失败统一 settled-guarded fail()（SIGTERM + stderr 持续 drain + unref）；握手改字节级分帧（Bun 会静默丢弃 unshift 回灌的字节，改为 pending 缓冲同步回喂）；late-reply 环形缓冲让三次纯超时不再误杀健康子进程；retrieve limit 三层 clamp（contracts .max(50) → 插件截断 → engine Math.min）；模型可见错误经 redactLocalPaths 脱敏；zod 统一 v4。测试 261→298，基线重冻结后门禁全绿。
 - **教训**：审计的价值密度集中在「不变量被局部推理破坏」处（守卫、水位、幂等）与「承诺无实现」处（检索桥接）——后者只有拿文档逐条对质才会现形。多代理按包分治的关键是先冻结共享接口（contracts/shared 先行提交），让并行修复不互相踩踏；而「对抗验证」环节驳回了 2/40 的候选发现，避免了对幻影问题的无效返工。
+
+---
+
+## 2026-08-25 · 第二轮审查 12 项改进清偿
+
+### 44. rebuild_state 的 skipped 必须把「消失」和「损坏」一起计入
+
+- **现象**：第二轮全项目审查确认 `rebuild_state(expected_chunks)` 基线在两类场景失效：WAL 断电回滚使 meta.db 与 index.db 落到不同检查点（两侧都高于基线，但 meta 多出若干从未落盘 chunk 行的 cas_meta 行），旧判据 `chunks < expected` 永假；此外 chmodSync 无守卫、握手累积器无上限、eval 固定 /tmp 目录、CONTRIBUTING 依赖图错误、依赖方向无 CI 强制等共 12 项。
+- **根因**：`indexLooksLost` 只记录了「上次重建写了多少行」，没记录「有多少 cas_meta 行是合法地无法索引的」。修复时第一版只把 corrupt 分支计入 skipped，立刻被既有测试 `a missing object converges instead of looping the healer` 打回——vanished 对象（读到 null）同样造成永久缺口，却走的是静默 `continue` 分支，不计入 skipped，新判据 `chunks + skipped < casMeta` 于是每次启动都误触发重建，heal-thrash 复发。
+- **解决方法**：vanished 分支同样 `skipped += 1`（仍不 warn——那是合法状态）；rebuild_state 加 skipped 列（PRAGMA table_info 探测 + DROP/recreate 一次性迁移，丢账本行的代价只是回退 legacy 探测一轮）；apply() 事务内双列 upsert；indexLooksLost 改双析取 `chunks < expected || chunks + skipped < casMeta`。chmod 收敛进可注入 impl 的 hardenPath（warn+continue）；attemptConnect 握手累积器加 64KiB 上限；eval 三处默认目录改 defaultSidecarDataDir（uid 命名空间）；依赖方向用 scripts/check-dependency-direction.ts 对照 ALLOWED_EDGES 全量断言并进 CI 与 verify；版本统一升 0.1.0 并补 CHANGELOG、dependabot、双语 README 平台声明。
+- **教训**：「不变量修复」最危险的时刻是新不变量与旧分支语义不完全对齐——corrupt 与 vanished 在同一循环里只差一个 warn，却让第一版修复直接复发历史上的 heal-thrash bug。既有回归测试的价值恰在此处：它守护的不是代码路径，而是当年踩坑的完整语义。新增测试要覆盖「失败形状」本身（below-baseline / meta-ahead / steady-growth / legacy 迁移），而非只测 happy path。

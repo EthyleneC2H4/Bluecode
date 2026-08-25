@@ -5,7 +5,7 @@ import { makeDataDir } from "./helpers";
 
 describe("@bluecode/rtk", () => {
   test("package version export is stable", () => {
-    expect(VERSION).toBe("0.0.1");
+    expect(VERSION).toBe("0.1.0");
   });
 
   test("spawn argv uses execPath only when it is really bun (M7 smoke)", () => {

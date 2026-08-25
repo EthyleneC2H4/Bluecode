@@ -1,0 +1,30 @@
+# Weekly dependency refresh. The bun workspace is one npm ecosystem entry at
+# the root (workspaces resolve there), plus a separate entry for the GitHub
+# Actions pins in ci.yml. Groups keep minor/patch churn to one PR per
+# ecosystem; majors surface individually on purpose.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # CI pins Bun deliberately (eval baseline is latency-sensitive; see
+      # ci.yml comment). Bump via a reviewed PR that re-freezes the baseline.
+      - dependency-name: "bun-types"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
