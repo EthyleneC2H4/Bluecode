@@ -60,20 +60,10 @@ export const headroomRetrieveTool = tool({
     // Enforces the refine (and the shape) — throws ZodError on violation.
     RetrieveArgsSchema.parse(args);
 
-    const client = getClient();
-    if (client === null) {
-      return "Error: headroomd client not available. The history retrieval daemon is not connected.";
-    }
-
-    // Clamp at the tool boundary: contracts reject limit > 50 with
-    // E_INVALID_PARAMS, but an LLM caller asking for 200 hits wants its first
-    // 50, not a protocol error. Direct UDS callers keep the strict rejection.
-    const limit = Math.min(args.limit ?? 5, MAX_QUERY_LIMIT);
-
-    // Retrieval bridge: sha256:-prefixed hashes address rtk's CAS of
-    // tool-output originals. Route BEFORE touching headroomd — its reader
-    // throws on foreign objects (devlog #44). Bare hex falls through to the
-    // headroomd archive unchanged.
+    // Retrieval bridge FIRST, before any headroomd availability guard: the two
+    // sidecars fail independently (factory continues when either connect fails),
+    // and a sha256: fetch must work whenever rtk is alive — even mid-headroomd
+    // outage. Bare hex falls through to the headroomd archive below.
     if (args.hash !== undefined && args.hash.startsWith("sha256:")) {
       const rtk = getSharedRtkClient();
       if (rtk === null) {
@@ -95,6 +85,16 @@ export const headroomRetrieveTool = tool({
         return `Error retrieving history: ${redactLocalPaths((err as Error).message)}`;
       }
     }
+
+    const client = getClient();
+    if (client === null) {
+      return "Error: headroomd client not available. The history retrieval daemon is not connected.";
+    }
+
+    // Clamp at the tool boundary: contracts reject limit > 50 with
+    // E_INVALID_PARAMS, but an LLM caller asking for 200 hits wants its first
+    // 50, not a protocol error. Direct UDS callers keep the strict rejection.
+    const limit = Math.min(args.limit ?? 5, MAX_QUERY_LIMIT);
 
     // Query mode is namespace-scoped server-side, so the session must be the
     // REAL one this tool was invoked in — archives live under their session

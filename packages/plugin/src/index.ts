@@ -13,7 +13,7 @@
 // of the module and throws "Plugin export is not a function" on any
 // non-function value (found in M7 real-session smoke). The plugin factory
 // rides on the default export alone.
-const VERSION = "0.0.1" as const;
+const VERSION = "0.1.0" as const;
 
 import type { PluginInput, PluginOptions, Hooks } from "@opencode-ai/plugin";
 import { parseOptions, type PluginOptions as InternalOptions } from "./config";
@@ -71,14 +71,29 @@ export default async function bluecodePlugin(
     // Always supply a spawn recipe (see sidecar.ts / headroom.ts rationale):
     // without one, HeadroomClient.connect never spawns and a default-config
     // install cannot self-heal a dead daemon.
-    const spawnOptions = { entry: resolveHeadroomEntry(options), cwd: process.cwd() };
+    //
+    // socketPath MUST ride the argv too (not just connectOptions.socketPath):
+    // the freshly spawned daemon otherwise binds <dataDir>/headroomd.sock while
+    // connect() polls the user's explicit path — every reconnect attempt fails
+    // and the whole feature degrades. Same channel carries idleExitMs; both
+    // options were parsed-but-unwired until this hop existed (audit round 2).
+    const spawnArgs: string[] = [];
+    if (socketPath !== undefined) spawnArgs.push("--socketPath", socketPath);
+    if (options.headroom.idleExitMs !== undefined) {
+      spawnArgs.push("--idleExitMs", String(options.headroom.idleExitMs));
+    }
+    const spawnOptions: { entry: string; cwd: string; args?: string[] } = {
+      entry: resolveHeadroomEntry(options),
+      cwd: process.cwd(),
+      ...(spawnArgs.length > 0 ? { args: spawnArgs } : {}),
+    };
 
     process.env.BLUECODE_DATA_DIR = dataDir;
 
     const connectOptions: {
       dataDir: string;
       socketPath?: string;
-      spawn: { entry: string; cwd: string };
+      spawn: { entry: string; cwd: string; args?: string[] };
       timeoutMs: number;
     } = { dataDir, spawn: spawnOptions, timeoutMs: 5000 };
     if (socketPath !== undefined) connectOptions.socketPath = socketPath;

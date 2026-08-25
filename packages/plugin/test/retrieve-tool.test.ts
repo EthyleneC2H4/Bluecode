@@ -252,6 +252,18 @@ describe("retrieval bridge (sha256: → rtk CAS)", () => {
     expect(headroomCalls).toBe(0);
   });
 
+  test("bridge works while headroomd is down (sidecars fail independently)", async () => {
+    // Audit round 2: the bridge used to sit behind the headroomd null-guard,
+    // so a sha256: fetch was refused whenever the daemon was down — but the
+    // factory deliberately continues when either sidecar fails to connect.
+    setSharedHeadroomClient(null);
+
+    const result = await headroomRetrieveTool.execute({ hash: PREFIXED }, mockContext);
+
+    expect(rtkFetches).toEqual([PREFIXED]);
+    expect(result).toContain("ORIGINAL TOOL OUTPUT BYTES");
+  });
+
   test("end-to-end shape: prefixed hash survives validation and returns original bytes", async () => {
     // Regression for the audit HIGH finding: before the bridge, this input was
     // rejected by the bare-hex regex, so a rawHash handed back by compress
