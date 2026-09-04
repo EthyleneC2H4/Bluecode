@@ -15,3 +15,11 @@ export {
 export { startHeadroomServer, type HeadroomServerOptions, type HeadroomServerStart } from "./server";
 export { HeadroomClient, type HeadroomClientOptions } from "./client";
 export { COMPACTION_MARKER } from "./turns";
+export {
+  buildReplacementMessage,
+  buildReplacementText,
+  materializeCompaction,
+  type CompactionApplyStatus,
+  type CompactionPlan,
+  type MaterializedCompaction,
+} from "./compaction";

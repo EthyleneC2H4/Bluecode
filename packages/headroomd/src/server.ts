@@ -28,7 +28,7 @@ import { unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   ErrorCode,
-  PROTOCOL_VERSION,
+  HEADROOM_PROTOCOL_VERSION,
   headroomCompressParamsSchema,
   headroomOpSchema,
   headroomResponseSchema,
@@ -87,10 +87,10 @@ function parseEnvelope(
 ): { v: number; id: string; op: string; params: unknown } | null {
   if (typeof value !== "object" || value === null) return null;
   const record = value as Record<string, unknown>;
-  if (record.v !== PROTOCOL_VERSION) return null;
+  if (record.v !== HEADROOM_PROTOCOL_VERSION) return null;
   if (typeof record.id !== "string" || record.id.length < 1) return null;
   if (typeof record.op !== "string") return null;
-  return { v: PROTOCOL_VERSION, id: record.id, op: record.op, params: record.params };
+  return { v: HEADROOM_PROTOCOL_VERSION, id: record.id, op: record.op, params: record.params };
 }
 
 /**
@@ -180,7 +180,7 @@ export async function startHeadroomServer(
       log("internal bug: outgoing frame failed headroomResponseSchema");
       client.write(
         frameFor({
-          v: PROTOCOL_VERSION,
+          v: HEADROOM_PROTOCOL_VERSION,
           id: UNKNOWN_ID,
           ok: false,
           error: { code: ErrorCode.E_INTERNAL, message: "outgoing frame failed schema" },
@@ -208,7 +208,7 @@ export async function startHeadroomServer(
     const knownOp = headroomOpSchema.safeParse(op);
     if (!knownOp.success) {
       return {
-        v: PROTOCOL_VERSION,
+        v: HEADROOM_PROTOCOL_VERSION,
         id,
         ok: false,
         error: { code: ErrorCode.E_UNKNOWN_OP, message: `unknown op ${JSON.stringify(op)}` },
@@ -219,16 +219,16 @@ export async function startHeadroomServer(
       switch (knownOp.data) {
         case "compress": {
           const params = headroomCompressParamsSchema.parse(rawParams);
-          return { v: PROTOCOL_VERSION, id, ok: true, result: await engine.compress(params) };
+          return { v: HEADROOM_PROTOCOL_VERSION, id, ok: true, result: await engine.compress(params) };
         }
         case "retrieve": {
           const params = headroomRetrieveParamsSchema.parse(rawParams);
-          return { v: PROTOCOL_VERSION, id, ok: true, result: await engine.retrieve(params) };
+          return { v: HEADROOM_PROTOCOL_VERSION, id, ok: true, result: await engine.retrieve(params) };
         }
         case "health": {
           healthParamsSchema.parse(rawParams);
           return {
-            v: PROTOCOL_VERSION,
+            v: HEADROOM_PROTOCOL_VERSION,
             id,
             ok: true,
             result: {
@@ -244,7 +244,7 @@ export async function startHeadroomServer(
       const issues = asParamIssueList(err);
       if (issues !== null) {
         return {
-          v: PROTOCOL_VERSION,
+          v: HEADROOM_PROTOCOL_VERSION,
           id,
           ok: false,
           error: {
@@ -257,7 +257,7 @@ export async function startHeadroomServer(
       const message = err instanceof Error ? err.message : String(err);
       log(`op ${knownOp.data} failed: ${message}`);
       return {
-        v: PROTOCOL_VERSION,
+        v: HEADROOM_PROTOCOL_VERSION,
         id,
         ok: false,
         error: { code: ErrorCode.E_INTERNAL, message },
@@ -268,7 +268,7 @@ export async function startHeadroomServer(
   async function handleLine(client: net.Socket, line: string): Promise<void> {
     if (line.trim().length === 0) {
       respond(client, {
-        v: PROTOCOL_VERSION,
+        v: HEADROOM_PROTOCOL_VERSION,
         id: UNKNOWN_ID,
         ok: false,
         error: { code: ErrorCode.E_PROTOCOL, message: "empty line is not a valid frame" },
@@ -281,7 +281,7 @@ export async function startHeadroomServer(
       parsed = JSON.parse(line);
     } catch {
       respond(client, {
-        v: PROTOCOL_VERSION,
+        v: HEADROOM_PROTOCOL_VERSION,
         id: UNKNOWN_ID,
         ok: false,
         error: { code: ErrorCode.E_PROTOCOL, message: "frame is not valid JSON" },
@@ -292,12 +292,12 @@ export async function startHeadroomServer(
     const envelope = parseEnvelope(parsed);
     if (envelope === null) {
       respond(client, {
-        v: PROTOCOL_VERSION,
+        v: HEADROOM_PROTOCOL_VERSION,
         id: UNKNOWN_ID,
         ok: false,
         error: {
           code: ErrorCode.E_PROTOCOL,
-          message: `malformed request envelope (expected {v:${PROTOCOL_VERSION},id,op,params})`,
+          message: `malformed request envelope (expected {v:${HEADROOM_PROTOCOL_VERSION},id,op,params})`,
         },
       });
       return;
@@ -319,7 +319,7 @@ export async function startHeadroomServer(
     openClients.add(client);
     disarmIdleTimer();
     // Handshake first, always: {"proto":1,"pid":<pid>}
-    client.write(frameFor({ proto: PROTOCOL_VERSION, pid: process.pid }));
+    client.write(frameFor({ proto: HEADROOM_PROTOCOL_VERSION, pid: process.pid }));
 
     const lines = createLineReconstructor(
       // exactOptionalPropertyTypes: stay absent rather than undefined.
@@ -343,7 +343,7 @@ export async function startHeadroomServer(
         // the cap so floods classify distinctly from ordinary E_PROTOCOLs.
         log(`frame overflow past ${err.maxFrameBytes} bytes: destroying client`);
         respond(client, {
-          v: PROTOCOL_VERSION,
+          v: HEADROOM_PROTOCOL_VERSION,
           id: UNKNOWN_ID,
           ok: false,
           error: {

@@ -16,6 +16,7 @@ import net from "node:net";
 import {
   headroomCompressResultSchema,
   headroomResponseSchema,
+  HEADROOM_PROTOCOL_VERSION,
   healthResultSchema,
   type HeadroomCompressParams,
   type HeadroomCompressResult,
@@ -30,7 +31,11 @@ import {
   FrameOverflowError,
   newRequestId,
 } from "@bluecode/shared";
-import { retrieveByHashResultSchema, retrieveByQueryResultSchema } from "@bluecode/contracts";
+import {
+  retrieveByHashResultSchema,
+  retrieveByHistoryResultSchema,
+  retrieveByQueryResultSchema,
+} from "@bluecode/contracts";
 
 export interface HeadroomClientOptions {
   /** Resolves socketPath as `<dataDir>/headroomd.sock` when socketPath is absent. */
@@ -139,7 +144,7 @@ export function attemptConnect(socketPath: string): Promise<AttemptedConnection>
       try {
         handshake = handshakeBytes.toString("utf8"); // trailing \r is JSON whitespace
         const parsed = JSON.parse(handshake) as { proto?: unknown; pid?: unknown };
-        if (parsed.proto !== 1 || typeof parsed.pid !== "number") {
+        if (parsed.proto !== HEADROOM_PROTOCOL_VERSION || typeof parsed.pid !== "number") {
           fail(new Error(`headroomd: bad handshake ${handshake}`));
           return;
         }
@@ -311,9 +316,8 @@ export class HeadroomClient {
   retrieve(params: HeadroomRetrieveParams): Promise<HeadroomRetrieveResult> {
     // Result shape depends on the mode; validate against the matching member.
     return this.request("retrieve", params, (value) => {
-      if (typeof value === "object" && value !== null && "hits" in value) {
-        return retrieveByQueryResultSchema.safeParse(value);
-      }
+      if ("query" in params) return retrieveByQueryResultSchema.safeParse(value);
+      if ("historyHash" in params) return retrieveByHistoryResultSchema.safeParse(value);
       return retrieveByHashResultSchema.safeParse(value);
     });
   }
@@ -354,7 +358,7 @@ export class HeadroomClient {
         reject,
         timer,
       });
-      this.socket.write(encodeFrame({ v: 1, id, op, params }));
+      this.socket.write(encodeFrame({ v: HEADROOM_PROTOCOL_VERSION, id, op, params }));
     }).then((value) => {
       const checked = validate(value);
       if (!checked.success) {

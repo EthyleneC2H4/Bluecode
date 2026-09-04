@@ -7,7 +7,8 @@
  * snapshot that gets refreshed periodically.
  */
 import { z } from "zod";
-import { PROTOCOL_VERSION } from "./rtk";
+/** Headroomd remains wire-compatible with existing v1 clients. */
+export const HEADROOM_PROTOCOL_VERSION = 1 as const;
 
 /**
  * Headroom hashes are BARE 64-char lowercase hex — the digest itself is the
@@ -81,23 +82,38 @@ export const headroomCompressResultSchema = z
      * daemon internals), so the daemon is the single source of this list.
      */
     replacedMessageIds: z.array(z.string()),
-    rawTokens: z.number(),
-    summaryTokens: z.number(),
-    freedTokens: z.number(),
+    rawTokens: z.number().nonnegative(),
+    summaryTokens: z.number().nonnegative(),
+    sourceTokensEst: z.number().nonnegative(),
+    evictedTokensEst: z.number().nonnegative(),
+    retainedTokensEst: z.number().nonnegative(),
+    replacementTokensEst: z.number().nonnegative(),
+    finalTokensEst: z.number().nonnegative(),
+    freedTokens: z.number().nonnegative(),
   })
   // Invariant: when nothing was compacted the result is fully inert —
   // historyHash/summary are null, freedTokens is 0 and both lists are empty.
   .refine(
     (r) =>
-      r.compacted ||
-      (r.historyHash === null &&
-        r.summary === null &&
-        r.freedTokens === 0 &&
-        r.refs.length === 0 &&
-        r.replacedMessageIds.length === 0),
+      r.rawTokens === r.sourceTokensEst &&
+      r.finalTokensEst === r.retainedTokensEst + r.replacementTokensEst &&
+      r.freedTokens === r.sourceTokensEst - r.finalTokensEst &&
+      (r.compacted
+        ? r.historyHash !== null &&
+          r.summary !== null &&
+          r.sourceTokensEst === r.evictedTokensEst + r.retainedTokensEst &&
+          r.freedTokens > 0
+        : r.historyHash === null &&
+          r.summary === null &&
+          r.freedTokens === 0 &&
+          r.refs.length === 0 &&
+          r.replacedMessageIds.length === 0 &&
+          r.evictedTokensEst === 0 &&
+          r.retainedTokensEst === r.sourceTokensEst &&
+          r.replacementTokensEst === 0),
     {
       message:
-        "compacted=false requires historyHash=null, summary=null, freedTokens=0, refs=[] and replacedMessageIds=[]",
+        "invalid headroom token accounting or non-inert compacted=false result",
     },
   );
 export type HeadroomCompressResult = z.infer<typeof headroomCompressResultSchema>;
@@ -119,6 +135,16 @@ export const retrieveByHashParamsSchema = z.strictObject({
 });
 export type RetrieveByHashParams = z.infer<typeof retrieveByHashParamsSchema>;
 
+/** Retrieve one page of an archived history in original message order. */
+export const retrieveByHistoryParamsSchema = z.strictObject({
+  namespace: namespaceSchema,
+  historyHash: headroomHashSchema,
+  offset: z.number().int().nonnegative().default(0),
+  limit: z.number().int().positive().max(50).default(10),
+});
+export type RetrieveByHistoryParams = z.input<typeof retrieveByHistoryParamsSchema>;
+export type RetrieveByHistoryParamsParsed = z.output<typeof retrieveByHistoryParamsSchema>;
+
 /** Retrieve by query: BM25 search, limit applied by headroomd as 5 when omitted. */
 export const retrieveByQueryParamsSchema = z.strictObject({
   namespace: namespaceSchema,
@@ -133,13 +159,14 @@ export type RetrieveByQueryParams = z.input<typeof retrieveByQueryParamsSchema>;
 export type RetrieveByQueryParamsParsed = z.output<typeof retrieveByQueryParamsSchema>;
 
 /**
- * The two retrieve modes share no literal discriminator field, so a plain
+ * The three retrieve modes share no literal discriminator field, so a plain
  * union of strict members is used instead of z.discriminatedUnion: strictness
  * makes the match exclusive (an object carrying both `hash` and `query`, or
  * neither, fails both branches -> caller answers E_INVALID_PARAMS).
  */
 export const headroomRetrieveParamsSchema = z.union([
   retrieveByHashParamsSchema,
+  retrieveByHistoryParamsSchema,
   retrieveByQueryParamsSchema,
 ]);
 export type HeadroomRetrieveParams = z.input<typeof headroomRetrieveParamsSchema>;
@@ -154,6 +181,25 @@ export const retrieveByHashResultSchema = z.discriminatedUnion("found", [
   z.object({ found: z.literal(false) }),
 ]);
 export type RetrieveByHashResult = z.infer<typeof retrieveByHashResultSchema>;
+
+export const retrieveByHistoryItemSchema = z.object({
+  contentHash: headroomHashSchema,
+  role: z.enum(["user", "assistant"]),
+  turnIndex: z.number().int().nonnegative(),
+  content: z.string(),
+});
+
+export const retrieveByHistoryResultSchema = z.discriminatedUnion("found", [
+  z.object({ found: z.literal(false) }),
+  z.object({
+    found: z.literal(true),
+    items: z.array(retrieveByHistoryItemSchema),
+    nextOffset: z.number().int().nonnegative().nullable(),
+    partial: z.boolean(),
+    missingHashes: z.array(headroomHashSchema),
+  }),
+]);
+export type RetrieveByHistoryResult = z.infer<typeof retrieveByHistoryResultSchema>;
 
 export const retrieveHitSchema = z.object({
   score: z.number(),
@@ -173,6 +219,7 @@ export type RetrieveByQueryResult = z.infer<typeof retrieveByQueryResultSchema>;
 
 export const headroomRetrieveResultSchema = z.union([
   retrieveByHashResultSchema,
+  retrieveByHistoryResultSchema,
   retrieveByQueryResultSchema,
 ]);
 export type HeadroomRetrieveResult = z.infer<typeof headroomRetrieveResultSchema>;
@@ -198,7 +245,7 @@ export const headroomOpSchema = z.enum(["compress", "retrieve", "health"]);
 export type HeadroomOp = z.infer<typeof headroomOpSchema>;
 
 export const headroomRequestSchema = z.object({
-  v: z.literal(PROTOCOL_VERSION),
+  v: z.literal(HEADROOM_PROTOCOL_VERSION),
   id: z.string().min(1),
   op: headroomOpSchema,
   params: z.unknown(),
@@ -207,13 +254,13 @@ export type HeadroomRequest = z.infer<typeof headroomRequestSchema>;
 
 export const headroomResponseSchema = z.discriminatedUnion("ok", [
   z.object({
-    v: z.literal(PROTOCOL_VERSION),
+    v: z.literal(HEADROOM_PROTOCOL_VERSION),
     id: z.string().min(1),
     ok: z.literal(true),
     result: z.unknown(),
   }),
   z.object({
-    v: z.literal(PROTOCOL_VERSION),
+    v: z.literal(HEADROOM_PROTOCOL_VERSION),
     id: z.string().min(1),
     ok: z.literal(false),
     error: errorSchema,

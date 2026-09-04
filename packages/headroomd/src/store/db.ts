@@ -211,6 +211,63 @@ export function countSessions(handle: HeadroomDb): number {
   ).n;
 }
 
+export interface CasMetaPageRow {
+  hash: string;
+  role: "user" | "assistant";
+  turnIndex: number;
+  msgSeq: number;
+}
+
+/** Namespace ownership check for direct content-hash retrieval. */
+export function ownsCasMeta(
+  handle: HeadroomDb,
+  namespace: { projectId: string; sessionId: string },
+  hash: string,
+): boolean {
+  return (
+    handle.db
+      .prepare(
+        `SELECT 1 FROM cas_meta
+         WHERE project_id = ? AND session_id = ? AND hash = ?`,
+      )
+      .get(namespace.projectId, namespace.sessionId, hash) !== null
+  );
+}
+
+export function hasHistoryMeta(
+  handle: HeadroomDb,
+  namespace: { projectId: string; sessionId: string },
+  historyHash: string,
+): boolean {
+  return (
+    handle.db
+      .prepare(
+        `SELECT 1 FROM cas_meta
+         WHERE project_id = ? AND session_id = ? AND history_hash = ? LIMIT 1`,
+      )
+      .get(namespace.projectId, namespace.sessionId, historyHash) !== null
+  );
+}
+
+/** Read attribution rows in original message order; caller requests limit + 1. */
+export function listHistoryMeta(
+  handle: HeadroomDb,
+  namespace: { projectId: string; sessionId: string },
+  historyHash: string,
+  offset: number,
+  limit: number,
+): CasMetaPageRow[] {
+  return handle.db
+    .prepare(
+      `SELECT hash, role, turn_index AS turnIndex, msg_seq AS msgSeq
+       FROM cas_meta
+       WHERE project_id = ? AND session_id = ? AND history_hash = ?
+       ORDER BY msg_seq ASC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(namespace.projectId, namespace.sessionId, historyHash, limit, offset) as CasMetaPageRow[];
+}
+
 // ---------------------------------------------------------------------------
 // derived rows live in index.db
 // ---------------------------------------------------------------------------

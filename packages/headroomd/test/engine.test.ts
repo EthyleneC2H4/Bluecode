@@ -4,11 +4,12 @@
  * contract (delete index.db -> auto rebuild -> identical answers).
  */
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtemp, readdir, rm, stat, unlink, chmod } from "node:fs/promises";
+import { mkdtemp, readdir, rm, stat, unlink, chmod, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ChatMessage } from "@bluecode/contracts";
 import { createEngine, type Engine } from "../src/engine";
+import { buildReplacementText } from "../src/compaction";
 
 const dirs: string[] = [];
 const engines: Engine[] = [];
@@ -37,8 +38,18 @@ function assistant(id: string, text: string): ChatMessage {
 function history(turnCount: number): ChatMessage[] {
   const messages: ChatMessage[] = [];
   for (let i = 0; i < turnCount; i++) {
-    messages.push(user(`u${i}`, `第 ${i} 轮：请分析模块 alpha 的行为`));
-    messages.push(assistant(`a${i}`, `分析完成：模块 alpha 第 ${i} 轮结论。`));
+    messages.push(
+      user(
+        `u${i}`,
+        `第 ${i} 轮：请分析模块 alpha 的行为。${"需要逐项核对输入、状态转换和异常边界。".repeat(12)}`,
+      ),
+    );
+    messages.push(
+      assistant(
+        `a${i}`,
+        `分析完成：模块 alpha 第 ${i} 轮结论。${"已核对输入、状态转换、恢复路径和异常边界。".repeat(12)}`,
+      ),
+    );
   }
   return messages;
 }
@@ -52,6 +63,19 @@ const BASE_PARAMS = {
 };
 
 describe("engine compress", () => {
+  test("replacement exposes only the bounded summary and history paging hint", () => {
+    const refHash = "a".repeat(64);
+    const text = buildReplacementText({
+      historyHash: "b".repeat(64),
+      summary: "bounded summary",
+      refs: [{ contentHash: refHash, role: "user", turnIndex: 0 }],
+      replacedMessageIds: ["u0"],
+    });
+    expect(text).toContain("bounded summary");
+    expect(text).toContain(`headroom_retrieve(historyHash="${"b".repeat(64)}")`);
+    expect(text).not.toContain(refHash);
+  });
+
   test("inert when turns fit within retainRecentTurns", async () => {
     const { engine } = await freshEngine();
     const result = await engine.compress({
@@ -116,14 +140,40 @@ describe("engine compress", () => {
     expect(after).toEqual(before); // CAS dedup: zero rewrites on replay
   });
 
-  test("freedTokens = rawTokens - summaryTokens, never negative", async () => {
+  test("reports source, evicted, retained, replacement and final token estimates", async () => {
     const { engine } = await freshEngine();
     const long = history(6);
     const result = await engine.compress({ ...BASE_PARAMS, messages: long });
     expect(result.rawTokens).toBeGreaterThan(0);
     expect(result.summaryTokens).toBeGreaterThan(0);
-    expect(result.freedTokens).toBe(Math.max(0, result.rawTokens - result.summaryTokens));
-    expect(result.freedTokens).toBeGreaterThanOrEqual(0);
+    expect(result.rawTokens).toBe(result.sourceTokensEst);
+    expect(result.sourceTokensEst).toBe(result.evictedTokensEst + result.retainedTokensEst);
+    expect(result.finalTokensEst).toBe(
+      result.retainedTokensEst + result.replacementTokensEst,
+    );
+    expect(result.freedTokens).toBe(result.sourceTokensEst - result.finalTokensEst);
+    expect(result.replacementTokensEst).toBeGreaterThan(result.summaryTokens);
+  });
+
+  test("does not archive when the replacement would not save tokens", async () => {
+    const { dir, engine } = await freshEngine();
+    const result = await engine.compress({
+      ...BASE_PARAMS,
+      messages: [user("u", "x")],
+      retainRecentTurns: 0,
+    });
+    expect(result).toMatchObject({
+      compacted: false,
+      historyHash: null,
+      refs: [],
+      replacedMessageIds: [],
+      evictedTokensEst: 0,
+      retainedTokensEst: result.sourceTokensEst,
+      replacementTokensEst: 0,
+      finalTokensEst: result.sourceTokensEst,
+      freedTokens: 0,
+    });
+    expect(await readdir(dir)).not.toContain("objects");
   });
 });
 
@@ -152,6 +202,121 @@ describe("engine retrieve", () => {
       hash: "f".repeat(64),
     });
     expect(miss).toEqual({ found: false });
+
+    const crossSession = await engine.retrieve({
+      namespace: { projectId: "p1", sessionId: "other" },
+      hash,
+    });
+    expect(crossSession).toEqual({ found: false });
+  });
+
+  test("by-history pages in message order and enforces namespace", async () => {
+    const { engine } = await freshEngine();
+    const compressed = await engine.compress({ ...BASE_PARAMS, messages: history(8) });
+    const historyHash = compressed.historyHash!;
+
+    const first = await engine.retrieve({
+      namespace: { projectId: "p1", sessionId: "s1" },
+      historyHash,
+      limit: 3,
+    });
+    if (!("found" in first) || !first.found || !("items" in first)) {
+      throw new Error("expected history page");
+    }
+    expect(first.items.map((item) => item.contentHash)).toEqual(
+      compressed.refs.slice(0, 3).map((ref) => ref.contentHash),
+    );
+    expect(first.items.map((item) => item.role)).toEqual(["user", "assistant", "user"]);
+    expect(first.nextOffset).toBe(3);
+    expect(first.partial).toBe(false);
+
+    const second = await engine.retrieve({
+      namespace: { projectId: "p1", sessionId: "s1" },
+      historyHash,
+      offset: first.nextOffset!,
+      limit: 50,
+    });
+    if (!("found" in second) || !second.found || !("items" in second)) {
+      throw new Error("expected second history page");
+    }
+    expect(second.items.map((item) => item.contentHash)).toEqual(
+      compressed.refs.slice(3).map((ref) => ref.contentHash),
+    );
+    expect(second.nextOffset).toBeNull();
+
+    expect(
+      await engine.retrieve({
+        namespace: { projectId: "p1", sessionId: "other" },
+        historyHash,
+      }),
+    ).toEqual({ found: false });
+    expect(
+      await engine.retrieve({
+        namespace: { projectId: "other", sessionId: "s1" },
+        historyHash,
+      }),
+    ).toEqual({ found: false });
+  });
+
+  test("by-history reports missing and corrupt objects as a partial page", async () => {
+    const { dir, engine } = await freshEngine();
+    const compressed = await engine.compress({ ...BASE_PARAMS, messages: history(6) });
+    const missingHash = compressed.refs[1]!.contentHash;
+    const corruptHash = compressed.refs[3]!.contentHash;
+    await rm(path.join(dir, "objects", missingHash.slice(0, 2), missingHash));
+    await writeFile(
+      path.join(dir, "objects", corruptHash.slice(0, 2), corruptHash),
+      Buffer.from("not-gzip"),
+    );
+
+    const result = await engine.retrieve({
+      namespace: { projectId: "p1", sessionId: "s1" },
+      historyHash: compressed.historyHash!,
+      offset: 0,
+      limit: 50,
+    });
+    if (!("found" in result) || !result.found || !("items" in result)) {
+      throw new Error("expected partial history page");
+    }
+    expect(result.partial).toBe(true);
+    expect(result.missingHashes).toEqual([missingHash, corruptHash]);
+    expect(result.items.map((item) => item.contentHash)).not.toContain(missingHash);
+    expect(result.items.map((item) => item.contentHash)).not.toContain(corruptHash);
+  });
+
+  test("by-history handles an offset at and beyond the end", async () => {
+    const { engine } = await freshEngine();
+    const compressed = await engine.compress({ ...BASE_PARAMS, messages: history(5) });
+    for (const offset of [compressed.refs.length, compressed.refs.length + 100]) {
+      const result = await engine.retrieve({
+        namespace: { projectId: "p1", sessionId: "s1" },
+        historyHash: compressed.historyHash!,
+        offset,
+        limit: 50,
+      });
+      expect(result).toEqual({
+        found: true,
+        items: [],
+        nextOffset: null,
+        partial: false,
+        missingHashes: [],
+      });
+    }
+  });
+
+  test("by-history accepts the maximum page size of 50", async () => {
+    const { engine } = await freshEngine();
+    const compressed = await engine.compress({ ...BASE_PARAMS, messages: history(32) });
+    const result = await engine.retrieve({
+      namespace: { projectId: "p1", sessionId: "s1" },
+      historyHash: compressed.historyHash!,
+      limit: 50,
+    });
+    if (!("found" in result) || !result.found || !("items" in result)) {
+      throw new Error("expected maximum-size history page");
+    }
+    expect(result.items).toHaveLength(50);
+    expect(result.nextOffset).toBe(50);
   });
 
   test("by-query returns namespace-scoped bm25-ordered hits", async () => {

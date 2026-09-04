@@ -131,7 +131,12 @@ describe("socket protocol", () => {
     // compress over the wire
     const messages: ChatMessage[] = [];
     for (let i = 0; i < 4; i++) {
-      messages.push(user(`u${i}`, `第 ${i} 轮问题：分析模块 alpha`));
+      messages.push(
+        user(
+          `u${i}`,
+          `第 ${i} 轮问题：分析模块 alpha。${"逐项检查输入、状态转换、恢复路径和异常边界。".repeat(16)}`,
+        ),
+      );
     }
     const compressed = await client.roundtrip({
       v: 1,

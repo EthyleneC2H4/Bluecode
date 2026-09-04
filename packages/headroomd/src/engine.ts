@@ -25,10 +25,13 @@ import {
   countSessions,
   ftsHealthy,
   getHistory,
+  hasHistoryMeta,
   hasChunk,
   indexLooksLost,
   insertCasMeta,
+  listHistoryMeta,
   openStore,
+  ownsCasMeta,
   rebuildFromObjects,
   schemaMismatch,
   upsertHistory,
@@ -37,6 +40,7 @@ import {
 } from "./store/db";
 import { buildMatchQuery, insertChunk, searchChunks, type InsertChunkInput } from "./store/fts";
 import { readMessageObject, renderProjection, writeMessageObject } from "./store/objects";
+import { buildReplacementMessage, type CompactionPlan } from "./compaction";
 import { hardenPath } from "./perms";
 import {
   historySummary,
@@ -97,7 +101,7 @@ export async function createEngine(options: EngineOptions): Promise<Engine> {
   return {
     dataDir,
     compress: (params) => compress(store, dataDir, params),
-    retrieve: (params) => retrieve(store.index, dataDir, params),
+    retrieve: (params) => retrieve(store, dataDir, params),
     sessionCount: () => countSessions(store.meta),
     close: () => store.close(),
   };
@@ -142,36 +146,79 @@ async function compress(
       replacedMessageIds: [],
       rawTokens,
       summaryTokens: 0,
+      sourceTokensEst: rawTokens,
+      evictedTokensEst: 0,
+      retainedTokensEst: rawTokens,
+      replacementTokensEst: 0,
+      finalTokensEst: rawTokens,
       freedTokens: 0,
     };
   }
 
-  const plan = await planArchive(store, dataDir, projectId, sessionId, oldTurns, rawTokens);
+  const plan = await planArchive(store, oldTurns);
+  const evictedTokensEst = plan.messages.reduce(
+    (sum, message) => sum + messageTokens(message),
+    0,
+  );
+  const retainedTokensEst = rawTokens - evictedTokensEst;
+  const refs = plan.messages.map((message, i) => ({
+    contentHash: plan.hashes[i] as string,
+    role: message.info.role,
+    turnIndex: turnIndexOf(plan.turns, i),
+  }));
+  const replacementPlan: CompactionPlan = {
+    historyHash: plan.historyHashValue,
+    summary: plan.summary,
+    refs,
+    replacedMessageIds: plan.messages.map((message) => message.info.id),
+  };
+  const replacementTokensEst = messageTokens(buildReplacementMessage(replacementPlan));
+  const finalTokensEst = retainedTokensEst + replacementTokensEst;
+  const freedTokens = rawTokens - finalTokensEst;
+
+  // Archiving is inert unless the actual replacement plus retained tail is
+  // smaller than the source. No object or database row is written here.
+  if (freedTokens <= 0) {
+    return {
+      compacted: false,
+      historyHash: null,
+      summary: null,
+      refs: [],
+      replacedMessageIds: [],
+      rawTokens,
+      summaryTokens: 0,
+      sourceTokensEst: rawTokens,
+      evictedTokensEst: 0,
+      retainedTokensEst: rawTokens,
+      replacementTokensEst: 0,
+      finalTokensEst: rawTokens,
+      freedTokens: 0,
+    };
+  }
+
+  await persistArchive(store, dataDir, projectId, sessionId, plan, rawTokens);
 
   return {
     compacted: true,
     historyHash: plan.historyHashValue,
     summary: plan.summary,
-    refs: plan.messages.map((message, i) => ({
-      contentHash: plan.hashes[i] as string,
-      role: message.info.role,
-      turnIndex: turnIndexOf(plan.turns, i),
-    })),
+    refs,
     replacedMessageIds: plan.messages.map((message) => message.info.id),
     rawTokens,
     summaryTokens: plan.summaryTokens,
-    freedTokens: Math.max(0, rawTokens - plan.summaryTokens),
+    sourceTokensEst: rawTokens,
+    evictedTokensEst,
+    retainedTokensEst,
+    replacementTokensEst,
+    finalTokensEst,
+    freedTokens,
   };
 }
 
 /** Hash the old turns, then either reuse the stored summary or compute one. */
 async function planArchive(
   store: HeadroomStore,
-  dataDir: string,
-  projectId: string,
-  sessionId: string,
   oldTurns: Turn[],
-  rawTokens: number,
 ): Promise<ArchivePlan> {
   const messages = oldTurns.flatMap((turn) => turn.messages);
   const hashes: string[] = [];
@@ -180,13 +227,6 @@ async function planArchive(
 
   const existing = getHistory(store.index, historyHashValue);
   if (existing !== null) {
-    // Idempotent replay: reuse the stored summary verbatim.
-    await backfill(store, dataDir, projectId, sessionId, {
-      turns: oldTurns,
-      messages,
-      hashes,
-      historyHashValue,
-    });
     return {
       turns: oldTurns,
       messages,
@@ -207,6 +247,23 @@ async function planArchive(
     summaryTokens: estimateTokens(summary),
   };
 
+  return plan;
+}
+
+async function persistArchive(
+  store: HeadroomStore,
+  dataDir: string,
+  projectId: string,
+  sessionId: string,
+  plan: ArchivePlan,
+  rawTokens: number,
+): Promise<void> {
+  const existing = getHistory(store.index, plan.historyHashValue);
+  if (existing !== null) {
+    await backfill(store, dataDir, projectId, sessionId, plan);
+    return;
+  }
+
   // Write order (each step idempotent, crash-safe):
   //   objects -> meta.cas_meta -> index rows.
   // A crash anywhere leaves earlier steps only; attribution leading the
@@ -214,8 +271,12 @@ async function planArchive(
   // reverse would not be. The two databases cannot share one transaction,
   // so ordering IS the atomicity story here. Objects are addressed by their
   // logical contentHash — the same value cas_meta and refs carry.
-  for (let i = 0; i < messages.length; i++) {
-    await writeMessageObject(dataDir, messages[i] as ChatMessage, hashes[i] as string);
+  for (let i = 0; i < plan.messages.length; i++) {
+    await writeMessageObject(
+      dataDir,
+      plan.messages[i] as ChatMessage,
+      plan.hashes[i] as string,
+    );
   }
 
   const createdAt = Date.now();
@@ -240,7 +301,6 @@ async function planArchive(
     );
   });
   writeIndex();
-  return plan;
 }
 
 interface RowFacts {
@@ -366,17 +426,59 @@ function chunkInputs(facts: RowFacts, projectId: string, sessionId: string): Ins
 // ---------------------------------------------------------------------------
 
 async function retrieve(
-  index: HeadroomDb,
+  store: HeadroomStore,
   dataDir: string,
   params: HeadroomRetrieveParams,
 ): Promise<HeadroomRetrieveResult> {
   if ("hash" in params) {
-    // Namespace ignored BY DESIGN: content is the address, so the hash itself
-    // proves the caller already knew these exact archived bytes — there is
-    // nothing to leak that the caller did not hold.
-    const projection = await readMessageObject(dataDir, params.hash);
+    if (!ownsCasMeta(store.meta, params.namespace, params.hash)) return { found: false };
+    const projection = await readValidProjection(dataDir, params.hash);
     if (projection === null) return { found: false };
     return { found: true, content: renderProjection(projection) };
+  }
+
+  if ("historyHash" in params) {
+    if (!hasHistoryMeta(store.meta, params.namespace, params.historyHash)) {
+      return { found: false };
+    }
+    const offset = params.offset ?? 0;
+    const limit = Math.min(params.limit ?? 10, RETRIEVE_LIMIT_CAP);
+    const rows = listHistoryMeta(
+      store.meta,
+      params.namespace,
+      params.historyHash,
+      offset,
+      limit + 1,
+    );
+    const hasMore = rows.length > limit;
+    const pageRows = rows.slice(0, limit);
+    const items: Array<{
+      contentHash: string;
+      role: "user" | "assistant";
+      turnIndex: number;
+      content: string;
+    }> = [];
+    const missingHashes: string[] = [];
+    for (const row of pageRows) {
+      const projection = await readValidProjection(dataDir, row.hash);
+      if (projection === null) {
+        missingHashes.push(row.hash);
+        continue;
+      }
+      items.push({
+        contentHash: row.hash,
+        role: row.role,
+        turnIndex: row.turnIndex,
+        content: renderProjection(projection),
+      });
+    }
+    return {
+      found: true,
+      items,
+      nextOffset: hasMore ? offset + limit : null,
+      partial: missingHashes.length > 0,
+      missingHashes,
+    };
   }
 
   // Unusable query text (no tokens left after quoting/segmentation) → no hits.
@@ -387,10 +489,22 @@ async function retrieve(
     // direct UDS clients bypass the plugin tool, so clamp here too — one
     // unbounded query must not dump the whole archive into model context.
     hits: searchChunks(
-      index.db,
+      store.index.db,
       params.namespace,
       matchExpression,
       Math.min(params.limit ?? 5, RETRIEVE_LIMIT_CAP),
     ),
   };
+}
+
+/** Missing, unreadable or logically mismatched objects are never returned. */
+async function readValidProjection(dataDir: string, hash: string) {
+  try {
+    const projection = await readMessageObject(dataDir, hash);
+    if (projection === null) return null;
+    if ((await hashMessage(projection)) !== hash) return null;
+    return projection;
+  } catch {
+    return null;
+  }
 }

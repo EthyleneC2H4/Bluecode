@@ -10,7 +10,7 @@
  * start yield `already-running`, which exits 0 quietly: spawn callers then
  * simply connect to the winner.
  */
-import { PROTOCOL_VERSION } from "@bluecode/contracts";
+import { HEADROOM_PROTOCOL_VERSION } from "@bluecode/contracts";
 import { encodeFrame } from "@bluecode/shared";
 import { startHeadroomServer } from "./server";
 import { VERSION } from "./version";
@@ -103,7 +103,7 @@ if (started.status === "already-running") {
 
 // Spawn-side boot validation: exactly one handshake line, protocol frames
 // never appear on stdout again.
-process.stdout.write(encodeFrame({ proto: PROTOCOL_VERSION, pid: started.pid }));
+process.stdout.write(encodeFrame({ proto: HEADROOM_PROTOCOL_VERSION, pid: started.pid }));
 
 process.on("SIGTERM", () => started.stop());
 process.on("SIGINT", () => started.stop());

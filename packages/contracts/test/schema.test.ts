@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { z } from "zod";
 import {
   ErrorCode,
+  HEADROOM_PROTOCOL_VERSION,
   PROTOCOL_VERSION,
   chatMessageSchema,
   compressParamsSchema,
@@ -12,6 +13,8 @@ import {
   headroomCompressParamsSchema,
   headroomCompressResultSchema,
   headroomRetrieveParamsSchema,
+  headroomRetrieveResultSchema,
+  headroomRequestSchema,
   healthParamsSchema,
   healthResultSchema,
   helloSchema,
@@ -20,6 +23,8 @@ import {
   responseSchema,
   retrieveByHashParamsSchema,
   retrieveByHashResultSchema,
+  retrieveByHistoryParamsSchema,
+  retrieveByHistoryResultSchema,
   retrieveByQueryParamsSchema,
   sha256RefSchema,
   statsResultSchema,
@@ -29,6 +34,7 @@ import type {
   FetchParams,
   HeadroomCompressParams,
   RetrieveByHashParams,
+  RetrieveByHistoryParams,
 } from "../src/index";
 
 const SHA = `sha256:${"a".repeat(64)}`;
@@ -46,6 +52,10 @@ const headroomCompressParamsAligned: AssertEqual<
 const retrieveByHashAligned: AssertEqual<
   RetrieveByHashParams,
   z.infer<typeof retrieveByHashParamsSchema>
+> = true;
+const retrieveByHistoryAligned: AssertEqual<
+  RetrieveByHistoryParams,
+  z.input<typeof retrieveByHistoryParamsSchema>
 > = true;
 void [compressParamsAligned, fetchParamsAligned, headroomCompressParamsAligned];
 
@@ -235,7 +245,12 @@ describe("headroomd protocol v1", () => {
       replacedMessageIds: ["m1", "m2"],
       rawTokens: 1000,
       summaryTokens: 100,
-      freedTokens: 900,
+      sourceTokensEst: 1000,
+      evictedTokensEst: 950,
+      retainedTokensEst: 50,
+      replacementTokensEst: 100,
+      finalTokensEst: 150,
+      freedTokens: 850,
     };
     expect(headroomCompressResultSchema.parse(compacted).compacted).toBe(true);
     // missing replacedMessageIds is invalid even when compacted
@@ -253,6 +268,11 @@ describe("headroomd protocol v1", () => {
         replacedMessageIds: [],
         rawTokens: 500,
         summaryTokens: 0,
+        sourceTokensEst: 500,
+        evictedTokensEst: 0,
+        retainedTokensEst: 500,
+        replacementTokensEst: 0,
+        finalTokensEst: 500,
         freedTokens: 0,
       }).success,
     ).toBe(true);
@@ -266,6 +286,11 @@ describe("headroomd protocol v1", () => {
         replacedMessageIds: [],
         rawTokens: 500,
         summaryTokens: 0,
+        sourceTokensEst: 500,
+        evictedTokensEst: 0,
+        retainedTokensEst: 500,
+        replacementTokensEst: 0,
+        finalTokensEst: 500,
         freedTokens: 12,
       }).success,
     ).toBe(false);
@@ -298,6 +323,37 @@ describe("headroomd protocol v1", () => {
       .toBe(2);
   });
 
+  test("retrieve history mode fills paging defaults and validates its result", () => {
+    const historyHash = SHA.slice("sha256:".length);
+    const parsed = retrieveByHistoryParamsSchema.parse({ namespace: ns, historyHash });
+    expect(parsed.offset).toBe(0);
+    expect(parsed.limit).toBe(10);
+    expect(
+      retrieveByHistoryParamsSchema.safeParse({ namespace: ns, historyHash, offset: -1 }).success,
+    ).toBe(false);
+    expect(
+      retrieveByHistoryParamsSchema.safeParse({ namespace: ns, historyHash, limit: 51 }).success,
+    ).toBe(false);
+
+    const page = {
+      found: true as const,
+      items: [
+        {
+          contentHash: historyHash,
+          role: "user" as const,
+          turnIndex: 0,
+          content: "[user]\nhello",
+        },
+      ],
+      nextOffset: null,
+      partial: false,
+      missingHashes: [],
+    };
+    expect(retrieveByHistoryResultSchema.parse(page)).toEqual(page);
+    expect(retrieveByHistoryResultSchema.parse({ found: false })).toEqual({ found: false });
+    expect(headroomRetrieveResultSchema.safeParse(page).success).toBe(true);
+  });
+
   test("retrieve union dispatches by shape and rejects ambiguity", () => {
     const byQuery = headroomRetrieveParamsSchema.parse({ namespace: ns, query: "auth flow" });
     if ("query" in byQuery) {
@@ -314,12 +370,32 @@ describe("headroomd protocol v1", () => {
     } else {
       throw new Error("expected hash branch");
     }
+    const byHistory = headroomRetrieveParamsSchema.parse({
+      namespace: ns,
+      historyHash: SHA.slice("sha256:".length),
+    });
+    if ("historyHash" in byHistory) {
+      expect(byHistory.offset).toBe(0);
+      expect(byHistory.limit).toBe(10);
+    } else {
+      throw new Error("expected history branch");
+    }
     // both keys present -> fails every branch
     expect(
       headroomRetrieveParamsSchema.safeParse({ namespace: ns, hash: SHA, query: "q" }).success,
     ).toBe(false);
     // neither key present -> fails every branch
     expect(headroomRetrieveParamsSchema.safeParse({ namespace: ns }).success).toBe(false);
+  });
+
+  test("headroom envelopes remain protocol v1 after rtk moves to v2", () => {
+    expect(HEADROOM_PROTOCOL_VERSION).toBe(1);
+    expect(
+      headroomRequestSchema.safeParse({ v: 1, id: "h1", op: "health", params: {} }).success,
+    ).toBe(true);
+    expect(
+      headroomRequestSchema.safeParse({ v: 2, id: "h1", op: "health", params: {} }).success,
+    ).toBe(false);
   });
 
   test("health round-trip", () => {
