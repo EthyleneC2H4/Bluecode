@@ -24,10 +24,15 @@ function groupMetrics(overrides: Partial<GroupMetrics>): GroupMetrics {
     longOutputRatio: 0.5,
     latencyP50Ms: 10,
     latencyP95Ms: 100,
-    recall: {
+    contextRecall: {
       mustHit: { found: 2, total: 2, rate: 1 },
       niceToHave: { found: 1, total: 1, rate: 1 },
     },
+    queryRecall: {
+      mustHit: { found: 0, total: 0, rate: 1 },
+      niceToHave: { found: 0, total: 0, rate: 1 },
+    },
+    archiveRecovery: { found: 0, total: 0, rate: 1 },
     degradedRate: {
       spawn_failed: 0,
       timeout: 0,
@@ -48,14 +53,27 @@ function makeReport(opts: { dRatio?: number; mustHitRate?: number; p95?: number 
       compressionRatio: opts.dRatio ?? 0.5,
       latencyP95Ms: opts.p95 ?? 100,
       ...(g !== "A"
-        ? { recall: { mustHit: { found: 2, total: 2, rate: opts.mustHitRate ?? 1 }, niceToHave: { found: 1, total: 1, rate: 1 } } }
+        ? { contextRecall: { mustHit: { found: 2, total: 2, rate: opts.mustHitRate ?? 1 }, niceToHave: { found: 1, total: 1, rate: 1 } } }
         : {}),
     });
   }
   return {
     meta: { timestamp: "2026-01-01T00:00:00.000Z", tokenCounter: "o200k_base", versions: { node: "test", bun: "test" } },
     groups,
-    perFixture: [],
+    perFixture: (["A", "B", "C", "D"] as const).map((group) => ({
+      fixture: "fixture-1",
+      group,
+      rawTokens: 100,
+      outTokens: 50,
+      latencyMs: 10,
+      contextRecallHits: ["fact-1", "fact-2"],
+      contextRecallMisses: [],
+      queryRecallHits: [],
+      queryRecallMisses: [],
+      archiveRecoveryFound: 0,
+      archiveRecoveryTotal: 0,
+      degradedReason: null,
+    })),
   };
 }
 
@@ -207,5 +225,36 @@ describe("check-baseline gate logic", () => {
     });
     expect(viaEnv.passed).toBe(true);
     expect(fs.existsSync(BASELINE_PATH)).toBe(true);
+  });
+
+  test("rejects duplicate/missing fixture rows, negative tokens and invalid degraded values", () => {
+    const baseline = makeReport({});
+    fs.writeFileSync(BASELINE_PATH, JSON.stringify(baseline));
+    const malformed = makeReport({});
+    malformed.perFixture.push({ ...malformed.perFixture[0]! });
+    malformed.perFixture[1]!.rawTokens = -1;
+    (malformed.perFixture[2] as any).degradedReason = "mystery";
+    writeReport(malformed);
+
+    const result = checkBaseline(false);
+
+    expect(result.passed).toBe(false);
+    const metrics = result.violations.map((violation) => violation.metric);
+    expect(metrics).toContain("report.fixtureRows");
+    expect(metrics).toContain("report.tokens");
+    expect(metrics).toContain("report.degradedReason");
+  });
+
+  test("rejects inconsistent context recall totals across A/B/C/D", () => {
+    const baseline = makeReport({});
+    fs.writeFileSync(BASELINE_PATH, JSON.stringify(baseline));
+    const malformed = makeReport({});
+    malformed.groups.D.contextRecall.mustHit.total = 99;
+    writeReport(malformed);
+    const result = checkBaseline(false);
+    expect(result.passed).toBe(false);
+    expect(result.violations.map((violation) => violation.metric)).toContain(
+      "report.recallTotals",
+    );
   });
 });

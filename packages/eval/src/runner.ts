@@ -1,440 +1,598 @@
-/**
- * Four-group evaluation runner (A/B/C/D) with real RtkClient and HeadroomClient.
- */
-import { RtkClient, type CompressInput, type CompressOutcome } from "@bluecode/rtk";
-import { HeadroomClient, type HeadroomClientOptions } from "@bluecode/headroomd";
-import { allFixtures, quickFixtures, fixturesToHeadroomParams, type FixtureSample } from "./fixtures";
-import { evaluateRecall, buildPerFixtureRecord, type LatencySample, type RecallResult, type PerFixtureRecord } from "./metrics";
-import { createExactTokenCounter, defaultSidecarDataDir } from "@bluecode/shared";
-import { randomUUID } from "node:crypto";
-import type { RetrieveHit, RetrieveByHashResult, HeadroomCompressParams, HeadroomRetrieveParams } from "@bluecode/contracts";
+/** Four-group evaluation runner over the real RTK and Headroomd pipelines. */
+import { RtkClient, type CompressInput } from "@bluecode/rtk"
+import {
+  HeadroomClient,
+  materializeCompaction,
+  type HeadroomClientOptions,
+} from "@bluecode/headroomd"
+import type {
+  ChatMessage,
+  HeadroomCompressResult,
+  RetrieveByHistoryResult,
+} from "@bluecode/contracts"
+import { createExactTokenCounter } from "@bluecode/shared"
+import { existsSync } from "node:fs"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import {
+  allFixtures,
+  quickFixtures,
+  fixturesToHeadroomParams,
+  type FixtureSample,
+} from "./fixtures"
+import {
+  buildPerFixtureRecord,
+  evaluateRecall,
+  type DegradedCounts,
+  type EvalGroup,
+  type LatencySample,
+  type PerFixtureRecord,
+  type RecallResult,
+} from "./metrics"
 
-const tokenCounter = createExactTokenCounter();
+const tokenCounter = createExactTokenCounter()
+const DEFAULT_HEADROOM_ENTRY = path.resolve(import.meta.dir, "../../headroomd/src/bin.ts")
+// Connect-or-spawn's first retry is at 250ms, so the daemon must outlive it.
+const HEADROOM_IDLE_EXIT_MS = 1000
+
+export type EvaluationObservation =
+  | { type: "data-dir"; dataDir: string; temporary: boolean }
+  | {
+      type: "headroom-input"
+      group: "C" | "D"
+      fixture: string
+      messages: ChatMessage[]
+    }
+  | {
+      type: "final-context"
+      group: EvalGroup
+      fixture: string
+      messages: ChatMessage[]
+      text: string
+      outTokens: number
+    }
 
 export interface RunnerOptions {
-  quick?: boolean;
-  dataDir?: string;
-  rtkEntry?: string;
-  headroomEntry?: string;
-  rtkBudgetTokens?: number;
-  rtkTimeoutMs?: number;
-  rtkMinBytes?: number;
-  headroomTimeoutMs?: number;
-  contextWindowTokens?: number;
+  quick?: boolean
+  dataDir?: string
+  rtkEntry?: string
+  headroomEntry?: string
+  rtkBudgetTokens?: number
+  rtkTimeoutMs?: number
+  rtkMinBytes?: number
+  headroomTimeoutMs?: number
+  contextWindowTokens?: number
+  observe?: (event: EvaluationObservation) => void
 }
 
 export interface RunnerResult {
-  perFixture: PerFixtureRecord[];
-  latencies: LatencySample[];
-  recallResults: RecallResult[];
+  perFixture: PerFixtureRecord[]
+  latencies: LatencySample[]
+  recallResults: RecallResult[]
+  dataDir: string
+  temporaryDataDir: boolean
 }
 
-async function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+interface GroupResult {
+  perFixture: PerFixtureRecord[]
+  latencies: LatencySample[]
+  recallResults: RecallResult[]
 }
 
-function extractToolOutput(messages: FixtureSample["messages"]): string[] {
-  const outputs: string[] = [];
-  for (const msg of messages) {
-    for (const part of msg.parts) {
-      if (part.type === "tool" && part.state.output) {
-        outputs.push(part.state.output);
-      }
+type DegradedReason = keyof DegradedCounts
+
+function cloneMessages(messages: ChatMessage[]): ChatMessage[] {
+  return structuredClone(messages)
+}
+
+/** Real OpenCode message IDs are globally unique; fixture clones must model that invariant. */
+function cloneMessagesForSession(messages: ChatMessage[], sessionId: string): ChatMessage[] {
+  const cloned = cloneMessages(messages)
+  for (const message of cloned) message.info.id = `${sessionId}:${message.info.id}`
+  return cloned
+}
+
+function extractAllText(messages: ChatMessage[]): string {
+  const parts: string[] = []
+  for (const message of messages) {
+    for (const part of message.parts) {
+      if (part.type === "text") parts.push(part.text)
+      else if (typeof part.state.output === "string") parts.push(part.state.output)
     }
   }
-  return outputs;
+  return parts.join("\n")
 }
 
-function extractAllText(messages: FixtureSample["messages"]): string {
-  const parts: string[] = [];
-  for (const msg of messages) {
-    for (const part of msg.parts) {
-      if (part.type === "text") {
-        parts.push(part.text);
-      } else if (part.type === "tool" && part.state.output) {
-        parts.push(part.state.output);
-      }
-    }
-  }
-  return parts.join("\n");
+function observeFinal(
+  options: RunnerOptions,
+  group: EvalGroup,
+  fixture: string,
+  messages: ChatMessage[],
+  text: string,
+): void {
+  options.observe?.({
+    type: "final-context",
+    group,
+    fixture,
+    messages: cloneMessages(messages),
+    text,
+    outTokens: tokenCounter.count(text),
+  })
 }
 
-/**
- * Recall evidence gathering. Fetch EVERY ref's content and probe one query
- * per golden fact: "retrievable from headroomd" counts as "not lost" (that
- * is the component's contract — details move out of context but stay
- * reachable), so the probe must exercise the full retrieval surface rather
- * than a single ref/fact sample.
- *
- * Runs OFF the latency clock — this is measurement overhead, not product
- * latency.
- */
-async function gatherRecallEvidence(
-  headroom: HeadroomClient,
-  sessionId: string,
-  refs: Array<{ contentHash: string }>,
-  facts: string[],
-): Promise<{ retrieveHits: RetrieveHit[]; fetchContent: string | null }> {
-  const chunks: string[] = [];
-  for (const ref of refs) {
-    try {
-      const byHash = await headroom.retrieve({
-        namespace: { projectId: "default", sessionId },
-        hash: ref.contentHash,
-      }) as RetrieveByHashResult;
-      if (byHash.found === true) chunks.push(byHash.content);
-    } catch {
-      // Unreachable ref contributes nothing to recall.
-    }
-  }
-
-  const retrieveHits: RetrieveHit[] = [];
-  for (const fact of facts) {
-    try {
-      const byQuery = await headroom.retrieve({
-        namespace: { projectId: "default", sessionId },
-        query: fact,
-        limit: 5,
-      });
-      if ("hits" in byQuery) retrieveHits.push(...byQuery.hits);
-    } catch {
-      // Query failure counts as a miss via absence of hits.
-    }
-  }
-
-  return { retrieveHits, fetchContent: chunks.length > 0 ? chunks.join("\n") : null };
-}
-
-function goldenFactsOf(fixture: FixtureSample): string[] {
-  return [...fixture.goldenFacts.mustHit, ...fixture.goldenFacts.niceToHave];
-}
-
-async function runGroupA(fixtures: FixtureSample[]): Promise<{
-  perFixture: PerFixtureRecord[];
-  latencies: LatencySample[];
-}> {
-  const perFixture: PerFixtureRecord[] = [];
-  const latencies: LatencySample[] = [];
-
-  for (const fixture of fixtures) {
-    const rawText = extractAllText(fixture.messages);
-    const rawTokens = tokenCounter.count(rawText);
-    const outputText = rawText; // Passthrough
-    const outTokens = rawTokens;
-
-    const start = performance.now();
-    // Simulate minimal processing
-    await sleep(1);
-    const latencyMs = performance.now() - start;
-
-    perFixture.push(buildPerFixtureRecord(fixture, "A", rawText, outputText, latencyMs, [], [], null));
-    latencies.push({ group: "A", fixture: fixture.name, latencyMs });
-  }
-
-  return { perFixture, latencies };
-}
-
-async function runGroupB(fixtures: FixtureSample[], options: RunnerOptions): Promise<{
-  perFixture: PerFixtureRecord[];
-  latencies: LatencySample[];
-  recallResults: RecallResult[];
-}> {
-  const rtkOptions: { entry?: string; cwd?: string; budgetTokens?: number; timeoutMs?: number; minBytes?: number; dataDir?: string; testMode?: boolean } = {
-    cwd: process.cwd(),
-    testMode: true,
-  };
-  if (options.rtkEntry) rtkOptions.entry = options.rtkEntry;
-  if (options.rtkBudgetTokens) rtkOptions.budgetTokens = options.rtkBudgetTokens;
-  if (options.rtkTimeoutMs) rtkOptions.timeoutMs = options.rtkTimeoutMs;
-  if (options.rtkMinBytes) rtkOptions.minBytes = options.rtkMinBytes;
-  if (options.dataDir) rtkOptions.dataDir = options.dataDir;
-  const rtk = await RtkClient.create(rtkOptions);
-
-  const perFixture: PerFixtureRecord[] = [];
-  const latencies: LatencySample[] = [];
-  const recallResults: RecallResult[] = [];
-
-  try {
-    for (const fixture of fixtures) {
-      const toolOutputs = extractToolOutput(fixture.messages);
-      const rawText = extractAllText(fixture.messages);
-      const rawTokens = tokenCounter.count(rawText);
-
-      let outputText = rawText;
-      let degradedReason: "spawn_failed" | "timeout" | "crash" | "protocol" | "no_gain" | null = null;
-      let totalOutTokens = 0;
-
-      const start = performance.now();
-
-      for (let i = 0; i < toolOutputs.length; i++) {
-        const toolOutput = toolOutputs[i] as string;
-        const toolName = fixture.messages.find((m) => m.parts.some((p) => p.type === "tool" && p.state.output === toolOutput))?.parts
-          .find((p) => p.type === "tool")?.tool ?? "unknown";
-
-        const input: CompressInput = {
-          tool: toolName,
-          output: toolOutput,
-          sessionId: `eval-${fixture.name}`,
-          callId: `call-${i}`,
-        };
-
-        const outcome: CompressOutcome = await rtk.compress(input);
-
-        if (outcome.kind === "compressed") {
-          if (toolOutput !== undefined) {
-            outputText = outputText.replace(toolOutput, outcome.result.output);
-          }
-          totalOutTokens += outcome.result.outTokensEst;
-          if (outcome.result.degraded) {
-            degradedReason = outcome.result.degraded.reason;
-          }
-        } else {
-          if (toolOutput !== undefined) {
-            totalOutTokens += tokenCounter.count(toolOutput);
-          }
-          if (outcome.degraded) {
-            degradedReason = outcome.degraded;
-          }
-        }
-      }
-
-      const latencyMs = performance.now() - start;
-      const outTokens = totalOutTokens || rawTokens;
-
-      // Recall is judged on the FULL post-compression context (every tool
-      // output replaced) — facts living in untouched message text must count
-      // as retained.
-      const recall = evaluateRecall(fixture, "B", outputText, [], null);
-
-      perFixture.push(buildPerFixtureRecord(fixture, "B", rawText, outputText, latencyMs, recall.hits, recall.misses, degradedReason));
-      latencies.push({ group: "B", fixture: fixture.name, latencyMs });
-      recallResults.push(recall);
-    }
-  } finally {
-    await rtk.shutdown();
-  }
-
-  return { perFixture, latencies, recallResults };
-}
-
-async function runGroupC(fixtures: FixtureSample[], options: RunnerOptions): Promise<{
-  perFixture: PerFixtureRecord[];
-  latencies: LatencySample[];
-  recallResults: RecallResult[];
-}> {
-  const dataDir = options.dataDir ?? defaultSidecarDataDir("bluecode-eval-headroomd");
-  // exactOptionalPropertyTypes: absent options stay absent, not undefined.
-  const headroomOptions: HeadroomClientOptions = {
-    dataDir,
-    ...(options.headroomTimeoutMs !== undefined ? { timeoutMs: options.headroomTimeoutMs } : {}),
-    ...(options.headroomEntry !== undefined
-      ? { spawn: { entry: options.headroomEntry, cwd: process.cwd() } }
-      : {}),
-  };
-  const headroom = await HeadroomClient.connect(headroomOptions);
-
-  const perFixture: PerFixtureRecord[] = [];
-  const latencies: LatencySample[] = [];
-  const recallResults: RecallResult[] = [];
-
-  try {
-    for (const fixture of fixtures) {
-      const rawText = extractAllText(fixture.messages);
-      const rawTokens = tokenCounter.count(rawText);
-
-      const params = fixturesToHeadroomParams(fixture, options.contextWindowTokens);
-      // Namespace per group: C runs before D against the same daemon and
-      // data dir; a shared session id would have D re-compress an already
-      // stored session instead of its own history.
-      params.sessionId = `${params.sessionId}-c`;
-      const start = performance.now();
-
-      let compressedOutput: string = "";
-      let compactedRefs: Array<{ contentHash: string }> | null = null;
-      let degradedReason: "spawn_failed" | "timeout" | "crash" | "protocol" | "no_gain" | null = null;
-
-      try {
-        const result = await headroom.compress(params);
-        if (result.compacted) {
-          compressedOutput = result.summary ?? "";
-          compactedRefs = result.refs;
-        } else {
-          compressedOutput = rawText;
-        }
-      } catch (err) {
-        degradedReason = "crash";
-        compressedOutput = rawText;
-      }
-
-      const latencyMs = performance.now() - start;
-
-      // Recall probing runs off the clock — see gatherRecallEvidence.
-      const evidence = compactedRefs !== null
-        ? await gatherRecallEvidence(headroom, params.sessionId, compactedRefs, goldenFactsOf(fixture))
-        : { retrieveHits: [] as RetrieveHit[], fetchContent: null };
-
-      const outTokens = tokenCounter.count(compressedOutput || rawText);
-
-      const recall = evaluateRecall(fixture, "C", compressedOutput || rawText, evidence.retrieveHits, evidence.fetchContent);
-
-      perFixture.push(buildPerFixtureRecord(fixture, "C", rawText, compressedOutput || rawText, latencyMs, recall.hits, recall.misses, degradedReason));
-      latencies.push({ group: "C", fixture: fixture.name, latencyMs });
-      recallResults.push(recall);
-    }
-  } finally {
-    await headroom.close();
-  }
-
-  return { perFixture, latencies, recallResults };
-}
-
-async function runGroupD(fixtures: FixtureSample[], options: RunnerOptions): Promise<{
-  perFixture: PerFixtureRecord[];
-  latencies: LatencySample[];
-  recallResults: RecallResult[];
-}> {
-  const dataDir = options.dataDir ?? defaultSidecarDataDir("bluecode-eval-headroomd");
-  // exactOptionalPropertyTypes: absent options stay absent, not undefined.
-  const rtk = await RtkClient.create({
+function rtkOptions(options: RunnerOptions, dataDir: string) {
+  return {
     cwd: process.cwd(),
     dataDir,
     testMode: true,
     ...(options.rtkEntry !== undefined ? { entry: options.rtkEntry } : {}),
-    ...(options.rtkBudgetTokens !== undefined ? { budgetTokens: options.rtkBudgetTokens } : {}),
+    ...(options.rtkBudgetTokens !== undefined
+      ? { budgetTokens: options.rtkBudgetTokens }
+      : {}),
     ...(options.rtkTimeoutMs !== undefined ? { timeoutMs: options.rtkTimeoutMs } : {}),
     ...(options.rtkMinBytes !== undefined ? { minBytes: options.rtkMinBytes } : {}),
-  });
+  }
+}
 
-  const headroomOptions: HeadroomClientOptions = {
+function headroomOptions(options: RunnerOptions, dataDir: string): HeadroomClientOptions {
+  return {
     dataDir,
-    ...(options.headroomTimeoutMs !== undefined ? { timeoutMs: options.headroomTimeoutMs } : {}),
-    ...(options.headroomEntry !== undefined
-      ? { spawn: { entry: options.headroomEntry, cwd: process.cwd() } }
+    ...(options.headroomTimeoutMs !== undefined
+      ? { timeoutMs: options.headroomTimeoutMs }
       : {}),
-  };
-  const headroom = await HeadroomClient.connect(headroomOptions);
+    spawn: {
+      entry: options.headroomEntry ?? DEFAULT_HEADROOM_ENTRY,
+      cwd: process.cwd(),
+      args: [
+        "--dataDir",
+        dataDir,
+        "--idleExitMs",
+        String(HEADROOM_IDLE_EXIT_MS),
+      ],
+    },
+  }
+}
 
-  const perFixture: PerFixtureRecord[] = [];
-  const latencies: LatencySample[] = [];
-  const recallResults: RecallResult[] = [];
+interface RtkRewriteResult {
+  messages: ChatMessage[]
+  archivedHashes: string[]
+  degradedReason: DegradedReason | null
+  latencyMs: number
+}
 
-  try {
-    for (const fixture of fixtures) {
-      const toolOutputs = extractToolOutput(fixture.messages);
-      const rawText = extractAllText(fixture.messages);
-      const rawTokens = tokenCounter.count(rawText);
+async function rewriteToolParts(
+  rtk: RtkClient,
+  source: ChatMessage[],
+  sessionId: string,
+): Promise<RtkRewriteResult> {
+  const messages = cloneMessages(source)
+  const archivedHashes: string[] = []
+  let degradedReason: DegradedReason | null = null
+  let callIndex = 0
+  const started = performance.now()
 
-      let outputText = rawText;
-      let degradedReason: "spawn_failed" | "timeout" | "crash" | "protocol" | "no_gain" | null = null;
-      let totalOutTokens = 0;
-
-      // Stage 1: Rtk compression on tool outputs
-      const rtkStart = performance.now();
-      for (let i = 0; i < toolOutputs.length; i++) {
-        const toolOutput = toolOutputs[i] as string;
-        const toolName = fixture.messages.find((m) => m.parts.some((p) => p.type === "tool" && p.state.output === toolOutput))?.parts
-          .find((p) => p.type === "tool")?.tool ?? "unknown";
-
-        const input: CompressInput = {
-          tool: toolName,
-          output: toolOutput,
-          sessionId: `eval-${fixture.name}`,
-          callId: `call-${i}`,
-        };
-
-        const outcome: CompressOutcome = await rtk.compress(input);
-        if (outcome.kind === "compressed") {
-          if (toolOutput !== undefined) {
-            outputText = outputText.replace(toolOutput, outcome.result.output);
-          }
-          totalOutTokens += outcome.result.outTokensEst;
-          if (outcome.result.degraded) {
-            degradedReason = outcome.result.degraded.reason;
-          }
-        } else {
-          if (toolOutput !== undefined) {
-            totalOutTokens += tokenCounter.count(toolOutput);
-          }
-          if (outcome.degraded) {
-            degradedReason = outcome.degraded;
-          }
-        }
+  for (const message of messages) {
+    for (const part of message.parts) {
+      if (part.type !== "tool" || typeof part.state.output !== "string") continue
+      const input: CompressInput = {
+        tool: part.tool,
+        output: part.state.output,
+        sessionId,
+        callId: `call-${callIndex++}`,
       }
-      const rtkLatencyMs = performance.now() - rtkStart;
-
-      // Stage 2: Headroom compression on full message history
-      const hrStart = performance.now();
-      const params = fixturesToHeadroomParams(fixture, options.contextWindowTokens);
-      // Per-group namespace — see the matching note in runGroupC.
-      params.sessionId = `${params.sessionId}-d`;
-
-      // Without compaction the final context is the full rtk-processed text;
-      // with compaction the summary replaces it below.
-      let compressedOutput: string = outputText;
-      let compactedRefs: Array<{ contentHash: string }> | null = null;
-
-      try {
-        const result = await headroom.compress(params);
-        if (result.compacted) {
-          compressedOutput = result.summary ?? compressedOutput;
-          compactedRefs = result.refs;
+      const outcome = await rtk.compress(input)
+      if (outcome.kind === "compressed") {
+        part.state.output = outcome.result.output
+        archivedHashes.push(outcome.result.rawHash)
+        if (outcome.result.degraded !== null) {
+          degradedReason = outcome.result.degraded.reason
         }
-      } catch (err) {
-        if (!degradedReason) degradedReason = "crash";
+      } else if (outcome.degraded !== null) {
+        degradedReason = outcome.degraded
       }
-      const hrLatencyMs = performance.now() - hrStart;
-
-      // Recall probing runs off the clock — see gatherRecallEvidence.
-      const evidence = compactedRefs !== null
-        ? await gatherRecallEvidence(headroom, params.sessionId, compactedRefs, goldenFactsOf(fixture))
-        : { retrieveHits: [] as RetrieveHit[], fetchContent: null };
-
-      const latencyMs = rtkLatencyMs + hrLatencyMs;
-      const outTokens = totalOutTokens || tokenCounter.count(compressedOutput);
-
-      const recall = evaluateRecall(fixture, "D", compressedOutput, evidence.retrieveHits, evidence.fetchContent);
-
-      perFixture.push(buildPerFixtureRecord(fixture, "D", rawText, compressedOutput, latencyMs, recall.hits, recall.misses, degradedReason));
-      latencies.push({ group: "D", fixture: fixture.name, latencyMs });
-      recallResults.push(recall);
     }
-  } finally {
-    await rtk.shutdown();
-    await headroom.close();
   }
 
-  return { perFixture, latencies, recallResults };
+  return {
+    messages,
+    archivedHashes,
+    degradedReason,
+    latencyMs: performance.now() - started,
+  }
+}
+
+async function recoverRtkArchives(
+  rtk: RtkClient,
+  sessionId: string,
+  hashes: string[],
+): Promise<{ found: number; total: number }> {
+  let found = 0
+  for (const hash of hashes) {
+    try {
+      const outcome = await rtk.fetch({ hash, sessionId })
+      if (outcome.kind === "found") found++
+    } catch {
+      // A failed recovery is measured as a miss, not a harness crash.
+    }
+  }
+  return { found, total: hashes.length }
+}
+
+interface HeadroomEvidence {
+  queryMatches: string[] | null
+  archiveRecovery: { found: number; total: number }
+}
+
+async function gatherHeadroomEvidence(
+  headroom: HeadroomClient,
+  sessionId: string,
+  result: HeadroomCompressResult | null,
+  fixture: FixtureSample,
+): Promise<HeadroomEvidence> {
+  if (result === null || !result.compacted || result.historyHash === null) {
+    return { queryMatches: null, archiveRecovery: { found: 0, total: 0 } }
+  }
+
+  const facts = [...fixture.goldenFacts.mustHit, ...fixture.goldenFacts.niceToHave]
+  const queryMatches: string[] = []
+  for (const fact of facts) {
+    try {
+      const queryResult = await headroom.retrieve({
+        namespace: { projectId: "default", sessionId },
+        query: fact,
+        limit: 5,
+      })
+      if ("hits" in queryResult && queryResult.hits.length > 0) queryMatches.push(fact)
+    } catch {
+      // A failed query remains a query miss.
+    }
+  }
+
+  const recoveredHashes: string[] = []
+  let offset = 0
+  let partial = false
+  for (let page = 0; page < 10_000; page++) {
+    let historyResult: RetrieveByHistoryResult
+    try {
+      historyResult = await headroom.retrieve({
+        namespace: { projectId: "default", sessionId },
+        historyHash: result.historyHash,
+        offset,
+        limit: 50,
+      }) as RetrieveByHistoryResult
+    } catch {
+      partial = true
+      break
+    }
+    if (!historyResult.found) {
+      partial = true
+      break
+    }
+    recoveredHashes.push(...historyResult.items.map((item) => item.contentHash))
+    partial ||= historyResult.partial
+    if (historyResult.nextOffset === null) break
+    if (historyResult.nextOffset <= offset) {
+      partial = true
+      break
+    }
+    offset = historyResult.nextOffset
+  }
+
+  const expectedHashes = result.refs.map((ref) => ref.contentHash)
+  let found = 0
+  for (let index = 0; index < expectedHashes.length; index++) {
+    if (recoveredHashes[index] === expectedHashes[index]) found++
+  }
+  if (partial && found === expectedHashes.length) found = Math.max(0, found - 1)
+
+  return {
+    queryMatches,
+    archiveRecovery: { found, total: expectedHashes.length },
+  }
+}
+
+async function runGroupA(fixtures: FixtureSample[], options: RunnerOptions): Promise<GroupResult> {
+  const perFixture: PerFixtureRecord[] = []
+  const latencies: LatencySample[] = []
+  const recallResults: RecallResult[] = []
+  for (const fixture of fixtures) {
+    const messages = cloneMessages(fixture.messages)
+    const rawText = extractAllText(messages)
+    const started = performance.now()
+    const outputText = extractAllText(messages)
+    const latencyMs = performance.now() - started
+    const recall = evaluateRecall(fixture, "A", outputText, null, { found: 0, total: 0 })
+    perFixture.push(buildPerFixtureRecord(fixture, "A", rawText, outputText, latencyMs, recall, null))
+    latencies.push({ group: "A", fixture: fixture.name, latencyMs })
+    recallResults.push(recall)
+    observeFinal(options, "A", fixture.name, messages, outputText)
+  }
+  return { perFixture, latencies, recallResults }
+}
+
+async function runGroupB(
+  fixtures: FixtureSample[],
+  options: RunnerOptions,
+  dataDir: string,
+): Promise<GroupResult> {
+  const rtk = await RtkClient.create(rtkOptions(options, dataDir))
+  const perFixture: PerFixtureRecord[] = []
+  const latencies: LatencySample[] = []
+  const recallResults: RecallResult[] = []
+  try {
+    for (const fixture of fixtures) {
+      const rawText = extractAllText(fixture.messages)
+      const sessionId = `eval-${fixture.name}-b`
+      const rewritten = await rewriteToolParts(
+        rtk,
+        cloneMessagesForSession(fixture.messages, sessionId),
+        sessionId,
+      )
+      const outputText = extractAllText(rewritten.messages)
+      const archiveRecovery = await recoverRtkArchives(
+        rtk,
+        sessionId,
+        rewritten.archivedHashes,
+      )
+      const recall = evaluateRecall(fixture, "B", outputText, null, archiveRecovery)
+      perFixture.push(
+        buildPerFixtureRecord(
+          fixture,
+          "B",
+          rawText,
+          outputText,
+          rewritten.latencyMs,
+          recall,
+          rewritten.degradedReason,
+        ),
+      )
+      latencies.push({ group: "B", fixture: fixture.name, latencyMs: rewritten.latencyMs })
+      recallResults.push(recall)
+      observeFinal(options, "B", fixture.name, rewritten.messages, outputText)
+    }
+  } finally {
+    await rtk.shutdown()
+  }
+  return { perFixture, latencies, recallResults }
+}
+
+function materializeHeadroomResult(
+  messages: ChatMessage[],
+  result: HeadroomCompressResult,
+): { messages: ChatMessage[]; valid: boolean } {
+  if (!result.compacted) return { messages, valid: true }
+  const materialized = materializeCompaction(messages, result)
+  return materialized.status === "applied"
+    ? { messages: materialized.messages, valid: true }
+    : { messages, valid: false }
+}
+
+async function runGroupC(
+  fixtures: FixtureSample[],
+  options: RunnerOptions,
+  dataDir: string,
+): Promise<GroupResult> {
+  const headroom = await HeadroomClient.connect(headroomOptions(options, dataDir))
+  const perFixture: PerFixtureRecord[] = []
+  const latencies: LatencySample[] = []
+  const recallResults: RecallResult[] = []
+  try {
+    for (const fixture of fixtures) {
+      const rawText = extractAllText(fixture.messages)
+      const sessionId = `eval-${fixture.name}-c`
+      const sourceMessages = cloneMessagesForSession(fixture.messages, sessionId)
+      const params = {
+        ...fixturesToHeadroomParams(fixture, options.contextWindowTokens),
+        sessionId,
+        messages: sourceMessages,
+      }
+      options.observe?.({
+        type: "headroom-input",
+        group: "C",
+        fixture: fixture.name,
+        messages: cloneMessages(sourceMessages),
+      })
+
+      let result: HeadroomCompressResult | null = null
+      let finalMessages = sourceMessages
+      let degradedReason: DegradedReason | null = null
+      const started = performance.now()
+      try {
+        result = await headroom.compress(params)
+        const materialized = materializeHeadroomResult(sourceMessages, result)
+        finalMessages = materialized.messages
+        if (!materialized.valid) degradedReason = "protocol"
+      } catch {
+        degradedReason = "crash"
+      }
+      const latencyMs = performance.now() - started
+      const outputText = extractAllText(finalMessages)
+      const evidence = await gatherHeadroomEvidence(headroom, params.sessionId, result, fixture)
+      const recall = evaluateRecall(
+        fixture,
+        "C",
+        outputText,
+        evidence.queryMatches,
+        evidence.archiveRecovery,
+      )
+      perFixture.push(
+        buildPerFixtureRecord(
+          fixture,
+          "C",
+          rawText,
+          outputText,
+          latencyMs,
+          recall,
+          degradedReason,
+        ),
+      )
+      latencies.push({ group: "C", fixture: fixture.name, latencyMs })
+      recallResults.push(recall)
+      observeFinal(options, "C", fixture.name, finalMessages, outputText)
+    }
+  } finally {
+    await headroom.close()
+  }
+  return { perFixture, latencies, recallResults }
+}
+
+async function runGroupD(
+  fixtures: FixtureSample[],
+  options: RunnerOptions,
+  dataDir: string,
+): Promise<GroupResult> {
+  const rtk = await RtkClient.create(rtkOptions(options, dataDir))
+  const headroom = await HeadroomClient.connect(headroomOptions(options, dataDir))
+  const perFixture: PerFixtureRecord[] = []
+  const latencies: LatencySample[] = []
+  const recallResults: RecallResult[] = []
+  try {
+    for (const fixture of fixtures) {
+      const rawText = extractAllText(fixture.messages)
+      const sessionId = `eval-${fixture.name}-d`
+      const rewritten = await rewriteToolParts(
+        rtk,
+        cloneMessagesForSession(fixture.messages, sessionId),
+        sessionId,
+      )
+      const params = {
+        ...fixturesToHeadroomParams(fixture, options.contextWindowTokens),
+        sessionId,
+        messages: rewritten.messages,
+      }
+      options.observe?.({
+        type: "headroom-input",
+        group: "D",
+        fixture: fixture.name,
+        messages: cloneMessages(rewritten.messages),
+      })
+
+      let result: HeadroomCompressResult | null = null
+      let finalMessages = rewritten.messages
+      let degradedReason = rewritten.degradedReason
+      const started = performance.now()
+      try {
+        result = await headroom.compress(params)
+        const materialized = materializeHeadroomResult(rewritten.messages, result)
+        finalMessages = materialized.messages
+        if (!materialized.valid) degradedReason = "protocol"
+      } catch {
+        degradedReason ??= "crash"
+      }
+      const headroomLatencyMs = performance.now() - started
+      const outputText = extractAllText(finalMessages)
+      const [rtkRecovery, headroomEvidence] = await Promise.all([
+        recoverRtkArchives(rtk, sessionId, rewritten.archivedHashes),
+        gatherHeadroomEvidence(headroom, sessionId, result, fixture),
+      ])
+      const archiveRecovery = {
+        found: rtkRecovery.found + headroomEvidence.archiveRecovery.found,
+        total: rtkRecovery.total + headroomEvidence.archiveRecovery.total,
+      }
+      const recall = evaluateRecall(
+        fixture,
+        "D",
+        outputText,
+        headroomEvidence.queryMatches,
+        archiveRecovery,
+      )
+      const latencyMs = rewritten.latencyMs + headroomLatencyMs
+      perFixture.push(
+        buildPerFixtureRecord(
+          fixture,
+          "D",
+          rawText,
+          outputText,
+          latencyMs,
+          recall,
+          degradedReason,
+        ),
+      )
+      latencies.push({ group: "D", fixture: fixture.name, latencyMs })
+      recallResults.push(recall)
+      observeFinal(options, "D", fixture.name, finalMessages, outputText)
+    }
+  } finally {
+    await rtk.shutdown()
+    await headroom.close()
+  }
+  return { perFixture, latencies, recallResults }
+}
+
+async function waitForHeadroomExit(dataDir: string, allowTerminate: boolean): Promise<void> {
+  const socketPath = path.join(dataDir, "headroomd.sock")
+  for (let attempt = 0; attempt < 60 && existsSync(socketPath); attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  if (!existsSync(socketPath)) return
+
+  // An explicit dataDir may point at a pre-existing daemon. Closing our
+  // client is sufficient; never signal a process we cannot prove we spawned.
+  if (!allowTerminate) return
+
+  // The directory is unique to this run, so this PID can only be our daemon.
+  try {
+    const pid = Number(await readFile(path.join(dataDir, "headroomd.pid"), "utf8"))
+    if (Number.isInteger(pid) && pid > 0) process.kill(pid, "SIGTERM")
+  } catch {
+    // A concurrently exiting daemon may remove the pid file between checks.
+  }
+  for (let attempt = 0; attempt < 60 && existsSync(socketPath); attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  if (existsSync(socketPath)) throw new Error(`eval headroomd did not exit for ${dataDir}`)
 }
 
 export async function runEvaluation(options: RunnerOptions = {}): Promise<RunnerResult> {
-  const fixtures = options.quick ? quickFixtures() : allFixtures();
+  const temporaryDataDir = options.dataDir === undefined
+  const dataDir = options.dataDir ?? await mkdtemp(path.join(tmpdir(), "bluecode-eval-"))
+  options.observe?.({ type: "data-dir", dataDir, temporary: temporaryDataDir })
+  const fixtures = options.quick ? quickFixtures() : allFixtures()
 
-  console.error(`[eval] Running ${fixtures.length} fixtures in ${options.quick ? "quick" : "full"} mode`);
-  console.error(`[eval] Groups: A (baseline), B (rtk), C (headroomd), D (combined)`);
+  console.error(`[eval] Running ${fixtures.length} fixtures in ${options.quick ? "quick" : "full"} mode`)
+  console.error("[eval] Groups: A (baseline), B (rtk), C (headroomd), D (combined)")
 
-  // Group A: Baseline
-  console.error("[eval] Group A: baseline (passthrough)...");
-  const resultA = await runGroupA(fixtures);
+  try {
+    console.error("[eval] Group A: baseline (passthrough)...")
+    const resultA = await runGroupA(fixtures, options)
+    console.error("[eval] Group B: rtk only...")
+    const resultB = await runGroupB(fixtures, options, dataDir)
+    console.error("[eval] Group C: headroomd only...")
+    const resultC = await runGroupC(fixtures, options, dataDir)
+    console.error("[eval] Group D: combined (rtk + headroomd)...")
+    const resultD = await runGroupD(fixtures, options, dataDir)
 
-  // Group B: Rtk only
-  console.error("[eval] Group B: rtk only...");
-  const resultB = await runGroupB(fixtures, options);
-
-  // Group C: Headroom only
-  console.error("[eval] Group C: headroomd only...");
-  const resultC = await runGroupC(fixtures, options);
-
-  // Group D: Combined
-  console.error("[eval] Group D: combined (rtk + headroomd)...");
-  const resultD = await runGroupD(fixtures, options);
-
-  return {
-    perFixture: [...resultA.perFixture, ...resultB.perFixture, ...resultC.perFixture, ...resultD.perFixture],
-    latencies: [...resultA.latencies, ...resultB.latencies, ...resultC.latencies, ...resultD.latencies],
-    recallResults: [...resultB.recallResults, ...resultC.recallResults, ...resultD.recallResults],
-  };
+    return {
+      perFixture: [
+        ...resultA.perFixture,
+        ...resultB.perFixture,
+        ...resultC.perFixture,
+        ...resultD.perFixture,
+      ],
+      latencies: [
+        ...resultA.latencies,
+        ...resultB.latencies,
+        ...resultC.latencies,
+        ...resultD.latencies,
+      ],
+      recallResults: [
+        ...resultA.recallResults,
+        ...resultB.recallResults,
+        ...resultC.recallResults,
+        ...resultD.recallResults,
+      ],
+      dataDir,
+      temporaryDataDir,
+    }
+  } finally {
+    await waitForHeadroomExit(dataDir, temporaryDataDir)
+    if (temporaryDataDir) {
+      await rm(dataDir, { recursive: true, force: true })
+    }
+  }
 }
 
 export function dispose(): void {
-  tokenCounter.dispose();
+  tokenCounter.dispose()
 }

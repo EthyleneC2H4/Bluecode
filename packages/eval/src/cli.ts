@@ -1,67 +1,68 @@
 #!/usr/bin/env bun
-/**
- * @bluecode/eval CLI — offline deterministic evaluation harness.
- *
- * Usage:
- *   bun run src/cli.ts              # full evaluation, write report
- *   bun run src/cli.ts --quick      # reduced fixture set
- *   bun run src/cli.ts --check      # regression gate against baseline.json
- *   bun run src/cli.ts --update-baseline  # write current report as baseline
- */
-import path from "node:path";
-import { defaultSidecarDataDir } from "@bluecode/shared";
-import { runEvaluation, dispose as disposeRunner } from "./runner";
-import { aggregateReport, dispose as disposeMetrics } from "./metrics";
-import { writeReport, printSummary, dispose as disposeReport } from "./report";
-import { checkBaseline } from "./check-baseline";
+/** CLI for full/quick evaluation, baseline refresh and regression checking. */
+import path from "node:path"
+import { runEvaluation, dispose as disposeRunner } from "./runner"
+import { aggregateReport, dispose as disposeMetrics } from "./metrics"
+import { writeReport, printSummary } from "./report"
+import { checkBaseline } from "./check-baseline"
 
-// HeadroomClient only spawns a daemon when given an explicit spawn recipe
-// (connect-only by design — see headroomd/src/client.ts), and the CLI has no
-// operator to start one. Default to the workspace bin so `bun run eval` works
-// standalone; RtkClient needs no such wiring (it resolves its own sibling bin).
-const DEFAULT_HEADROOM_ENTRY = path.resolve(import.meta.dir, "../../headroomd/src/bin.ts");
+const DEFAULT_HEADROOM_ENTRY = path.resolve(import.meta.dir, "../../headroomd/src/bin.ts")
 
-interface CliOptions {
-  quick: boolean;
-  check: boolean;
-  updateBaseline: boolean;
-  skipLatency: boolean;
-  help: boolean;
+export interface CliOptions {
+  quick: boolean
+  check: boolean
+  updateBaseline: boolean
+  skipLatency: boolean
+  help: boolean
 }
 
-function parseArgs(argv: string[]): CliOptions {
+export interface EvaluationExecution {
+  quick: boolean
+  action: "report" | "check" | "update-baseline"
+}
+
+export function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
     quick: false,
     check: false,
     updateBaseline: false,
     skipLatency: false,
     help: false,
-  };
-
+  }
   for (const arg of argv) {
     switch (arg) {
       case "--quick":
-        options.quick = true;
-        break;
+        options.quick = true
+        break
       case "--check":
-        options.check = true;
-        break;
+        options.check = true
+        break
       case "--update-baseline":
-        options.updateBaseline = true;
-        break;
+        options.updateBaseline = true
+        break
       case "--skip-latency":
-        options.skipLatency = true;
-        break;
+        options.skipLatency = true
+        break
       case "--help":
       case "-h":
-        options.help = true;
-        break;
+        options.help = true
+        break
       default:
-        console.error(`Unknown argument: ${arg}`);
-        options.help = true;
+        console.error(`Unknown argument: ${arg}`)
+        options.help = true
     }
   }
-  return options;
+  return options
+}
+
+/** Baseline operations always evaluate now; quick mode may never freeze a baseline. */
+export function resolveExecution(options: CliOptions): EvaluationExecution {
+  if (options.updateBaseline && options.quick) {
+    throw new Error("--quick cannot be combined with --update-baseline")
+  }
+  if (options.updateBaseline) return { quick: false, action: "update-baseline" }
+  if (options.check) return { quick: false, action: "check" }
+  return { quick: options.quick, action: "report" }
 }
 
 function printHelp(): void {
@@ -73,78 +74,67 @@ Usage:
 
 Options:
   --quick              Run with reduced fixture set (faster iteration)
-  --check              Run regression gate against baseline.json (exit 0 on pass)
-  --update-baseline    Write current eval-report.json as baseline.json
-  --skip-latency       Skip the p95 latency gate (for noisy shared CI runners
-                       where IPC timing makes >2x baseline flaky)
+  --check              Run a fresh full evaluation, then compare to baseline
+  --update-baseline    Run a fresh full evaluation, then update baseline
+  --skip-latency       Skip only the p95 latency gate
   --help, -h           Show this help
-
-Examples:
-  bun run eval                    # Full evaluation
-  bun run eval --quick            # Quick smoke test
-  bun run eval --check            # CI gate
-  bun run eval --update-baseline  # Freeze new baseline
-`);
+`)
 }
 
-async function main(): Promise<number> {
-  const options = parseArgs(process.argv.slice(2));
-
+export async function main(argv = process.argv.slice(2)): Promise<number> {
+  const options = parseArgs(argv)
   if (options.help) {
-    printHelp();
-    return 0;
+    printHelp()
+    return 0
   }
 
-  if (options.check || options.updateBaseline) {
-    const result = checkBaseline(options.updateBaseline, { skipLatency: options.skipLatency });
-    disposeReport();
-    disposeMetrics();
-    disposeRunner();
-    return result.passed ? 0 : 1;
+  let execution: EvaluationExecution
+  try {
+    execution = resolveExecution(options)
+  } catch (error) {
+    console.error(`[eval] ERROR: ${(error as Error).message}`)
+    return 1
   }
 
-  // Full evaluation run
-  // The spawned headroomd reads its data dir from this env var (the client
-  // passes no CLI args — see headroomd/src/client.ts). Default mirrors the
-  // runner's own fallback so a plain `bun run eval` works standalone.
-  // uid-namespaced runtime dir (same policy as the plugin) instead of a fixed
-  // /tmp path: parallel eval runs by different users stop colliding, and a
-  // same-uid second run reuses the winner's daemon rather than fighting it.
-  process.env.BLUECODE_DATA_DIR ??= defaultSidecarDataDir("bluecode-eval-headroomd");
-  console.error("[eval] Starting evaluation...");
-
+  console.error("[eval] Starting evaluation...")
   try {
     const runnerResult = await runEvaluation({
-      quick: options.quick,
-      // exactOptionalPropertyTypes: absent env stays absent, not undefined.
+      quick: execution.quick,
       headroomEntry: DEFAULT_HEADROOM_ENTRY,
-      ...(process.env.BLUECODE_DATA_DIR !== undefined ? { dataDir: process.env.BLUECODE_DATA_DIR } : {}),
-    });
-    const report = aggregateReport(runnerResult.perFixture, runnerResult.latencies, runnerResult.recallResults);
-    writeReport(report);
-    printSummary(report);
+    })
+    const report = aggregateReport(
+      runnerResult.perFixture,
+      runnerResult.latencies,
+      runnerResult.recallResults,
+    )
+    writeReport(report)
+    printSummary(report)
 
-    // Also run baseline check if baseline exists (warning-only; exit code stays 0)
-    const baselineCheck = checkBaseline(false, { skipLatency: options.skipLatency });
+    if (execution.action === "update-baseline") {
+      return checkBaseline(true, { skipLatency: options.skipLatency }).passed ? 0 : 1
+    }
+    if (execution.action === "check") {
+      return checkBaseline(false, { skipLatency: options.skipLatency }).passed ? 0 : 1
+    }
+
+    const baselineCheck = checkBaseline(false, { skipLatency: options.skipLatency })
     if (!baselineCheck.passed) {
-      console.error("[eval] WARNING: Current results violate baseline (run with --check to see details)");
+      console.error("[eval] WARNING: Current results violate baseline (run with --check for a gate)")
     }
-
-    return 0;
-  } catch (err) {
-    console.error(`[eval] ERROR: ${err instanceof Error ? err.message : String(err)}`);
-    if (err instanceof Error && err.stack) {
-      console.error(err.stack);
-    }
-    return 1;
+    return 0
+  } catch (error) {
+    console.error(`[eval] ERROR: ${error instanceof Error ? error.message : String(error)}`)
+    if (error instanceof Error && error.stack) console.error(error.stack)
+    return 1
   } finally {
-    disposeReport();
-    disposeMetrics();
-    disposeRunner();
+    disposeMetrics()
+    disposeRunner()
   }
 }
 
-main().then(code => process.exit(code)).catch(err => {
-  console.error(`[eval] FATAL: ${err instanceof Error ? err.message : String(err)}`);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().then((code) => process.exit(code)).catch((error) => {
+    console.error(`[eval] FATAL: ${error instanceof Error ? error.message : String(error)}`)
+    process.exit(1)
+  })
+}

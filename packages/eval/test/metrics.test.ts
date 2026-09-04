@@ -42,8 +42,12 @@ function record(partial: Partial<PerFixtureRecord> & { fixture: string; group: P
     rawTokens: 1000,
     outTokens: 500,
     latencyMs: 10,
-    recallHits: [],
-    recallMisses: [],
+    contextRecallHits: [],
+    contextRecallMisses: [],
+    queryRecallHits: [],
+    queryRecallMisses: [],
+    archiveRecoveryFound: 0,
+    archiveRecoveryTotal: 0,
     degradedReason: null,
     ...partial,
   };
@@ -51,12 +55,16 @@ function record(partial: Partial<PerFixtureRecord> & { fixture: string; group: P
 
 function recall(partial: Partial<RecallResult> & { fixture: string; group: RecallResult["group"] }): RecallResult {
   return {
-    hits: [],
-    misses: [],
-    mustHitTotal: 2,
-    mustHitFound: 2,
-    niceToHaveTotal: 1,
-    niceToHaveFound: 1,
+    context: {
+      hits: [],
+      misses: [],
+      mustHitTotal: 2,
+      mustHitFound: 2,
+      niceToHaveTotal: 1,
+      niceToHaveFound: 1,
+    },
+    query: null,
+    archiveRecovery: { found: 0, total: 0 },
     ...partial,
   };
 }
@@ -87,18 +95,38 @@ describe("metrics: computeGroupMetrics", () => {
 
   test("recall rates aggregate must-hit separately from nice-to-have", () => {
     const recalls: RecallResult[] = [
-      recall({ fixture: "f1", group: "D", mustHitTotal: 4, mustHitFound: 4, niceToHaveTotal: 2, niceToHaveFound: 0 }),
-      recall({ fixture: "f2", group: "D", mustHitTotal: 4, mustHitFound: 2, niceToHaveTotal: 2, niceToHaveFound: 2 }),
+      recall({ fixture: "f1", group: "D", context: { hits: [], misses: [], mustHitTotal: 2, mustHitFound: 2, niceToHaveTotal: 1, niceToHaveFound: 1 } }),
+      recall({ fixture: "f2", group: "D", context: { hits: [], misses: [], mustHitTotal: 4, mustHitFound: 2, niceToHaveTotal: 2, niceToHaveFound: 2 } }),
     ];
     const m = computeGroupMetrics("D", [], [], recalls);
-    expect(m.recall.mustHit).toEqual({ found: 6, total: 8, rate: 0.75 });
-    expect(m.recall.niceToHave).toEqual({ found: 2, total: 4, rate: 0.5 });
+    expect(m.contextRecall.mustHit).toEqual({ found: 4, total: 6, rate: 2 / 3 });
+    expect(m.contextRecall.niceToHave).toEqual({ found: 3, total: 3, rate: 1 });
   });
 
   test("recall rate defaults to 1 when a group has no golden facts at all", () => {
     const m = computeGroupMetrics("A", [], [], []);
-    expect(m.recall.mustHit.rate).toBe(1);
-    expect(m.recall.niceToHave.rate).toBe(1);
+    expect(m.contextRecall.mustHit.rate).toBe(1);
+    expect(m.contextRecall.niceToHave.rate).toBe(1);
+  });
+
+  test("archive recovery and query recall aggregate independently", () => {
+    const recalls: RecallResult[] = [
+      recall({
+        fixture: "f1",
+        group: "D",
+        query: { hits: ["q1"], misses: ["q2"], mustHitTotal: 2, mustHitFound: 1, niceToHaveTotal: 0, niceToHaveFound: 0 },
+        archiveRecovery: { found: 4, total: 5 },
+      }),
+      recall({
+        fixture: "f2",
+        group: "D",
+        query: { hits: ["q3"], misses: [], mustHitTotal: 1, mustHitFound: 1, niceToHaveTotal: 0, niceToHaveFound: 0 },
+        archiveRecovery: { found: 2, total: 2 },
+      }),
+    ];
+    const m = computeGroupMetrics("D", [], [], recalls);
+    expect(m.archiveRecovery).toEqual({ found: 6, total: 7, rate: 6 / 7 });
+    expect(m.queryRecall.mustHit).toEqual({ found: 2, total: 3, rate: 2 / 3 });
   });
 
   test("degraded counts tally reasons and rate against total fixtures", () => {
@@ -140,31 +168,35 @@ describe("metrics: evaluateRecall", () => {
     },
   };
 
-  test("matches across compressed output, retrieve snippets, and fetch content", () => {
+  test("keeps active-context recall separate from query and archive recovery", () => {
     const r = evaluateRecall(
       fixture,
       "D",
       "prefix fact-in-output suffix",
-      [{ score: 0.9, hash: "a".repeat(64), projectId: "default", sessionId: "s", turnIndex: 0, role: "user", snippet: "has fact-in-snippet" }],
-      "fetch body fact-in-fetch",
+      ["fact-in-snippet"],
+      { found: 3, total: 4 },
     );
-    expect(r.mustHitFound).toBe(2);
-    expect(r.misses).toEqual([]);
-    expect(r.hits).toEqual(["fact-in-output", "fact-in-snippet"]);
-    expect(r.niceToHaveFound).toBe(1);
+    expect(r.context.mustHitFound).toBe(1);
+    expect(r.context.hits).toEqual(["fact-in-output"]);
+    expect(r.context.misses).toEqual(["fact-in-snippet"]);
+    expect(r.context.niceToHaveFound).toBe(0);
+    expect(r.query?.hits).toEqual(["fact-in-snippet"]);
+    expect(r.archiveRecovery).toEqual({ found: 3, total: 4 });
   });
 
-  test("null compressed output with no hits means total miss", () => {
-    const r = evaluateRecall(fixture, "C", null, [], null);
-    expect(r.mustHitFound).toBe(0);
-    expect(r.misses).toEqual(fixture.goldenFacts.mustHit);
+  test("null active context is a context miss and null query means not measured", () => {
+    const r = evaluateRecall(fixture, "C", null, null, { found: 0, total: 0 });
+    expect(r.context.mustHitFound).toBe(0);
+    expect(r.context.misses).toEqual(fixture.goldenFacts.mustHit);
+    expect(r.query).toBeNull();
   });
 });
 
 describe("metrics: buildPerFixtureRecord / aggregateReport", () => {
   test("record counts tokens of provided texts via o200k_base exact counter", () => {
     const f: FixtureSample = { name: "n", description: "n", messages: [], goldenFacts: { mustHit: [], niceToHave: [] } };
-    const r = buildPerFixtureRecord(f, "A", "hello world", "hello world hello world", 5, [], [], null);
+    const recall = evaluateRecall(f, "A", "hello world hello world", null, { found: 0, total: 0 });
+    const r = buildPerFixtureRecord(f, "A", "hello world", "hello world hello world", 5, recall, null);
     expect(r.rawTokens).toBeGreaterThan(0);
     // Same text counted twice must agree; doubled text should count more.
     expect(r.outTokens).toBeGreaterThanOrEqual(r.rawTokens);

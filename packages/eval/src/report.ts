@@ -32,7 +32,7 @@ export function printSummary(report: FullReport): void {
   console.log("╠══════════════════════════════════════════════════════════════════════════════╣");
   console.log("║  GROUP METRICS                                                                ║");
   console.log("╠══════════════════════════════════════════════════════════════════════════════╣");
-  console.log("║  Group │ Comp.Ratio │ LongOut │  P50ms │  P95ms │ MustHit │ Nice2Hav │ Deg%  ║");
+  console.log("║  Group │ Comp.Ratio │ LongOut │  P50ms │  P95ms │ CtxHit │ Archive │ Deg%   ║");
   console.log("╠══════════════════════════════════════════════════════════════════════════════╣");
 
   for (const group of ["A", "B", "C", "D"] as const) {
@@ -41,11 +41,11 @@ export function printSummary(report: FullReport): void {
     const lor = (g.longOutputRatio * 100).toFixed(1).padStart(5);
     const p50 = g.latencyP50Ms.toFixed(1).padStart(6);
     const p95 = g.latencyP95Ms.toFixed(1).padStart(6);
-    const mh = `${g.recall.mustHit.found}/${g.recall.mustHit.total}`.padStart(7);
-    const nh = `${g.recall.niceToHave.found}/${g.recall.niceToHave.total}`.padStart(8);
+    const mh = `${g.contextRecall.mustHit.found}/${g.contextRecall.mustHit.total}`.padStart(7);
+    const archive = `${g.archiveRecovery.found}/${g.archiveRecovery.total}`.padStart(8);
     const deg = (g.degradedRate.rate * 100).toFixed(1).padStart(5);
 
-    console.log(`║   ${group}    │   ${cr}%   │  ${lor}%  │ ${p50} │ ${p95} │ ${mh} │ ${nh} │ ${deg}%  ║`);
+    console.log(`║   ${group}    │   ${cr}%   │  ${lor}%  │ ${p50} │ ${p95} │ ${mh} │ ${archive} │ ${deg}%  ║`);
   }
 
   console.log("╠══════════════════════════════════════════════════════════════════════════════╣");
@@ -72,8 +72,8 @@ export function printSummary(report: FullReport): void {
     const raw = f.rawTokens.toString().padStart(6);
     const out = f.outTokens.toString().padStart(6);
     const lat = f.latencyMs.toFixed(1).padStart(6);
-    const hits = f.recallHits.length.toString().padStart(4);
-    const misses = f.recallMisses.length.toString().padStart(4);
+    const hits = f.contextRecallHits.length.toString().padStart(4);
+    const misses = f.contextRecallMisses.length.toString().padStart(4);
     console.log(`║  ${name} │${group} │ ${raw} │ ${out} │ ${lat} │ ${hits} │ ${misses} ║`);
   }
 

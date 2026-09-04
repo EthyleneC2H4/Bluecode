@@ -13,6 +13,7 @@ import { quickFixtures } from "../src/fixtures";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { EvaluationObservation } from "../src/runner";
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bluecode-eval-smoke-"));
 const headroomEntry = path.resolve(import.meta.dir, "../../headroomd/src/bin.ts");
@@ -28,14 +29,17 @@ describe("runner: quick-mode smoke across all four groups", () => {
     "A/B/C/D all complete; report structure valid; groups observe their own contracts",
     async () => {
       // The spawned headroomd reads its data dir from this env var (the
-      // client passes no CLI args — see packages/headroomd/src/client.ts).
-      process.env.BLUECODE_DATA_DIR = tmpDir;
+      // runner now passes an exact temporary directory through CLI args.
+      const observations: EvaluationObservation[] = [];
 
       const result = await runEvaluation({
         quick: true,
-        dataDir: tmpDir,
         headroomEntry,
+        observe: (event) => observations.push(event),
       });
+
+      expect(result.temporaryDataDir).toBe(true);
+      expect(fs.existsSync(result.dataDir)).toBe(false);
 
       const fixtureCount = quickFixtures().length;
 
@@ -47,10 +51,10 @@ describe("runner: quick-mode smoke across all four groups", () => {
         expect(lats.length).toBe(fixtureCount);
       }
 
-      // Recall results only exist for B/C/D.
-      expect(result.recallResults.length).toBe(fixtureCount * 3);
+      // Context recall is measured for all four groups.
+      expect(result.recallResults.length).toBe(fixtureCount * 4);
       for (const r of result.recallResults) {
-        expect(["B", "C", "D"]).toContain(r.group);
+        expect(["A", "B", "C", "D"]).toContain(r.group);
       }
 
       // Degraded reasons stay within the contract enum.
@@ -68,8 +72,32 @@ describe("runner: quick-mode smoke across all four groups", () => {
         expect(m.compressionRatio).toBeGreaterThan(0);
         expect(m.latencyP50Ms).toBeGreaterThanOrEqual(0);
         expect(m.latencyP95Ms).toBeGreaterThanOrEqual(m.latencyP50Ms);
-        expect(m.recall.mustHit.rate).toBeGreaterThanOrEqual(0);
-        expect(m.recall.mustHit.rate).toBeLessThanOrEqual(1);
+        expect(m.contextRecall.mustHit.rate).toBeGreaterThanOrEqual(0);
+        expect(m.contextRecall.mustHit.rate).toBeLessThanOrEqual(1);
+      }
+
+      const dInput = observations.find(
+        (event) => event.type === "headroom-input" && event.group === "D" && event.fixture === "long-session",
+      );
+      if (dInput?.type !== "headroom-input") throw new Error("missing Group D input observation");
+      const dToolOutputs = dInput.messages.flatMap((message) =>
+        message.parts.flatMap((part) => part.type === "tool" ? [part.state.output ?? ""] : []),
+      );
+      expect(dToolOutputs.some((output) => output.includes("[bluecode rtk] compressed:"))).toBe(true);
+
+      for (const group of ["C", "D"] as const) {
+        const final = observations.find(
+          (event) => event.type === "final-context" && event.group === group && event.fixture === "long-session",
+        );
+        if (final?.type !== "final-context") throw new Error(`missing ${group} final context`);
+        expect(final.messages[0]?.info.id).toContain("compaction-");
+        for (const retainedId of ["msg-52", "msg-53", "msg-54"]) {
+          expect(final.messages.some((message) => message.info.id.endsWith(`:${retainedId}`))).toBe(true);
+        }
+        const record = result.perFixture.find(
+          (item) => item.group === group && item.fixture === "long-session",
+        )!;
+        expect(record.outTokens).toBe(final.outTokens);
       }
     },
     120_000,
@@ -78,8 +106,12 @@ describe("runner: quick-mode smoke across all four groups", () => {
   test(
     "group B traffic really goes through rtk IPC (not the trivial passthrough path)",
     async () => {
-      process.env.BLUECODE_DATA_DIR = tmpDir;
-      const result = await runEvaluation({ quick: true, dataDir: tmpDir, headroomEntry });
+      const first = await runEvaluation({ quick: true, headroomEntry });
+      const result = await runEvaluation({ quick: true, headroomEntry });
+
+      expect(result.dataDir).not.toBe(first.dataDir);
+      expect(fs.existsSync(first.dataDir)).toBe(false);
+      expect(fs.existsSync(result.dataDir)).toBe(false);
 
       const total = (g: "A" | "B") =>
         result.latencies.filter((l) => l.group === g).reduce((s, l) => s + l.latencyMs, 0);
@@ -91,4 +123,11 @@ describe("runner: quick-mode smoke across all four groups", () => {
     },
     120_000,
   );
+
+  test("an explicit dataDir is never deleted", async () => {
+    const result = await runEvaluation({ quick: true, dataDir: tmpDir, headroomEntry });
+    expect(result.temporaryDataDir).toBe(false);
+    expect(result.dataDir).toBe(tmpDir);
+    expect(fs.existsSync(tmpDir)).toBe(true);
+  }, 120_000);
 });
