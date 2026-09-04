@@ -5,7 +5,7 @@
  *
  * Hash forms (the retrieval bridge — headroomd's reader cannot decode rtk's
  * CAS objects and vice versa, so the ROUTING lives here at the tool layer):
- * - `sha256:<64 hex>` → rtk CAS (original bytes of a compressed tool output)
+ * - `sha256:<64 hex>` → rtk CAS (canonical sanitized compressed tool output)
  * - `<64 hex>` bare   → headroomd archive (history turns)
  */
 import { z } from "zod";
@@ -54,7 +54,7 @@ const RetrieveArgsSchema = z
 export const headroomRetrieveTool = tool({
   description:
     "Retrieve original conversation content from headroomd history store by content hash or search query. " +
-    "Hash forms: bare 64-hex searches the history archive; \"sha256:\"-prefixed 64-hex fetches an original tool output that compression stored.",
+    "Hash forms: bare 64-hex searches the history archive; \"sha256:\"-prefixed 64-hex fetches the canonical sanitized tool output that compression stored.",
   args: RetrieveArgsShape,
   execute: async (args: RetrieveArgs, context: ToolContext): Promise<ToolResult> => {
     // Enforces the refine (and the shape) — throws ZodError on violation.
@@ -71,7 +71,7 @@ export const headroomRetrieveTool = tool({
       }
       try {
         // rtk's wire form IS the prefixed hash — pass through verbatim.
-        const outcome = await rtk.fetch(args.hash);
+        const outcome = await rtk.fetch({ hash: args.hash, sessionId: context.sessionID });
         switch (outcome.kind) {
           case "found":
             return `**Historical content retrieved (hash: \`${args.hash}\`):**\n\n${outcome.content}`;
@@ -79,7 +79,7 @@ export const headroomRetrieveTool = tool({
             return `**No content found** for hash: \`${args.hash}\``;
           case "unavailable":
             // rtk's DegradedReason is the bare enum string itself.
-            return `Error retrieving history: rtk degraded (${outcome.degraded}); original unavailable.`;
+            return `Error retrieving history: rtk degraded (${outcome.degraded}); canonical output unavailable.`;
         }
       } catch (err) {
         return `Error retrieving history: ${redactLocalPaths((err as Error).message)}`;

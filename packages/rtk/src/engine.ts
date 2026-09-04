@@ -3,9 +3,9 @@
  *
  * compress: contracts per-op schema first (wire defaults such as
  * budgetTokens=512 materialize here) -> @bluecode/rtk-core pipeline ->
- * rawForStore persisted to CAS -> wire-shaped CompressResult. The CAS write
- * is what makes `fetch(rawHash)` round-trips work; the pipeline hashes the
- * post-sanitize/redact text, so nothing secret ever reaches the store.
+ * rawForStore persisted to CAS -> session ownership persisted -> wire-shaped
+ * CompressResult. The stored value is the pipeline's canonical
+ * post-sanitize/redact text (the default redactor is intentionally a no-op).
  *
  * fetch: format-checked hash -> CAS read -> text content.
  */
@@ -22,6 +22,7 @@ import {
 } from "@bluecode/rtk-core";
 import { chmodSync, mkdirSync } from "node:fs";
 import { defaultSidecarDataDir, readObject, writeObject } from "@bluecode/shared";
+import { openOwnershipStore } from "./ownership";
 
 /**
  * Fallback store root when BLUECODE_DATA_DIR is unset. Namespaced per uid /
@@ -48,6 +49,7 @@ export interface RtkEngine {
   fetch(params: unknown): Promise<FetchResult>;
   /** Counter snapshot for the stats op (uptimeMs is added by the server). */
   pipelineSnapshot(): PipelineStatsSnapshot;
+  close(): void;
 }
 
 export function createEngine(options: { dataDir: string }): RtkEngine {
@@ -59,6 +61,7 @@ export function createEngine(options: { dataDir: string }): RtkEngine {
   // injected paths may not be. macOS tmpdir is per-user; redundant but safe.
   mkdirSync(dataDir, { recursive: true });
   chmodSync(dataDir, 0o700);
+  const ownership = openOwnershipStore(dataDir);
   const stats = createPipelineStats();
   const decoder = new TextDecoder();
 
@@ -86,6 +89,7 @@ export function createEngine(options: { dataDir: string }): RtkEngine {
           `cas hash mismatch: stored ${stored.hash} but pipeline hashed ${expectedHex}`,
         );
       }
+      ownership.grant(parsed.sessionId, expectedHex);
 
       // Wire result only — rawForStore/notes are internal pipeline extras.
       const result: CompressResult = {
@@ -103,13 +107,15 @@ export function createEngine(options: { dataDir: string }): RtkEngine {
     },
 
     async fetch(params) {
-      const { hash } = fetchParamsSchema.parse(params);
+      const { hash, sessionId } = fetchParamsSchema.parse(params);
       const hex = hash.slice("sha256:".length);
+      if (!ownership.owns(sessionId, hex)) return { found: false };
       const bytes = await readObject(dataDir, hex);
       if (bytes === null) return { found: false };
       return { found: true, content: decoder.decode(bytes) };
     },
 
     pipelineSnapshot: () => stats.snapshot(),
+    close: () => ownership.close(),
   };
 }

@@ -21,7 +21,7 @@ describe("fault injection", () => {
     });
     try {
       const input = lsLaOutput(700);
-      const inFlight = client.compress({ tool: "ls", output: input });
+      const inFlight = client.compress({ tool: "ls", output: input, sessionId: "sess-crash" });
       await new Promise((resolve) => setTimeout(resolve, 150)); // let it reach the server
 
       expect(client.serverPid).not.toBeNull();
@@ -34,7 +34,7 @@ describe("fault injection", () => {
       await waitFor(() => client.serverPid !== null, 4000, "server did not restart");
       expect(client.diag.recoveries).toBeGreaterThanOrEqual(1);
 
-      const next = await client.compress({ tool: "ls", output: input });
+      const next = await client.compress({ tool: "ls", output: input, sessionId: "sess-crash" });
       expect(next.kind).toBe("compressed");
     } finally {
       await client.shutdown();
@@ -58,13 +58,13 @@ describe("fault injection", () => {
 
     try {
       const input = lsLaOutput(700);
-      expect((await client.compress({ tool: "ls", output: input })).kind).toBe("compressed");
+      expect((await client.compress({ tool: "ls", output: input, sessionId: "sess-breaker" })).kind).toBe("compressed");
 
       // Kill #1: restart budget still healthy, backoff window rejects fast.
       process.kill(client.serverPid as number, "SIGKILL");
       await waitFor(() => client.serverPid === null, 2000);
       const t0 = Date.now();
-      const duringBackoff = await client.compress({ tool: "ls", output: input });
+      const duringBackoff = await client.compress({ tool: "ls", output: input, sessionId: "sess-breaker" });
       expect(duringBackoff).toEqual({
         kind: "passthrough",
         output: input,
@@ -80,10 +80,10 @@ describe("fault injection", () => {
       await waitFor(() => client.serverPid === null, 2000);
       await waitFor(() => client.diag.breakerOpen, 8000, "breaker did not open");
 
-      const broken = await client.compress({ tool: "ls", output: input });
+      const broken = await client.compress({ tool: "ls", output: input, sessionId: "sess-breaker" });
       expect(broken).toEqual({ kind: "passthrough", output: input, degraded: "spawn_failed" });
       const spawnsAtTrip = client.diag.spawns;
-      await client.compress({ tool: "ls", output: input });
+      await client.compress({ tool: "ls", output: input, sessionId: "sess-breaker" });
       // Request path must not spawn; only background probes may have.
       const probeSpawns = client.diag.spawns - spawnsAtTrip;
       expect(probeSpawns).toBeLessThanOrEqual(2); // one probe tick at most
@@ -94,7 +94,7 @@ describe("fault injection", () => {
       await waitFor(() => client.serverPid !== null, 4000);
       expect(client.diag.recoveries).toBeGreaterThanOrEqual(1);
 
-      const recovered = await client.compress({ tool: "ls", output: input });
+      const recovered = await client.compress({ tool: "ls", output: input, sessionId: "sess-breaker" });
       expect(recovered.kind).toBe("compressed");
     } finally {
       await client.shutdown();
@@ -111,7 +111,7 @@ describe("fault injection", () => {
     try {
       const input = lsLaOutput(700);
       const started = performance.now();
-      const outcome = await client.compress({ tool: "ls", output: input });
+      const outcome = await client.compress({ tool: "ls", output: input, sessionId: "sess-slow" });
       const elapsed = performance.now() - started;
 
       expect(outcome).toEqual({ kind: "passthrough", output: input, degraded: "timeout" });

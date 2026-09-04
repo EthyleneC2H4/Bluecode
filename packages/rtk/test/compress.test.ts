@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { RtkClient } from "../src/index";
+import { writeObject } from "@bluecode/shared";
 import { lsLaOutput, makeDataDir } from "./helpers";
 
 const HASH_RE = /^sha256:[0-9a-f]{64}$/;
@@ -11,7 +12,7 @@ describe("compress/fetch full chain", () => {
       const input = lsLaOutput(700);
       expect(Buffer.byteLength(input, "utf8")).toBeGreaterThan(512);
 
-      const outcome = await client.compress({ tool: "ls", output: input });
+      const outcome = await client.compress({ tool: "ls", output: input, sessionId: "sess-a" });
       if (outcome.kind !== "compressed") {
         throw new Error(`expected compressed outcome, got ${JSON.stringify(outcome.kind)}`);
       }
@@ -32,11 +33,65 @@ describe("compress/fetch full chain", () => {
       expect(result.output).toContain(`headroom_retrieve(hash="${result.rawHash}")`);
 
       // Round-trip: the sanitized raw text reached the CAS under rawHash.
-      const fetched = await client.fetch(result.rawHash);
+      const fetched = await client.fetch({ hash: result.rawHash, sessionId: "sess-a" });
       if (fetched.kind !== "found") {
         throw new Error(`expected found outcome, got ${JSON.stringify(fetched)}`);
       }
       expect(fetched.content).toBe(input);
+    } finally {
+      await client.shutdown();
+    }
+  });
+
+  test("fetch is scoped to the session that archived the output", async () => {
+    const dataDir = await makeDataDir("ownership");
+    const client = await RtkClient.create({ dataDir });
+    try {
+      const outcome = await client.compress({
+        tool: "ls",
+        output: lsLaOutput(700),
+        sessionId: "sess-owner",
+      });
+      if (outcome.kind !== "compressed") throw new Error("expected compressed outcome");
+
+      expect(await client.fetch({ hash: outcome.result.rawHash, sessionId: "sess-owner" }))
+        .toEqual(expect.objectContaining({ kind: "found" }));
+      expect(await client.fetch({ hash: outcome.result.rawHash, sessionId: "sess-other" }))
+        .toEqual({ kind: "missing" });
+    } finally {
+      await client.shutdown();
+    }
+  });
+
+  test("session ownership survives an rtk server restart", async () => {
+    const dataDir = await makeDataDir("ownership-restart");
+    const first = await RtkClient.create({ dataDir });
+    const outcome = await first.compress({
+      tool: "ls",
+      output: lsLaOutput(700),
+      sessionId: "sess-persisted",
+    });
+    if (outcome.kind !== "compressed") throw new Error("expected compressed outcome");
+    await first.shutdown();
+
+    const second = await RtkClient.create({ dataDir });
+    try {
+      expect(await second.fetch({ hash: outcome.result.rawHash, sessionId: "sess-persisted" }))
+        .toEqual(expect.objectContaining({ kind: "found" }));
+    } finally {
+      await second.shutdown();
+    }
+  });
+
+  test("legacy CAS objects without ownership stay unavailable", async () => {
+    const dataDir = await makeDataDir("legacy-unowned");
+    const stored = await writeObject(dataDir, "legacy canonical output");
+    const client = await RtkClient.create({ dataDir });
+    try {
+      expect(await client.fetch({
+        hash: `sha256:${stored.hash}`,
+        sessionId: "sess-legacy",
+      })).toEqual({ kind: "missing" });
     } finally {
       await client.shutdown();
     }
@@ -48,7 +103,7 @@ describe("compress/fetch full chain", () => {
       const tiny = "src/app.ts:1:tiny output\n";
       expect(Buffer.byteLength(tiny, "utf8")).toBeLessThan(512);
 
-      const outcome = await client.compress({ tool: "grep", output: tiny });
+      const outcome = await client.compress({ tool: "grep", output: tiny, sessionId: "sess-fast" });
       expect(outcome).toEqual({
         kind: "passthrough",
         output: tiny,
@@ -68,15 +123,15 @@ describe("compress/fetch full chain", () => {
   test("stats counters stay consistent across mixed traffic", async () => {
     const client = await RtkClient.create({ dataDir: await makeDataDir("stats") });
     try {
-      const compressed = await client.compress({ tool: "ls", output: lsLaOutput(700) });
+      const compressed = await client.compress({ tool: "ls", output: lsLaOutput(700), sessionId: "sess-stats" });
       expect(compressed.kind).toBe("compressed");
 
       // One more server-visible op through a second big input.
-      const second = await client.compress({ tool: "ls", output: lsLaOutput(650) });
+      const second = await client.compress({ tool: "ls", output: lsLaOutput(650), sessionId: "sess-stats" });
       expect(second.kind).toBe("compressed");
 
       // Tiny input stays client-side; stats must not count it.
-      await client.compress({ tool: "ls", output: "small" });
+      await client.compress({ tool: "ls", output: "small", sessionId: "sess-stats" });
 
       const stats = await client.stats();
       expect(stats.requests).toBe(2);
@@ -94,7 +149,10 @@ describe("compress/fetch full chain", () => {
   test("fetch of an unknown hash reports missing instead of failing", async () => {
     const client = await RtkClient.create({ dataDir: await makeDataDir("missing") });
     try {
-      const outcome = await client.fetch(`sha256:${"a".repeat(64)}`);
+      const outcome = await client.fetch({
+        hash: `sha256:${"a".repeat(64)}`,
+        sessionId: "sess-missing",
+      });
       expect(outcome).toEqual({ kind: "missing" });
     } finally {
       await client.shutdown();

@@ -1,5 +1,5 @@
 /**
- * rtk JSONL protocol v1 — schemas and inferred types only (no runtime logic).
+ * rtk JSONL protocol v2 — schemas and inferred types only (no runtime logic).
  *
  * Wire format: one JSON value per line. The first line a rtk server emits is
  * the hello handshake; every subsequent exchange is request/response envelopes
@@ -9,13 +9,13 @@
 import { z } from "zod";
 import { errorSchema } from "./errors";
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 /**
  * Startup handshake — the first line a rtk server writes after spawn.
  */
 export const helloSchema = z.object({
-  proto: z.literal(1),
+  proto: z.literal(2),
   pid: z.number().int().positive(),
 });
 export type Hello = z.infer<typeof helloSchema>;
@@ -54,7 +54,7 @@ export interface CompressParams {
   metadata?: Record<string, unknown> | undefined;
   /** Compression token budget; applied by the server as 512 when omitted. */
   budgetTokens?: number | undefined;
-  sessionId?: string | undefined;
+  sessionId: string;
   callId?: string | undefined;
 }
 
@@ -64,7 +64,7 @@ export const compressParamsSchema = z.object({
   title: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   budgetTokens: z.number().int().positive().default(512),
-  sessionId: z.string().optional(),
+  sessionId: z.string().min(1),
   callId: z.string().optional(),
 });
 export type CompressParamsParsed = z.output<typeof compressParamsSchema>;
@@ -89,9 +89,14 @@ export type CompressResult = z.infer<typeof compressResultSchema>;
 export interface FetchParams {
   /** Content hash to retrieve; format "sha256:<64 hex>". */
   hash: string;
+  /** Session that originally archived the canonical output. */
+  sessionId: string;
 }
 
-export const fetchParamsSchema = z.object({ hash: sha256RefSchema });
+export const fetchParamsSchema = z.object({
+  hash: sha256RefSchema,
+  sessionId: z.string().min(1),
+});
 
 export const fetchResultSchema = z.discriminatedUnion("found", [
   z.object({ found: z.literal(true), content: z.string() }),
@@ -134,7 +139,7 @@ export const rtkOpSchema = z.enum(["compress", "fetch", "ping", "stats", "simula
 export type RtkOp = z.infer<typeof rtkOpSchema>;
 
 export const requestSchema = z.object({
-  v: z.literal(1),
+  v: z.literal(2),
   id: z.string().min(1),
   op: rtkOpSchema,
   params: z.unknown(),
@@ -143,13 +148,13 @@ export type RtkRequest = z.infer<typeof requestSchema>;
 
 export const responseSchema = z.discriminatedUnion("ok", [
   z.object({
-    v: z.literal(1),
+    v: z.literal(2),
     id: z.string().min(1),
     ok: z.literal(true),
     result: z.unknown(),
   }),
   z.object({
-    v: z.literal(1),
+    v: z.literal(2),
     id: z.string().min(1),
     ok: z.literal(false),
     error: errorSchema,

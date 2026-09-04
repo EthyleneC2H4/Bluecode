@@ -182,7 +182,7 @@ describe("retrieval bridge (sha256: → rtk CAS)", () => {
   const PREFIXED = `sha256:${RAW_HASH}`;
 
   let headroomCalls = 0;
-  let rtkFetches: string[] = [];
+  let rtkFetches: Array<{ hash: string; sessionId: string }> = [];
 
   beforeEach(() => {
     headroomCalls = 0;
@@ -198,9 +198,9 @@ describe("retrieval bridge (sha256: → rtk CAS)", () => {
       health: async () => ({ ok: true, pid: 123, uptimeMs: 1000, sessions: 0 }),
     } as any);
     setSharedRtkClient({
-      fetch: async (hash: string) => {
-        rtkFetches.push(hash);
-        return { kind: "found", content: "ORIGINAL TOOL OUTPUT BYTES" };
+      fetch: async (input: { hash: string; sessionId: string }) => {
+        rtkFetches.push(input);
+        return { kind: "found", content: "CANONICAL TOOL OUTPUT" };
       },
     } as any);
   });
@@ -208,10 +208,10 @@ describe("retrieval bridge (sha256: → rtk CAS)", () => {
   test("prefixed hash routes to rtk.fetch verbatim, never touches headroomd", async () => {
     const result = await headroomRetrieveTool.execute({ hash: PREFIXED }, mockContext);
 
-    expect(rtkFetches).toEqual([PREFIXED]);
+    expect(rtkFetches).toEqual([{ hash: PREFIXED, sessionId: "sess-1" }]);
     expect(headroomCalls).toBe(0);
     expect(result).toContain("Historical content retrieved");
-    expect(result).toContain("ORIGINAL TOOL OUTPUT BYTES");
+    expect(result).toContain("CANONICAL TOOL OUTPUT");
   });
 
   test("bare hex never reaches the rtk client (headroomd namespace unchanged)", async () => {
@@ -260,11 +260,11 @@ describe("retrieval bridge (sha256: → rtk CAS)", () => {
 
     const result = await headroomRetrieveTool.execute({ hash: PREFIXED }, mockContext);
 
-    expect(rtkFetches).toEqual([PREFIXED]);
-    expect(result).toContain("ORIGINAL TOOL OUTPUT BYTES");
+    expect(rtkFetches).toEqual([{ hash: PREFIXED, sessionId: "sess-1" }]);
+    expect(result).toContain("CANONICAL TOOL OUTPUT");
   });
 
-  test("end-to-end shape: prefixed hash survives validation and returns original bytes", async () => {
+  test("end-to-end shape: prefixed hash survives validation and returns canonical output", async () => {
     // Regression for the audit HIGH finding: before the bridge, this input was
     // rejected by the bare-hex regex, so a rawHash handed back by compress
     // could never be fetched through the tool that docs promised would work.
@@ -277,7 +277,7 @@ describe("retrieval bridge (sha256: → rtk CAS)", () => {
       true,
     );
     expect(result).toContain(PREFIXED);
-    expect(result).toContain("ORIGINAL TOOL OUTPUT BYTES");
+    expect(result).toContain("CANONICAL TOOL OUTPUT");
   });
 });
 

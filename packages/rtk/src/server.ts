@@ -74,18 +74,18 @@ const RESULT_SCHEMAS = {
  */
 const ENVELOPE_PRE_SCHEMA = {
   safeParse(value: unknown):
-    | { success: true; data: { v: 1; id: string; op: string; params: unknown } }
+    | { success: true; data: { v: 2; id: string; op: string; params: unknown } }
     | { success: false } {
     if (typeof value !== "object" || value === null) return { success: false };
     const v = (value as { v?: unknown }).v;
     const id = (value as { id?: unknown }).id;
     const op = (value as { op?: unknown }).op;
-    if (v !== 1) return { success: false };
+    if (v !== 2) return { success: false };
     if (typeof id !== "string" || id.length < 1) return { success: false };
     if (typeof op !== "string") return { success: false };
     return {
       success: true,
-      data: { v: 1, id, op, params: (value as { params?: unknown }).params },
+      data: { v: 2, id, op, params: (value as { params?: unknown }).params },
     };
   },
 };
@@ -190,7 +190,7 @@ export function startServer(io: ServerIo, options: ServeOptions = {}): RtkServer
     if (!env.success) {
       await emitError(UNKNOWN_ID, {
         code: ErrorCode.E_PROTOCOL,
-        message: "malformed request envelope (expected {v:1,id,op,params})",
+        message: "malformed request envelope (expected {v:2,id,op,params})",
         detail: { line: lineNo },
       });
       return;
@@ -258,6 +258,7 @@ export function startServer(io: ServerIo, options: ServeOptions = {}): RtkServer
   async function finish(): Promise<void> {
     const elapsed = uptimeMs();
     io.log(`[rtk-server] stdin closed after ${elapsed}ms; shutting down cleanly`);
+    engine.close();
   }
 
   async function abortProtocol(message: string): Promise<void> {

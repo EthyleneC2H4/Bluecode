@@ -54,7 +54,7 @@ describe("@bluecode/rtk", () => {
     await client.shutdown();
 
     expect(client.serverPid).toBeNull();
-    await expect(client.compress({ tool: "ls", output: "x".repeat(4096) })).rejects.toThrow(
+    await expect(client.compress({ tool: "ls", output: "x".repeat(4096), sessionId: "sess-shutdown" })).rejects.toThrow(
       /shut down/i,
     );
     // Idempotent: a second shutdown resolves instead of throwing.

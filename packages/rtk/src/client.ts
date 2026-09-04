@@ -114,8 +114,13 @@ export interface CompressInput {
   output: string;
   title?: string;
   metadata?: Record<string, unknown>;
-  sessionId?: string;
+  sessionId: string;
   callId?: string;
+}
+
+export interface FetchInput {
+  hash: string;
+  sessionId: string;
 }
 
 /** Well-formed ok:false response — a caller bug, not a transport failure. */
@@ -277,7 +282,7 @@ export class RtkClient {
     const params: Record<string, unknown> = { tool: input.tool, output: input.output };
     if (input.title !== undefined) params.title = input.title;
     if (input.metadata !== undefined) params.metadata = input.metadata;
-    if (input.sessionId !== undefined) params.sessionId = input.sessionId;
+    params.sessionId = input.sessionId;
     if (input.callId !== undefined) params.callId = input.callId;
     params.budgetTokens = this.opts.budgetTokens;
 
@@ -293,10 +298,10 @@ export class RtkClient {
     }
   }
 
-  async fetch(hash: string): Promise<FetchOutcome> {
+  async fetch(input: FetchInput): Promise<FetchOutcome> {
     try {
       const result = fetchResultSchema.parse(
-        await this.request("fetch", { hash }, this.opts.timeoutMs),
+        await this.request("fetch", input, this.opts.timeoutMs),
       );
       return result.found ? { kind: "found", content: result.content } : { kind: "missing" };
     } catch (err) {
@@ -428,7 +433,7 @@ export class RtkClient {
       this.spawns += 1;
       this.proc = proc;
 
-      const hello = deferred<{ proto: 1; pid: number }>();
+      const hello = deferred<{ proto: 2; pid: number }>();
       this.pumpStdout(proc, hello);
       this.pumpStderr(proc);
 
@@ -464,7 +469,7 @@ export class RtkClient {
     }
   }
 
-  private pumpStdout(proc: RtkProc, hello: { resolve: (v: { proto: 1; pid: number }) => void; reject: (e: unknown) => void }): void {
+  private pumpStdout(proc: RtkProc, hello: { resolve: (v: { proto: 2; pid: number }) => void; reject: (e: unknown) => void }): void {
     void (async () => {
       const decoder = new TextDecoder();
       const frames = createLineReconstructor(
@@ -511,7 +516,7 @@ export class RtkClient {
     })();
   }
 
-  private consumeHello(line: string, hello: { resolve: (v: { proto: 1; pid: number }) => void; reject: (e: unknown) => void }): void {
+  private consumeHello(line: string, hello: { resolve: (v: { proto: 2; pid: number }) => void; reject: (e: unknown) => void }): void {
     try {
       hello.resolve(helloSchema.parse(JSON.parse(line)));
     } catch (err) {

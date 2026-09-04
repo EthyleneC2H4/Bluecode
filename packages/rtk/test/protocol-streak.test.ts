@@ -182,7 +182,7 @@ describe("protocol streak machinery", () => {
     track(client);
 
     const input = lsLaOutput(700);
-    const inFlight = client.compress({ tool: "ls", output: input });
+    const inFlight = client.compress({ tool: "ls", output: input, sessionId: "sess-streak-crash" });
     // Non-JSON frames are counted as garbage with NO victim request attached;
     // the in-flight compress only learns of the death via onChildExit, which
     // rejects everything as "crash".
@@ -204,13 +204,13 @@ describe("protocol streak machinery", () => {
     track(client);
 
     const input = lsLaOutput(700);
-    const outcome = await client.compress({ tool: "ls", output: input });
+    const outcome = await client.compress({ tool: "ls", output: input, sessionId: "sess-corrupt" });
     expect(outcome).toEqual({ kind: "passthrough", output: input, degraded: "protocol" });
 
     // Strike 1 of 3: the child stays up and id-correlation is undamaged.
     expect(client.serverPid).not.toBeNull();
     expect(client.diag.breakerOpen).toBe(false);
-    const next = await client.compress({ tool: "ls", output: lsLaOutput(650) });
+    const next = await client.compress({ tool: "ls", output: lsLaOutput(650), sessionId: "sess-corrupt" });
     expect(next.kind).toBe("compressed");
   }, 20_000);
 
@@ -238,7 +238,7 @@ describe("protocol streak machinery", () => {
     // field must ride a VALID output string so the client fast path forwards
     // it instead of tripping on its own pre-check.
     await expect(
-      client.compress({ tool: 12345 as unknown as string, output: lsLaOutput(700) }),
+      client.compress({ tool: 12345 as unknown as string, output: lsLaOutput(700), sessionId: "sess-reset" }),
     ).rejects.toBeInstanceOf(RtkServerError);
     expect(client.serverPid).toBe(pidBefore);
 
@@ -264,7 +264,7 @@ describe("protocol streak machinery", () => {
     expect(pidBefore).not.toBeNull();
 
     for (let i = 0; i < 3; i++) {
-      const outcome = await client.compress({ tool: "ls", output: lsLaOutput(700) });
+      const outcome = await client.compress({ tool: "ls", output: lsLaOutput(700), sessionId: "sess-slowx3" });
       expect(outcome).toEqual({ kind: "passthrough", output: lsLaOutput(700), degraded: "timeout" });
       // Let the late reply arrive and be dropped before the next round.
       await new Promise((resolve) => setTimeout(resolve, 400));
@@ -309,7 +309,7 @@ describe("FrameOverflowError mapping", () => {
 
     // The compress response itself is well-formed and resolves; the three
     // newline-less 4KiB chunks behind it trip FrameOverflowError once each.
-    const outcome = await client.compress({ tool: "ls", output: lsLaOutput(700) });
+    const outcome = await client.compress({ tool: "ls", output: lsLaOutput(700), sessionId: "sess-oversize" });
     expect(outcome.kind).toBe("compressed");
 
     await waitFor(() => client.serverPid === null, 5000, "overflow strikes did not kill the child");

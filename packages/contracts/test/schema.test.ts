@@ -71,20 +71,23 @@ describe("errors", () => {
   });
 });
 
-describe("rtk protocol v1", () => {
+describe("rtk protocol v2", () => {
   test("hello handshake", () => {
-    expect(helloSchema.parse({ proto: 1, pid: 4242 })).toEqual({ proto: 1, pid: 4242 });
-    expect(helloSchema.safeParse({ proto: 2, pid: 4242 }).success).toBe(false);
-    expect(helloSchema.safeParse({ proto: 1, pid: -1 }).success).toBe(false);
-    expect(PROTOCOL_VERSION).toBe(1);
+    expect(helloSchema.parse({ proto: 2, pid: 4242 })).toEqual({ proto: 2, pid: 4242 });
+    expect(helloSchema.safeParse({ proto: 1, pid: 4242 }).success).toBe(false);
+    expect(helloSchema.safeParse({ proto: 2, pid: -1 }).success).toBe(false);
+    expect(PROTOCOL_VERSION).toBe(2);
   });
 
-  test("compress params fill budgetTokens default 512", () => {
-    const parsed = compressParamsSchema.parse({ tool: "bash", output: "line\n" });
+  test("compress params require a session and fill budgetTokens default 512", () => {
+    const parsed = compressParamsSchema.parse({ tool: "bash", output: "line\n", sessionId: "sess-1" });
     expect(parsed.budgetTokens).toBe(512);
-    expect(compressParamsSchema.parse({ tool: "t", output: "o", budgetTokens: 64 }).budgetTokens)
+    expect(compressParamsSchema.parse({ tool: "t", output: "o", sessionId: "sess-1", budgetTokens: 64 }).budgetTokens)
       .toBe(64);
-    expect(compressParamsSchema.safeParse({ tool: "t", output: "o", budgetTokens: 0 }).success)
+    expect(compressParamsSchema.safeParse({ tool: "t", output: "o", sessionId: "sess-1", budgetTokens: 0 }).success)
+      .toBe(false);
+    expect(compressParamsSchema.safeParse({ tool: "t", output: "o" }).success).toBe(false);
+    expect(compressParamsSchema.safeParse({ tool: "t", output: "o", sessionId: "" }).success)
       .toBe(false);
   });
 
@@ -92,8 +95,12 @@ describe("rtk protocol v1", () => {
     expect(sha256RefSchema.safeParse(SHA).success).toBe(true);
     expect(sha256RefSchema.safeParse("abc").success).toBe(false);
     expect(sha256RefSchema.safeParse(`sha256:${"A".repeat(64)}`).success).toBe(false);
-    expect(fetchParamsSchema.safeParse({ hash: "abc" }).success).toBe(false);
-    expect(fetchParamsSchema.parse({ hash: SHA })).toEqual({ hash: SHA });
+    expect(fetchParamsSchema.safeParse({ hash: "abc", sessionId: "sess-1" }).success).toBe(false);
+    expect(fetchParamsSchema.safeParse({ hash: SHA }).success).toBe(false);
+    expect(fetchParamsSchema.parse({ hash: SHA, sessionId: "sess-1" })).toEqual({
+      hash: SHA,
+      sessionId: "sess-1",
+    });
   });
 
   test("compress result round-trips", () => {
@@ -159,34 +166,34 @@ describe("rtk protocol v1", () => {
   });
 
   test("request envelope", () => {
-    expect(requestSchema.parse({ v: 1, id: "r_1_ab", op: "ping", params: {} })).toEqual({
-      v: 1,
+    expect(requestSchema.parse({ v: 2, id: "r_1_ab", op: "ping", params: {} })).toEqual({
+      v: 2,
       id: "r_1_ab",
       op: "ping",
       params: {},
     });
-    expect(requestSchema.safeParse({ v: 2, id: "r", op: "ping", params: {} }).success).toBe(false);
-    expect(requestSchema.safeParse({ v: 1, id: "", op: "ping", params: {} }).success).toBe(false);
-    expect(requestSchema.safeParse({ v: 1, id: "r", op: "nope", params: {} }).success).toBe(false);
+    expect(requestSchema.safeParse({ v: 1, id: "r", op: "ping", params: {} }).success).toBe(false);
+    expect(requestSchema.safeParse({ v: 2, id: "", op: "ping", params: {} }).success).toBe(false);
+    expect(requestSchema.safeParse({ v: 2, id: "r", op: "nope", params: {} }).success).toBe(false);
   });
 
   test("response envelope both branches", () => {
-    expect(responseSchema.parse({ v: 1, id: "r", ok: true, result: { pong: true } })).toEqual({
-      v: 1,
+    expect(responseSchema.parse({ v: 2, id: "r", ok: true, result: { pong: true } })).toEqual({
+      v: 2,
       id: "r",
       ok: true,
       result: { pong: true },
     });
     expect(
       responseSchema.parse({
-        v: 1,
+        v: 2,
         id: "r",
         ok: false,
         error: { code: "E_UNKNOWN_OP", message: "?" },
       }),
-    ).toEqual({ v: 1, id: "r", ok: false, error: { code: "E_UNKNOWN_OP", message: "?" } });
+    ).toEqual({ v: 2, id: "r", ok: false, error: { code: "E_UNKNOWN_OP", message: "?" } });
     // ok:false without error payload is invalid
-    expect(responseSchema.safeParse({ v: 1, id: "r", ok: false }).success).toBe(false);
+    expect(responseSchema.safeParse({ v: 2, id: "r", ok: false }).success).toBe(false);
   });
 });
 
