@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { RtkClient } from "../src/index";
-import { writeObject } from "@bluecode/shared";
+import { objectPath, writeObject } from "@bluecode/shared";
+import { writeFile } from "node:fs/promises";
 import { lsLaOutput, makeDataDir } from "./helpers";
 
 const HASH_RE = /^sha256:[0-9a-f]{64}$/;
@@ -92,6 +93,30 @@ describe("compress/fetch full chain", () => {
         hash: `sha256:${stored.hash}`,
         sessionId: "sess-legacy",
       })).toEqual({ kind: "missing" });
+    } finally {
+      await client.shutdown();
+    }
+  });
+
+  test("owned CAS corruption is rejected instead of returning unverified content", async () => {
+    const dataDir = await makeDataDir("owned-corrupt");
+    const client = await RtkClient.create({ dataDir });
+    try {
+      const outcome = await client.compress({
+        tool: "ls",
+        output: lsLaOutput(700),
+        sessionId: "sess-corrupt-object",
+      });
+      if (outcome.kind !== "compressed") throw new Error("expected compressed outcome");
+
+      const hex = outcome.result.rawHash.slice("sha256:".length);
+      await writeFile(objectPath(dataDir, hex), "tampered canonical output");
+
+      await expect(client.fetch({
+        hash: outcome.result.rawHash,
+        sessionId: "sess-corrupt-object",
+      })).rejects.toThrow("rtk server error E_INTERNAL");
+      expect((await client.ping()).pong).toBe(true);
     } finally {
       await client.shutdown();
     }

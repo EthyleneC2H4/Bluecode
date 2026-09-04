@@ -110,7 +110,9 @@ const UNKNOWN_ID = "?";
 
 export function startServer(io: ServerIo, options: ServeOptions = {}): RtkServerHandle {
   const startedAtMs = Date.now();
-  const engine: RtkEngine = createEngine({ dataDir: resolveDataDir(options.dataDir) });
+  const engine: RtkEngine = createEngine({
+    dataDir: resolveDataDir(options.dataDir ?? process.env.BLUECODE_DATA_DIR),
+  });
   const responseDelayMs = options.testMode === true ? Math.max(0, options.responseDelayMs ?? 0) : 0;
   let linesSeen = 0;
 
