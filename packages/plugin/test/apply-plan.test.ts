@@ -38,7 +38,7 @@ describe("applyPlanInPlace", () => {
 
     const result = applyPlanInPlace(messages, plan);
 
-    expect(result).toBe(true);
+    expect(result).toBe("applied");
     expect(messages).toBe(originalRef); // Same array reference
     expect(messages.length).toBe(3); // 5 - 3 + 1 = 3
     expect(messages[0]?.info.id).toContain("compaction-");
@@ -47,8 +47,9 @@ describe("applyPlanInPlace", () => {
     if (firstPart?.type === "text") {
       expect(firstPart.text).toContain(COMPACTION_MARKER);
       expect(firstPart.text).toContain("User greeted");
-      expect(firstPart.text).toContain("abc123");
+      expect(firstPart.text).not.toContain("abc123");
       expect(firstPart.text).toContain("history-hash-123");
+      expect(firstPart.text).toContain('headroom_retrieve(historyHash="history-hash-123")');
     }
     expect(messages[1]?.info.id).toBe("msg-4");
     expect(messages[2]?.info.id).toBe("msg-5");
@@ -68,8 +69,8 @@ describe("applyPlanInPlace", () => {
 
     const second = applyPlanInPlace(messages, plan);
 
-    expect(first).toBe(true);
-    expect(second).toBe(false); // No-op
+    expect(first).toBe("applied");
+    expect(second).toBe("already-compacted");
     expect(messages.length).toBe(lenAfterFirst);
     expect(messages[0]?.info.id).toBe(firstMsgId); // Same replacement message
   });
@@ -90,7 +91,7 @@ describe("applyPlanInPlace", () => {
 
     const result = applyPlanInPlace(messages, plan);
 
-    expect(result).toBe(false); // No-op because marker detected
+    expect(result).toBe("already-compacted");
     expect(messages.length).toBe(2);
     const firstPart = messages[0]?.parts[0];
     expect(firstPart?.type).toBe("text");
@@ -99,7 +100,8 @@ describe("applyPlanInPlace", () => {
     }
   });
 
-  test("missing message IDs are skipped safely", () => {
+  test("a partially missing plan is invalid and leaves the array byte-for-byte unchanged", () => {
+    const before = structuredClone(messages);
     const plan = {
       refs: [],
       summary: "Summary",
@@ -109,12 +111,8 @@ describe("applyPlanInPlace", () => {
 
     const result = applyPlanInPlace(messages, plan);
 
-    expect(result).toBe(true);
-    expect(messages.length).toBe(4); // 5 - 2 + 1 = 4 (msg-1 and msg-3 removed, replacement added)
-    expect(messages[0]?.info.id).toContain("compaction-");
-    expect(messages[1]?.info.id).toBe("msg-2"); // msg-2 preserved
-    expect(messages[2]?.info.id).toBe("msg-4"); // msg-4 preserved
-    expect(messages[3]?.info.id).toBe("msg-5"); // msg-5 preserved
+    expect(result).toBe("invalid");
+    expect(messages).toEqual(before);
   });
 
   test("empty replacedMessageIds is no-op", () => {
@@ -127,7 +125,7 @@ describe("applyPlanInPlace", () => {
 
     const result = applyPlanInPlace(messages, plan);
 
-    expect(result).toBe(false);
+    expect(result).toBe("invalid");
     expect(messages.length).toBe(5);
   });
 
@@ -141,7 +139,7 @@ describe("applyPlanInPlace", () => {
 
     const result = applyPlanInPlace(messages, plan);
 
-    expect(result).toBe(true);
+    expect(result).toBe("applied");
     const firstPart = messages[0]?.parts[0];
     expect(firstPart?.type).toBe("text");
     if (firstPart?.type === "text") {
@@ -164,7 +162,7 @@ describe("applyPlanInPlace", () => {
       replacedMessageIds: ["msg-1", "msg-2"],
       historyHash: "hash-1",
     };
-    expect(applyPlanInPlace(messages, plan1)).toBe(true);
+    expect(applyPlanInPlace(messages, plan1)).toBe("applied");
     const firstReplacementId = messages[0]?.info.id;
     expect(firstReplacementId).toContain("compaction-");
 
@@ -181,7 +179,7 @@ describe("applyPlanInPlace", () => {
 
     const result = applyPlanInPlace(messages, plan2);
 
-    expect(result).toBe(true); // was permanently false under the old guard
+    expect(result).toBe("applied");
     expect(messages.length).toBe(1); // merged into a single replacement
     const part = messages[0]?.parts[0];
     expect(part?.type).toBe("text");
@@ -204,13 +202,13 @@ describe("applyPlanInPlace", () => {
       replacedMessageIds: ["msg-1", "msg-2"],
       historyHash: "history-hash-123",
     };
-    expect(applyPlanInPlace(messages, plan)).toBe(true);
+    expect(applyPlanInPlace(messages, plan)).toBe("applied");
     const replacementId = messages[0]?.info.id;
     const lenAfterFirst = messages.length;
 
     const replay = applyPlanInPlace(messages, { ...plan, replacedMessageIds: [replacementId!] });
 
-    expect(replay).toBe(false);
+    expect(replay).toBe("already-compacted");
     expect(messages.length).toBe(lenAfterFirst);
   });
 
@@ -234,5 +232,49 @@ describe("applyPlanInPlace", () => {
     if (part0?.type === "text") {
       expect(part0.text).toContain(COMPACTION_MARKER);
     }
+  });
+
+  test("duplicate plan IDs are invalid and preserve the original array", () => {
+    const originalRef = messages;
+    const before = structuredClone(messages);
+    const result = applyPlanInPlace(messages, {
+      refs: [],
+      summary: "Summary",
+      replacedMessageIds: ["msg-1", "msg-1"],
+      historyHash: "duplicate",
+    });
+    expect(result).toBe("invalid");
+    expect(messages).toBe(originalRef);
+    expect(messages).toEqual(before);
+  });
+
+  test("non-contiguous or out-of-order plans are invalid and atomic", () => {
+    for (const replacedMessageIds of [
+      ["msg-1", "msg-3"],
+      ["msg-2", "msg-1"],
+    ]) {
+      const candidate = structuredClone(messages);
+      const before = structuredClone(candidate);
+      const result = applyPlanInPlace(candidate, {
+        refs: [],
+        summary: "Summary",
+        replacedMessageIds,
+        historyHash: "invalid-order",
+      });
+      expect(result).toBe("invalid");
+      expect(candidate).toEqual(before);
+    }
+  });
+
+  test("a plan from another session is no-match and preserves every message", () => {
+    const before = structuredClone(messages);
+    const result = applyPlanInPlace(messages, {
+      refs: [],
+      summary: "Other session",
+      replacedMessageIds: ["other-1", "other-2"],
+      historyHash: "other-history",
+    });
+    expect(result).toBe("no-match");
+    expect(messages).toEqual(before);
   });
 });

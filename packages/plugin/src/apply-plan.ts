@@ -1,106 +1,24 @@
-/**
- * applyPlanInPlace — mutate the messages array in place by replacing the
- * compressed message range with a single synthetic user message.
- *
- * This is the ONLY place that performs the replacement. The daemon returns
- * `replacedMessageIds` as the single source of truth for which messages were
- * covered by the compression; the plugin MUST NOT re-derive turn segmentation.
- */
-import type { ChatMessage } from "@bluecode/contracts";
-import { COMPACTION_MARKER } from "@bluecode/headroomd";
+/** Atomic plugin adapter over headroomd's pure compaction materializer. */
+import type { ChatMessage } from "@bluecode/contracts"
+import {
+  materializeCompaction,
+  type CompactionApplyStatus,
+  type CompactionPlan,
+} from "@bluecode/headroomd"
 
-export interface CompactionPlan {
-  refs: Array<{ contentHash: string; role: "user" | "assistant"; turnIndex: number }>;
-  summary: string | null;
-  replacedMessageIds: string[];
-  historyHash: string | null;
-}
+export type { CompactionApplyStatus, CompactionPlan }
 
 /**
- * Check if a message is already a compaction replacement.
+ * Validate and apply a plan while preserving the host array reference.
+ * Invalid, unmatched and replayed plans leave every element untouched.
  */
-function isCompactionReplacement(message: ChatMessage): boolean {
-  if (message.info.role !== "user") return false;
-  for (const part of message.parts) {
-    if (part.type === "text" && part.text.startsWith(COMPACTION_MARKER)) return true;
+export function applyPlanInPlace(
+  messages: ChatMessage[],
+  plan: CompactionPlan,
+): CompactionApplyStatus {
+  const materialized = materializeCompaction(messages, plan)
+  if (materialized.status === "applied") {
+    messages.splice(0, messages.length, ...materialized.messages)
   }
-  return false;
-}
-
-/**
- * Apply a compaction plan to the messages array in place.
- *
- * - Locates messages by `replacedMessageIds` in the input array
- * - Splices them out and inserts a single synthetic user message
- * - The synthetic message text starts with COMPACTION_MARKER
- * - Idempotent: if the plan has already been applied (detected by marker),
- *   subsequent calls are no-ops.
- * - Safe: missing message IDs are skipped without error.
- *
- * @param messages The messages array to mutate (same reference must be preserved)
- * @param plan The compaction plan from headroomd compress result
- * @returns true if a replacement was made, false if no-op (already applied or nothing to do)
- */
-export function applyPlanInPlace(messages: ChatMessage[], plan: CompactionPlan): boolean {
-  if (plan.replacedMessageIds.length === 0) return false;
-
-  // Find the indices of messages to replace
-  const indices: number[] = [];
-  for (const id of plan.replacedMessageIds) {
-    const idx = messages.findIndex((m) => m.info.id === id);
-    if (idx !== -1) indices.push(idx);
-  }
-
-  if (indices.length === 0) return false;
-
-  // Idempotency guard, narrowed to ALL-located (devlog #43): the daemon feeds
-  // prior replacements into later plans as turn 0 (headroomd splitTurns hashes
-  // a replacement like any other user message), so every SECOND-and-later
-  // compaction leads its plan with the old replacement id. Refusing whenever
-  // the FIRST located message is a replacement made those plans no-ops
-  // forever and the session grew past the watermark permanently. Refuse only
-  // when EVERY located index points at a replacement — a replayed plan still
-  // exits earlier at indices.length === 0, and merging an old replacement
-  // into a new one is exactly the intended outcome.
-  const located = indices.map((i) => messages[i]!); // findIndex hits: element exists
-  if (located.length > 0 && located.every(isCompactionReplacement)) {
-    return false;
-  }
-
-  // Sort indices descending so we can splice from highest to lowest without index shifting
-  indices.sort((a, b) => b - a);
-
-  // Build the replacement message content
-  const refsText = plan.refs.length > 0
-    ? "\n\n**Original turns (by hash):**\n" +
-      plan.refs.map((r) => `- turn ${r.turnIndex} (${r.role}): \`${r.contentHash}\``).join("\n")
-    : "";
-
-  const summaryText = plan.summary ? `\n\n**Summary:**\n${plan.summary}` : "";
-
-  const retrieveHint = plan.historyHash
-    ? `\n\n**Retrieve full history:** Use the \`headroom_retrieve\` tool with \`hash="${plan.historyHash}"\` to fetch the complete original conversation.`
-    : "";
-
-  const replacementText = `${COMPACTION_MARKER} This conversation segment was compacted.${summaryText}${refsText}${retrieveHint}`;
-
-  const replacementMessage: ChatMessage = {
-    info: {
-      id: `compaction-${plan.historyHash ?? "unknown"}-${Date.now()}`,
-      role: "user",
-    },
-    parts: [{ type: "text", text: replacementText }],
-  };
-
-  // Remove each found message at its index (descending order preserves lower indices)
-  for (const idx of indices) {
-    messages.splice(idx, 1);
-  }
-
-  // Insert replacement at the position of the first (lowest) removed message.
-  // indices.length >= 1 is guaranteed by the early return above.
-  const insertIdx = indices[indices.length - 1]!;
-  messages.splice(insertIdx, 0, replacementMessage);
-
-  return true;
+  return materialized.status
 }

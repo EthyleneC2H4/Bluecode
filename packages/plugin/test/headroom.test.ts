@@ -9,6 +9,7 @@ import {
   getPendingPlan,
   clearPendingPlan,
   setSharedHeadroomClient,
+  fetchCompleteSessionMessages,
 } from "../src/headroom";
 import { parseOptions } from "../src/config";
 import type { ChatMessage } from "@bluecode/contracts";
@@ -70,6 +71,11 @@ let mockHeadroomCompressImpl: (params: any) => Promise<any> = async () => ({
   replacedMessageIds: [],
   rawTokens: 0,
   summaryTokens: 0,
+  sourceTokensEst: 0,
+  evictedTokensEst: 0,
+  retainedTokensEst: 0,
+  replacementTokensEst: 0,
+  finalTokensEst: 0,
   freedTokens: 0,
 });
 
@@ -126,6 +132,72 @@ function makeSdkMsg(id: string, role: "user" | "assistant", text: string, tokens
 }
 
 describe("headroom: waterlevel detection", () => {
+  test("fetchCompleteSessionMessages omits limit and preserves oldest-to-newest order", async () => {
+    for (const count of [101, 201, 1000]) {
+      const source = Array.from({ length: count }, (_, index) =>
+        makeSdkMsg(`m-${index}`, index % 2 === 0 ? "user" : "assistant", `message ${index}`),
+      );
+      let request: unknown;
+      const sdkClient = {
+        session: {
+          messages: async (input: unknown) => {
+            request = input;
+            return { data: source };
+          },
+        },
+      } as any;
+
+      const fetched = await fetchCompleteSessionMessages(sdkClient, `session-${count}`);
+      expect(request).toEqual({ path: { id: `session-${count}` } });
+      expect(fetched).toHaveLength(count);
+      expect(fetched[0]?.info.id).toBe("m-0");
+      expect(fetched[Math.floor(count / 2)]?.info.id).toBe(`m-${Math.floor(count / 2)}`);
+      expect(fetched.at(-1)?.info.id).toBe(`m-${count - 1}`);
+      expect(new Set(fetched.map((message: any) => message.info.id)).size).toBe(count);
+    }
+  });
+
+  test("idle sends every message exactly once for 101, 201 and 1000-message sessions", async () => {
+    for (const count of [101, 201, 1000]) {
+      const source = Array.from({ length: count }, (_, index) =>
+        makeSdkMsg(
+          `long-${count}-${index}`,
+          index % 2 === 0 ? "user" : "assistant",
+          `message ${index}`,
+          index === count - 2 || index === count - 1 ? 150000 : undefined,
+        ),
+      );
+      const sdkClient = createMockSdkClient({ messages: source });
+      let captured: ChatMessage[] = [];
+      mockHeadroomCompressImpl = async (params) => {
+        captured = params.messages;
+        return {
+          compacted: false,
+          historyHash: null,
+          summary: null,
+          refs: [],
+          replacedMessageIds: [],
+          rawTokens: 150000,
+          summaryTokens: 0,
+          sourceTokensEst: 150000,
+          evictedTokensEst: 0,
+          retainedTokensEst: 150000,
+          replacementTokensEst: 0,
+          finalTokensEst: 150000,
+          freedTokens: 0,
+        };
+      };
+
+      await handleSessionIdle({ sessionID: `long-${count}` }, sdkClient, defaultOptions);
+      const ids = captured.map((message) => message.info.id);
+      expect(ids).toHaveLength(count);
+      expect(ids[0]).toBe(`long-${count}-0`);
+      expect(ids[Math.floor(count / 2)]).toBe(`long-${count}-${Math.floor(count / 2)}`);
+      expect(ids.at(-1)).toBe(`long-${count}-${count - 1}`);
+      expect(new Set(ids).size).toBe(count);
+    }
+  });
+
   test("triggers compress when tokens >= contextWindow * triggerRatio", async () => {
     const sdkClient = createMockSdkClient({
       messages: [
@@ -274,6 +346,45 @@ describe("headroom: messages.transform consumes plan", () => {
     expect(output.messages[0]?.info.id).toBe("msg-1");
   });
 
+  test("invalid partial plan changes nothing and remains pending", async () => {
+    const output = {
+      messages: [makeMsg("msg-1", "user", "Hello"), makeMsg("msg-2", "assistant", "Hi")],
+    };
+    const before = structuredClone(output.messages);
+    setPendingPlan("sess-1", {
+      refs: [],
+      summary: "Summary",
+      replacedMessageIds: ["msg-1", "missing"],
+      historyHash: "hist-invalid",
+    });
+
+    await handleMessagesTransform(output, "sess-1");
+
+    expect(output.messages).toEqual(before);
+    expect(getPendingPlan("sess-1")).toBeDefined();
+  });
+
+  test("already-compacted replay changes nothing and remains pending", async () => {
+    const output = {
+      messages: [
+        makeMsg("compaction-hist-replay", "user", `${COMPACTION_MARKER} already done`),
+        makeMsg("tail", "assistant", "tail"),
+      ],
+    };
+    const before = structuredClone(output.messages);
+    setPendingPlan("sess-1", {
+      refs: [],
+      summary: "Summary",
+      replacedMessageIds: ["old-1", "old-2"],
+      historyHash: "hist-replay",
+    });
+
+    await handleMessagesTransform(output, "sess-1");
+
+    expect(output.messages).toEqual(before);
+    expect(getPendingPlan("sess-1")).toBeDefined();
+  });
+
   test("second call (simulating compaction second trigger point) is no-op after plan consumed", async () => {
     const output = {
       messages: [
@@ -381,6 +492,8 @@ describe("headroom: compacting hook", () => {
     expect(output.context.length).toBe(1);
     expect(output.context[0]).toContain("headroom_retrieve");
     expect(output.context[0]).toContain("compacted");
+    expect(output.context[0]).toContain("historyHash");
+    expect(output.context[0]).not.toContain("pass it as `hash`");
   });
 
   test("fallback=passthrough: no-op", async () => {

@@ -50,8 +50,19 @@ export function materializeCompaction(
     return { status: "invalid", messages: [...messages] }
   }
 
+  const indexById = new Map<string, number>()
+  const duplicateSourceIds = new Set<string>()
+  for (let index = 0; index < messages.length; index++) {
+    const id = messages[index]!.info.id
+    if (indexById.has(id)) duplicateSourceIds.add(id)
+    else indexById.set(id, index)
+  }
+  if (ids.some((id) => duplicateSourceIds.has(id))) {
+    return { status: "invalid", messages: [...messages] }
+  }
+
   const replacementId = `compaction-${plan.historyHash ?? "unknown"}`
-  const indices = ids.map((id) => messages.findIndex((message) => message.info.id === id))
+  const indices = ids.map((id) => indexById.get(id) ?? -1)
   const missing = indices.filter((index) => index < 0).length
   if (missing === ids.length) {
     const replayed = messages.some(

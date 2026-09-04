@@ -160,6 +160,17 @@ function sdkMessageToChatMessage(m: any): ChatMessage | null {
   };
 }
 
+/** OpenCode v1.18.21 returns the complete oldest-to-newest session when limit is omitted. */
+export async function fetchCompleteSessionMessages(
+  sdkClient: ReturnType<typeof import("@opencode-ai/sdk").createOpencodeClient>,
+  sessionId: string,
+): Promise<any[]> {
+  const result = await (sdkClient as any).session.messages({
+    path: { id: sessionId },
+  })
+  return Array.isArray(result.data) ? result.data : []
+}
+
 /**
  * Fetch model context window via SDK.
  *
@@ -290,11 +301,7 @@ export async function handleSessionIdle(
 
     // Check if upstream compaction is already in progress
     try {
-      const messagesResult = await (sdkClient as any).session.messages({
-        path: { id: sessionId },
-        query: { limit: 100 },
-      });
-      const messages = messagesResult.data;
+      const messages = await fetchCompleteSessionMessages(sdkClient, sessionId);
       if (!messages || messages.length === 0) {
         debug("skipped: no session messages via SDK");
         return;
@@ -407,11 +414,11 @@ export async function handleMessagesTransform(
   // passes {} at both call sites), so the factory iterates every pending
   // session — a foreign session's message array matches none of this
   // plan's replacedMessageIds (opencode message ids are globally unique),
-  // applyPlanInPlace returns false, and the plan must survive for its own
+  // applyPlanInPlace returns no-match, and the plan must survive for its own
   // session's next transform. Deleting unconditionally would let one
   // session consume another's compression result.
-  const applied = applyPlanInPlace(output.messages, pending.plan);
-  if (applied) {
+  const status = applyPlanInPlace(output.messages, pending.plan);
+  if (status === "applied") {
     pendingPlans.delete(sessionId);
   }
 }
@@ -434,8 +441,8 @@ export async function handleCompacting(
   // and headroom_retrieve usage hint.
   output.context.push(
     `[bluecode headroom] Conversation history was compacted. ` +
-    `Use the \`headroom_retrieve\` tool to fetch original turns by hash. ` +
-    `If you have a historyHash from the compaction notice, pass it as \`hash\` to retrieve the full text.`,
+    `Use the \`headroom_retrieve\` tool to fetch original turns. ` +
+    `If the compaction notice contains a historyHash, pass it as the \`historyHash\` argument and follow the pagination offsets.`,
   );
 }
 

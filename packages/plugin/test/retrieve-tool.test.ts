@@ -105,6 +105,51 @@ describe("headroom_retrieve tool", () => {
     expect(result).toContain("nonexistent");
   });
 
+  test("history retrieval formats ordered items, partial gaps and continuation", async () => {
+    const historyHash = "e".repeat(64);
+    let capturedParams: any;
+    mockRetrieveImpl = async (params) => {
+      capturedParams = params;
+      return {
+        found: true,
+        items: [
+          {
+            contentHash: "a".repeat(64),
+            role: "user",
+            turnIndex: 0,
+            content: "[user]\nfirst",
+          },
+          {
+            contentHash: "b".repeat(64),
+            role: "assistant",
+            turnIndex: 0,
+            content: "[assistant]\nsecond",
+          },
+        ],
+        nextOffset: 12,
+        partial: true,
+        missingHashes: ["c".repeat(64)],
+      };
+    };
+
+    const result = await headroomRetrieveTool.execute(
+      { historyHash, offset: 2 },
+      mockContext,
+    );
+
+    expect(capturedParams).toEqual({
+      namespace: { projectId: "default", sessionId: "sess-1" },
+      historyHash,
+      offset: 2,
+      limit: 10,
+    });
+    expect(result).toContain("Archived history");
+    expect(result).toContain("[user]\nfirst");
+    expect(result).toContain("partial");
+    expect(result).toContain("next offset: 12");
+    expect(result).toContain("c".repeat(64));
+  });
+
   test("client unavailable: returns error message", async () => {
     setSharedHeadroomClient(null);
 
@@ -128,13 +173,40 @@ describe("headroom_retrieve tool", () => {
     expect(result).toContain("connection refused");
   });
 
-  test("validation: hash or query required throws ZodError", async () => {
+  test("validation: exactly one of hash, historyHash or query is required", async () => {
     try {
       await headroomRetrieveTool.execute({ limit: 5 }, mockContext);
       expect(false).toBe(true); // Should not reach
     } catch (err: any) {
       expect(err).toBeInstanceOf(z.ZodError);
-      expect(err.issues[0].message).toContain("Either 'hash' or 'query' must be provided");
+      expect(err.issues[0].message).toContain("Exactly one");
+    }
+
+    for (const args of [
+      { hash: "a".repeat(64), query: "q" },
+      { historyHash: "b".repeat(64), query: "q" },
+      { hash: "a".repeat(64), historyHash: "b".repeat(64) },
+    ]) {
+      try {
+        await (headroomRetrieveTool as any).execute(args, mockContext);
+        throw new Error("expected validation failure");
+      } catch (err) {
+        expect(err).toBeInstanceOf(z.ZodError);
+      }
+    }
+  });
+
+  test("validation: offset is accepted only with historyHash", async () => {
+    for (const args of [
+      { query: "q", offset: 1 },
+      { hash: "a".repeat(64), offset: 1 },
+    ]) {
+      try {
+        await (headroomRetrieveTool as any).execute(args, mockContext);
+        throw new Error("expected validation failure");
+      } catch (err) {
+        expect(err).toBeInstanceOf(z.ZodError);
+      }
     }
   });
 
