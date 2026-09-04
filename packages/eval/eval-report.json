@@ -1,6 +1,6 @@
 {
   "meta": {
-    "timestamp": "2026-09-04T17:25:00.396Z",
+    "timestamp": "2026-09-04T17:53:32.303Z",
     "tokenCounter": "o200k_base",
     "versions": {
       "node": "v26.3.0",
@@ -12,7 +12,7 @@
       "compressionRatio": 1,
       "longOutputRatio": 1,
       "latencyP50Ms": 0.0002499999999940883,
-      "latencyP95Ms": 0.030249999999998778,
+      "latencyP95Ms": 0.039959000000003186,
       "contextRecall": {
         "mustHit": {
           "found": 94,
@@ -55,8 +55,8 @@
     "B": {
       "compressionRatio": 0.3558362695854262,
       "longOutputRatio": 0.35301444605407456,
-      "latencyP50Ms": 0.8815000000000168,
-      "latencyP95Ms": 26.06437500000004,
+      "latencyP50Ms": 2.3029999999999973,
+      "latencyP95Ms": 31.675625000000025,
       "contextRecall": {
         "mustHit": {
           "found": 75,
@@ -99,8 +99,8 @@
     "C": {
       "compressionRatio": 0.454506834595297,
       "longOutputRatio": 0.4089167490285807,
-      "latencyP50Ms": 0.21875,
-      "latencyP95Ms": 75.59783300000004,
+      "latencyP50Ms": 0.13237500000002456,
+      "latencyP95Ms": 60.61379199999999,
       "contextRecall": {
         "mustHit": {
           "found": 38,
@@ -143,8 +143,8 @@
     "D": {
       "compressionRatio": 0.14074018542119598,
       "longOutputRatio": 0.11994151175857354,
-      "latencyP50Ms": 1.317792000000054,
-      "latencyP95Ms": 57.98862500000007,
+      "latencyP50Ms": 1.1001240000000507,
+      "latencyP95Ms": 62.67066599999998,
       "contextRecall": {
         "mustHit": {
           "found": 24,
@@ -191,7 +191,7 @@
       "group": "A",
       "rawTokens": 51083,
       "outTokens": 51083,
-      "latencyMs": 0.030249999999998778,
+      "latencyMs": 0.039959000000003186,
       "contextRecallHits": [
         "user-query-0-authentication",
         "user-query-1-database",
@@ -272,7 +272,7 @@
       "group": "A",
       "rawTokens": 6579,
       "outTokens": 6579,
-      "latencyMs": 0.0006249999999852207,
+      "latencyMs": 0.0006250000000136424,
       "contextRecallHits": [
         "file_0000.ts",
         "file_0100.json",
@@ -290,7 +290,7 @@
       "group": "A",
       "rawTokens": 1748,
       "outTokens": 1748,
-      "latencyMs": 0.0002499999999940883,
+      "latencyMs": 0.0003330000000119071,
       "contextRecallHits": [
         "compressHandler",
         "fetchHandler",
@@ -309,7 +309,7 @@
       "group": "A",
       "rawTokens": 4081,
       "outTokens": 4081,
-      "latencyMs": 0.0027500000000202363,
+      "latencyMs": 0.004291999999992413,
       "contextRecallHits": [
         "must-hit-50",
         "must-hit-100",
@@ -330,7 +330,7 @@
       "group": "A",
       "rawTokens": 389,
       "outTokens": 389,
-      "latencyMs": 0.003291999999987638,
+      "latencyMs": 0.00637499999999136,
       "contextRecallHits": [
         "budget increased for large outputs",
         "new timeout handling",
@@ -348,7 +348,7 @@
       "group": "A",
       "rawTokens": 187,
       "outTokens": 187,
-      "latencyMs": 0.00016699999997626946,
+      "latencyMs": 0.00016599999997879422,
       "contextRecallHits": [
         "degraded reason \"timeout\" at test line 15",
         "compression ratio threshold 0.85"
@@ -365,7 +365,7 @@
       "group": "A",
       "rawTokens": 12118,
       "outTokens": 12118,
-      "latencyMs": 0.00012499999999704414,
+      "latencyMs": 0.00016700000000469117,
       "contextRecallHits": [
         "noise-marker-0",
         "noise-marker-250",
@@ -383,7 +383,7 @@
       "group": "A",
       "rawTokens": 2499,
       "outTokens": 2499,
-      "latencyMs": 0.0002910000000042601,
+      "latencyMs": 0.0002499999999940883,
       "contextRecallHits": [
         "ansi-marker-0",
         "ansi-marker-99"
@@ -400,7 +400,7 @@
       "group": "A",
       "rawTokens": 200,
       "outTokens": 200,
-      "latencyMs": 0.00016700000000469117,
+      "latencyMs": 0.0002499999999940883,
       "contextRecallHits": [
         "progress-0",
         "progress-100",
@@ -418,7 +418,7 @@
       "group": "A",
       "rawTokens": 1150,
       "outTokens": 1150,
-      "latencyMs": 0.00016699999997626946,
+      "latencyMs": 0.00016599999997879422,
       "contextRecallHits": [
         "backspace-marker-0",
         "backspace-marker-49"
@@ -435,7 +435,7 @@
       "group": "B",
       "rawTokens": 51083,
       "outTokens": 21529,
-      "latencyMs": 26.06437500000004,
+      "latencyMs": 31.675625000000025,
       "contextRecallHits": [
         "user-query-0-authentication",
         "user-query-1-database",
@@ -517,7 +517,7 @@
       "group": "B",
       "rawTokens": 6579,
       "outTokens": 3475,
-      "latencyMs": 1.324374999999975,
+      "latencyMs": 2.5046669999999835,
       "contextRecallHits": [
         "file_0000.ts",
         "file_0100.json"
@@ -536,7 +536,7 @@
       "group": "B",
       "rawTokens": 1748,
       "outTokens": 606,
-      "latencyMs": 0.9462080000000128,
+      "latencyMs": 2.3029999999999973,
       "contextRecallHits": [
         "compressHandler",
         "fetchHandler",
@@ -556,7 +556,7 @@
       "group": "B",
       "rawTokens": 4081,
       "outTokens": 654,
-      "latencyMs": 1.035333000000037,
+      "latencyMs": 8.74433399999998,
       "contextRecallHits": [
         "must-hit-300"
       ],
@@ -578,7 +578,7 @@
       "group": "B",
       "rawTokens": 389,
       "outTokens": 389,
-      "latencyMs": 0.7447080000000028,
+      "latencyMs": 2.2347089999999525,
       "contextRecallHits": [
         "budget increased for large outputs",
         "new timeout handling",
@@ -596,7 +596,7 @@
       "group": "B",
       "rawTokens": 187,
       "outTokens": 187,
-      "latencyMs": 0.6892500000000155,
+      "latencyMs": 1.2083749999999895,
       "contextRecallHits": [
         "degraded reason \"timeout\" at test line 15",
         "compression ratio threshold 0.85"
@@ -613,7 +613,7 @@
       "group": "B",
       "rawTokens": 12118,
       "outTokens": 416,
-      "latencyMs": 2.050083000000029,
+      "latencyMs": 3.4785830000000146,
       "contextRecallHits": [],
       "contextRecallMisses": [
         "noise-marker-0",
@@ -631,7 +631,7 @@
       "group": "B",
       "rawTokens": 2499,
       "outTokens": 614,
-      "latencyMs": 0.8815000000000168,
+      "latencyMs": 2.4871250000000487,
       "contextRecallHits": [
         "ansi-marker-99"
       ],
@@ -649,7 +649,7 @@
       "group": "B",
       "rawTokens": 200,
       "outTokens": 15,
-      "latencyMs": 0.7177500000000236,
+      "latencyMs": 1.1873330000000237,
       "contextRecallHits": [
         "progress-complete"
       ],
@@ -668,7 +668,7 @@
       "group": "B",
       "rawTokens": 1150,
       "outTokens": 594,
-      "latencyMs": 0.793124999999975,
+      "latencyMs": 1.2137919999999554,
       "contextRecallHits": [
         "backspace-marker-49"
       ],
@@ -686,7 +686,7 @@
       "group": "C",
       "rawTokens": 51083,
       "outTokens": 7425,
-      "latencyMs": 75.59783300000004,
+      "latencyMs": 60.61379199999999,
       "contextRecallHits": [
         "assistant-response-5",
         "budget increased for large outputs",
@@ -836,7 +836,7 @@
       "group": "C",
       "rawTokens": 6579,
       "outTokens": 6579,
-      "latencyMs": 5.238915999999904,
+      "latencyMs": 1.1728749999999764,
       "contextRecallHits": [
         "file_0000.ts",
         "file_0100.json",
@@ -854,7 +854,7 @@
       "group": "C",
       "rawTokens": 1748,
       "outTokens": 1748,
-      "latencyMs": 0.2901249999999891,
+      "latencyMs": 0.22204199999998764,
       "contextRecallHits": [
         "compressHandler",
         "fetchHandler",
@@ -873,7 +873,7 @@
       "group": "C",
       "rawTokens": 4081,
       "outTokens": 4081,
-      "latencyMs": 0.22258399999998346,
+      "latencyMs": 0.19029199999999946,
       "contextRecallHits": [
         "must-hit-50",
         "must-hit-100",
@@ -894,7 +894,7 @@
       "group": "C",
       "rawTokens": 389,
       "outTokens": 389,
-      "latencyMs": 0.13666599999999107,
+      "latencyMs": 0.11862500000006548,
       "contextRecallHits": [
         "budget increased for large outputs",
         "new timeout handling",
@@ -912,7 +912,7 @@
       "group": "C",
       "rawTokens": 187,
       "outTokens": 187,
-      "latencyMs": 0.10808400000007623,
+      "latencyMs": 0.09058300000003783,
       "contextRecallHits": [
         "degraded reason \"timeout\" at test line 15",
         "compression ratio threshold 0.85"
@@ -929,7 +929,7 @@
       "group": "C",
       "rawTokens": 12118,
       "outTokens": 12118,
-      "latencyMs": 1.3912090000000035,
+      "latencyMs": 0.2992499999999154,
       "contextRecallHits": [
         "noise-marker-0",
         "noise-marker-250",
@@ -947,7 +947,7 @@
       "group": "C",
       "rawTokens": 2499,
       "outTokens": 2499,
-      "latencyMs": 0.21875,
+      "latencyMs": 0.13237500000002456,
       "contextRecallHits": [
         "ansi-marker-0",
         "ansi-marker-99"
@@ -964,7 +964,7 @@
       "group": "C",
       "rawTokens": 200,
       "outTokens": 200,
-      "latencyMs": 0.10099999999999909,
+      "latencyMs": 0.0982089999999971,
       "contextRecallHits": [
         "progress-0",
         "progress-100",
@@ -982,7 +982,7 @@
       "group": "C",
       "rawTokens": 1150,
       "outTokens": 1150,
-      "latencyMs": 0.0975420000000895,
+      "latencyMs": 0.07291599999996379,
       "contextRecallHits": [
         "backspace-marker-0",
         "backspace-marker-49"
@@ -999,7 +999,7 @@
       "group": "D",
       "rawTokens": 51083,
       "outTokens": 4314,
-      "latencyMs": 57.98862500000007,
+      "latencyMs": 62.67066599999998,
       "contextRecallHits": [
         "assistant-response-5",
         "budget increased for large outputs",
@@ -1149,7 +1149,7 @@
       "group": "D",
       "rawTokens": 6579,
       "outTokens": 3475,
-      "latencyMs": 3.2456680000000233,
+      "latencyMs": 1.935999000000038,
       "contextRecallHits": [
         "file_0000.ts",
         "file_0100.json"
@@ -1168,7 +1168,7 @@
       "group": "D",
       "rawTokens": 1748,
       "outTokens": 606,
-      "latencyMs": 1.5124590000000353,
+      "latencyMs": 1.3328749999998308,
       "contextRecallHits": [
         "compressHandler",
         "fetchHandler",
@@ -1188,7 +1188,7 @@
       "group": "D",
       "rawTokens": 4081,
       "outTokens": 654,
-      "latencyMs": 1.317792000000054,
+      "latencyMs": 1.2207080000000587,
       "contextRecallHits": [
         "must-hit-300"
       ],
@@ -1210,7 +1210,7 @@
       "group": "D",
       "rawTokens": 389,
       "outTokens": 389,
-      "latencyMs": 0.8940000000001191,
+      "latencyMs": 1.1001240000000507,
       "contextRecallHits": [
         "budget increased for large outputs",
         "new timeout handling",
@@ -1228,7 +1228,7 @@
       "group": "D",
       "rawTokens": 187,
       "outTokens": 187,
-      "latencyMs": 0.9043329999999514,
+      "latencyMs": 0.8339579999999387,
       "contextRecallHits": [
         "degraded reason \"timeout\" at test line 15",
         "compression ratio threshold 0.85"
@@ -1245,7 +1245,7 @@
       "group": "D",
       "rawTokens": 12118,
       "outTokens": 416,
-      "latencyMs": 2.2762500000001182,
+      "latencyMs": 2.8382910000000265,
       "contextRecallHits": [],
       "contextRecallMisses": [
         "noise-marker-0",
@@ -1263,7 +1263,7 @@
       "group": "D",
       "rawTokens": 2499,
       "outTokens": 614,
-      "latencyMs": 2.5326250000000528,
+      "latencyMs": 1.0705000000000382,
       "contextRecallHits": [
         "ansi-marker-99"
       ],
@@ -1281,7 +1281,7 @@
       "group": "D",
       "rawTokens": 200,
       "outTokens": 15,
-      "latencyMs": 0.9879169999999249,
+      "latencyMs": 0.7952089999998861,
       "contextRecallHits": [
         "progress-complete"
       ],
@@ -1300,7 +1300,7 @@
       "group": "D",
       "rawTokens": 1150,
       "outTokens": 594,
-      "latencyMs": 1.0945420000000468,
+      "latencyMs": 1.0281670000001668,
       "contextRecallHits": [
         "backspace-marker-49"
       ],

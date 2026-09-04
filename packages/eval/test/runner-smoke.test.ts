@@ -74,6 +74,10 @@ describe("runner: quick-mode smoke across all four groups", () => {
         expect(m.latencyP95Ms).toBeGreaterThanOrEqual(m.latencyP50Ms);
         expect(m.contextRecall.mustHit.rate).toBeGreaterThanOrEqual(0);
         expect(m.contextRecall.mustHit.rate).toBeLessThanOrEqual(1);
+        if (g !== "A") {
+          expect(m.archiveRecovery.total).toBeGreaterThan(0);
+          expect(m.archiveRecovery.found).toBe(m.archiveRecovery.total);
+        }
       }
 
       const dInput = observations.find(

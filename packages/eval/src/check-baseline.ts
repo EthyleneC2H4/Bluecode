@@ -34,6 +34,7 @@ function loadBaseline(): unknown | null {
 
 const GROUPS = ["A", "B", "C", "D"] as const;
 const DEGRADED = new Set(["spawn_failed", "timeout", "crash", "protocol", "no_gain"]);
+const LATENCY_ABSOLUTE_REGRESSION_MS = 1;
 
 function structuralViolation(metric: string, label: string, detail: string): Violation {
   return { metric, group: label, baseline: 0, current: 0, threshold: detail };
@@ -73,6 +74,21 @@ export function validateReportStructure(report: unknown, label = "report"): Viol
     } else {
       recallTotals.push(`${mustTotal}:${niceTotal}`);
     }
+    const archiveFound = metrics.archiveRecovery?.found;
+    const archiveTotal = metrics.archiveRecovery?.total;
+    if (
+      !Number.isInteger(archiveFound) ||
+      archiveFound < 0 ||
+      !Number.isInteger(archiveTotal) ||
+      archiveTotal < 0 ||
+      archiveFound > archiveTotal
+    ) {
+      violations.push(structuralViolation(
+        "report.archiveRecovery",
+        `${label}:${group}`,
+        "archive recovery found/total must be valid non-negative counts",
+      ));
+    }
   }
   if (recallTotals.length === GROUPS.length && new Set(recallTotals).size !== 1) {
     violations.push(structuralViolation("report.recallTotals", label, "A/B/C/D context recall totals must match"));
@@ -96,6 +112,23 @@ export function validateReportStructure(report: unknown, label = "report"): Viol
       if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
         violations.push(structuralViolation("report.tokens", `${label}:${group}:${fixture}`, `${key} must be non-negative`));
       }
+    }
+    const archiveFound = row.archiveRecoveryFound;
+    const archiveTotal = row.archiveRecoveryTotal;
+    if (
+      typeof archiveFound !== "number" ||
+      !Number.isInteger(archiveFound) ||
+      archiveFound < 0 ||
+      typeof archiveTotal !== "number" ||
+      !Number.isInteger(archiveTotal) ||
+      archiveTotal < 0 ||
+      archiveFound > archiveTotal
+    ) {
+      violations.push(structuralViolation(
+        "report.archiveRecovery",
+        `${label}:${group}:${fixture}`,
+        "archiveRecoveryFound/archiveRecoveryTotal must be valid counts",
+      ));
     }
     const degradedReason = row.degradedReason;
     if (degradedReason !== null && !DEGRADED.has(String(degradedReason))) {
@@ -153,8 +186,30 @@ function compareMetrics(baseline: FullReport, current: FullReport, skipLatency: 
 
   // Archive recovery is a correctness property, not context recall.
   for (const group of ["B", "C", "D"] as const) {
+    const baselineFound = baseline.groups[group].archiveRecovery.found;
+    const baselineTotal = baseline.groups[group].archiveRecovery.total;
+    const currentFound = current.groups[group].archiveRecovery.found;
+    const currentTotal = current.groups[group].archiveRecovery.total;
     const baselineRate = baseline.groups[group].archiveRecovery.rate;
     const currentRate = current.groups[group].archiveRecovery.rate;
+    if (currentTotal !== baselineTotal) {
+      violations.push({
+        metric: "archiveRecoveryTotal",
+        group,
+        baseline: baselineTotal,
+        current: currentTotal,
+        threshold: "expected archive count must remain exact",
+      });
+    }
+    if (currentFound < baselineFound) {
+      violations.push({
+        metric: "archiveRecoveryFound",
+        group,
+        baseline: baselineFound,
+        current: currentFound,
+        threshold: "recovered archive count may not decline",
+      });
+    }
     if (currentRate < baselineRate - 0.0001) {
       violations.push({
         metric: "archiveRecovery",
@@ -166,20 +221,22 @@ function compareMetrics(baseline: FullReport, current: FullReport, skipLatency: 
     }
   }
 
-  // p95 latency: >2x baseline. Sound locally, but flaky on shared CI runners
-  // where IPC timing noise dominates — hence the explicit opt-out below.
+  // p95 latency: >2x baseline and >1ms absolute regression. The absolute
+  // floor prevents sub-millisecond passthrough timing noise from looking like
+  // a many-fold slowdown while preserving the ratio gate for real work.
+  // Shared CI runners can still opt out explicitly below.
   // Only this gate may be skipped; compression and recall stay enforced.
   if (!skipLatency) {
     for (const group of ["A", "B", "C", "D"] as const) {
       const b = baseline.groups[group].latencyP95Ms;
       const c = current.groups[group].latencyP95Ms;
-      if (b > 0 && c > b * 2) {
+      if (b > 0 && c > b * 2 && c - b > LATENCY_ABSOLUTE_REGRESSION_MS) {
         violations.push({
           metric: "latencyP95",
           group,
           baseline: b,
           current: c,
-          threshold: `2x baseline (ratio=${(c/b).toFixed(2)})`,
+          threshold: `2x baseline and +${LATENCY_ABSOLUTE_REGRESSION_MS}ms (ratio=${(c/b).toFixed(2)}, delta=${(c-b).toFixed(2)}ms)`,
         });
       }
     }

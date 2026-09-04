@@ -2,6 +2,7 @@
 import { RtkClient, type CompressInput } from "@bluecode/rtk"
 import {
   HeadroomClient,
+  contentHash,
   materializeCompaction,
   type HeadroomClientOptions,
 } from "@bluecode/headroomd"
@@ -10,7 +11,7 @@ import type {
   HeadroomCompressResult,
   RetrieveByHistoryResult,
 } from "@bluecode/contracts"
-import { createExactTokenCounter } from "@bluecode/shared"
+import { createExactTokenCounter, sanitize, sha256Hex } from "@bluecode/shared"
 import { existsSync } from "node:fs"
 import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -156,7 +157,7 @@ function headroomOptions(options: RunnerOptions, dataDir: string): HeadroomClien
 
 interface RtkRewriteResult {
   messages: ChatMessage[]
-  archivedHashes: string[]
+  expectedArchivedHashes: string[]
   degradedReason: DegradedReason | null
   latencyMs: number
 }
@@ -165,9 +166,10 @@ async function rewriteToolParts(
   rtk: RtkClient,
   source: ChatMessage[],
   sessionId: string,
+  minBytes: number,
 ): Promise<RtkRewriteResult> {
   const messages = cloneMessages(source)
-  const archivedHashes: string[] = []
+  const expectedArchivedHashes: string[] = []
   let degradedReason: DegradedReason | null = null
   let callIndex = 0
   const started = performance.now()
@@ -175,6 +177,9 @@ async function rewriteToolParts(
   for (const message of messages) {
     for (const part of message.parts) {
       if (part.type !== "tool" || typeof part.state.output !== "string") continue
+      if (Buffer.byteLength(part.state.output, "utf8") >= minBytes) {
+        expectedArchivedHashes.push(`sha256:${await sha256Hex(sanitize(part.state.output))}`)
+      }
       const input: CompressInput = {
         tool: part.tool,
         output: part.state.output,
@@ -184,7 +189,6 @@ async function rewriteToolParts(
       const outcome = await rtk.compress(input)
       if (outcome.kind === "compressed") {
         part.state.output = outcome.result.output
-        archivedHashes.push(outcome.result.rawHash)
         if (outcome.result.degraded !== null) {
           degradedReason = outcome.result.degraded.reason
         }
@@ -196,7 +200,7 @@ async function rewriteToolParts(
 
   return {
     messages,
-    archivedHashes,
+    expectedArchivedHashes,
     degradedReason,
     latencyMs: performance.now() - started,
   }
@@ -224,11 +228,26 @@ interface HeadroomEvidence {
   archiveRecovery: { found: number; total: number }
 }
 
+function expectedEvictedMessages(
+  messages: ChatMessage[],
+  retainRecentTurns: number,
+): ChatMessage[] {
+  const turns: ChatMessage[][] = []
+  for (const message of messages) {
+    if (message.info.role === "user" || turns.length === 0) turns.push([message])
+    else turns[turns.length - 1]!.push(message)
+  }
+  const retained = Math.min(retainRecentTurns, turns.length)
+  return turns.slice(0, turns.length - retained).flat()
+}
+
 async function gatherHeadroomEvidence(
   headroom: HeadroomClient,
   sessionId: string,
   result: HeadroomCompressResult | null,
   fixture: FixtureSample,
+  sourceMessages: ChatMessage[],
+  retainRecentTurns: number,
 ): Promise<HeadroomEvidence> {
   if (result === null || !result.compacted || result.historyHash === null) {
     return { queryMatches: null, archiveRecovery: { found: 0, total: 0 } }
@@ -243,7 +262,18 @@ async function gatherHeadroomEvidence(
         query: fact,
         limit: 5,
       })
-      if ("hits" in queryResult && queryResult.hits.length > 0) queryMatches.push(fact)
+      if ("hits" in queryResult) {
+        for (const hit of queryResult.hits) {
+          const fetched = await headroom.retrieve({
+            namespace: { projectId: "default", sessionId },
+            hash: hit.hash,
+          })
+          if ("content" in fetched && fetched.content.includes(fact)) {
+            queryMatches.push(fact)
+            break
+          }
+        }
+      }
     } catch {
       // A failed query remains a query miss.
     }
@@ -279,10 +309,19 @@ async function gatherHeadroomEvidence(
     offset = historyResult.nextOffset
   }
 
-  const expectedHashes = result.refs.map((ref) => ref.contentHash)
+  const expectedMessages = expectedEvictedMessages(sourceMessages, retainRecentTurns)
+  const expectedHashes: string[] = []
+  for (const message of expectedMessages) expectedHashes.push(await contentHash(message))
+  const planMatches =
+    result.replacedMessageIds.length === expectedMessages.length &&
+    result.refs.length === expectedMessages.length &&
+    expectedMessages.every((message, index) =>
+      result.replacedMessageIds[index] === message.info.id &&
+      result.refs[index]?.contentHash === expectedHashes[index]
+    )
   let found = 0
   for (let index = 0; index < expectedHashes.length; index++) {
-    if (recoveredHashes[index] === expectedHashes[index]) found++
+    if (planMatches && recoveredHashes[index] === expectedHashes[index]) found++
   }
   if (partial && found === expectedHashes.length) found = Math.max(0, found - 1)
 
@@ -328,12 +367,13 @@ async function runGroupB(
         rtk,
         cloneMessagesForSession(fixture.messages, sessionId),
         sessionId,
+        options.rtkMinBytes ?? 512,
       )
       const outputText = extractAllText(rewritten.messages)
       const archiveRecovery = await recoverRtkArchives(
         rtk,
         sessionId,
-        rewritten.archivedHashes,
+        rewritten.expectedArchivedHashes,
       )
       const recall = evaluateRecall(fixture, "B", outputText, null, archiveRecovery)
       perFixture.push(
@@ -408,7 +448,14 @@ async function runGroupC(
       }
       const latencyMs = performance.now() - started
       const outputText = extractAllText(finalMessages)
-      const evidence = await gatherHeadroomEvidence(headroom, params.sessionId, result, fixture)
+      const evidence = await gatherHeadroomEvidence(
+        headroom,
+        params.sessionId,
+        result,
+        fixture,
+        sourceMessages,
+        params.retainRecentTurns ?? 4,
+      )
       const recall = evaluateRecall(
         fixture,
         "C",
@@ -443,79 +490,90 @@ async function runGroupD(
   dataDir: string,
 ): Promise<GroupResult> {
   const rtk = await RtkClient.create(rtkOptions(options, dataDir))
-  const headroom = await HeadroomClient.connect(headroomOptions(options, dataDir))
   const perFixture: PerFixtureRecord[] = []
   const latencies: LatencySample[] = []
   const recallResults: RecallResult[] = []
   try {
-    for (const fixture of fixtures) {
-      const rawText = extractAllText(fixture.messages)
-      const sessionId = `eval-${fixture.name}-d`
-      const rewritten = await rewriteToolParts(
-        rtk,
-        cloneMessagesForSession(fixture.messages, sessionId),
-        sessionId,
-      )
-      const params = {
-        ...fixturesToHeadroomParams(fixture, options.contextWindowTokens),
-        sessionId,
-        messages: rewritten.messages,
-      }
-      options.observe?.({
-        type: "headroom-input",
-        group: "D",
-        fixture: fixture.name,
-        messages: cloneMessages(rewritten.messages),
-      })
+    const headroom = await HeadroomClient.connect(headroomOptions(options, dataDir))
+    try {
+      for (const fixture of fixtures) {
+        const rawText = extractAllText(fixture.messages)
+        const sessionId = `eval-${fixture.name}-d`
+        const rewritten = await rewriteToolParts(
+          rtk,
+          cloneMessagesForSession(fixture.messages, sessionId),
+          sessionId,
+          options.rtkMinBytes ?? 512,
+        )
+        const params = {
+          ...fixturesToHeadroomParams(fixture, options.contextWindowTokens),
+          sessionId,
+          messages: rewritten.messages,
+        }
+        options.observe?.({
+          type: "headroom-input",
+          group: "D",
+          fixture: fixture.name,
+          messages: cloneMessages(rewritten.messages),
+        })
 
-      let result: HeadroomCompressResult | null = null
-      let finalMessages = rewritten.messages
-      let degradedReason = rewritten.degradedReason
-      const started = performance.now()
-      try {
-        result = await headroom.compress(params)
-        const materialized = materializeHeadroomResult(rewritten.messages, result)
-        finalMessages = materialized.messages
-        if (!materialized.valid) degradedReason = "protocol"
-      } catch {
-        degradedReason ??= "crash"
-      }
-      const headroomLatencyMs = performance.now() - started
-      const outputText = extractAllText(finalMessages)
-      const [rtkRecovery, headroomEvidence] = await Promise.all([
-        recoverRtkArchives(rtk, sessionId, rewritten.archivedHashes),
-        gatherHeadroomEvidence(headroom, sessionId, result, fixture),
-      ])
-      const archiveRecovery = {
-        found: rtkRecovery.found + headroomEvidence.archiveRecovery.found,
-        total: rtkRecovery.total + headroomEvidence.archiveRecovery.total,
-      }
-      const recall = evaluateRecall(
-        fixture,
-        "D",
-        outputText,
-        headroomEvidence.queryMatches,
-        archiveRecovery,
-      )
-      const latencyMs = rewritten.latencyMs + headroomLatencyMs
-      perFixture.push(
-        buildPerFixtureRecord(
+        let result: HeadroomCompressResult | null = null
+        let finalMessages = rewritten.messages
+        let degradedReason = rewritten.degradedReason
+        const started = performance.now()
+        try {
+          result = await headroom.compress(params)
+          const materialized = materializeHeadroomResult(rewritten.messages, result)
+          finalMessages = materialized.messages
+          if (!materialized.valid) degradedReason = "protocol"
+        } catch {
+          degradedReason ??= "crash"
+        }
+        const headroomLatencyMs = performance.now() - started
+        const outputText = extractAllText(finalMessages)
+        const [rtkRecovery, headroomEvidence] = await Promise.all([
+          recoverRtkArchives(rtk, sessionId, rewritten.expectedArchivedHashes),
+          gatherHeadroomEvidence(
+            headroom,
+            sessionId,
+            result,
+            fixture,
+            rewritten.messages,
+            params.retainRecentTurns ?? 4,
+          ),
+        ])
+        const archiveRecovery = {
+          found: rtkRecovery.found + headroomEvidence.archiveRecovery.found,
+          total: rtkRecovery.total + headroomEvidence.archiveRecovery.total,
+        }
+        const recall = evaluateRecall(
           fixture,
           "D",
-          rawText,
           outputText,
-          latencyMs,
-          recall,
-          degradedReason,
-        ),
-      )
-      latencies.push({ group: "D", fixture: fixture.name, latencyMs })
-      recallResults.push(recall)
-      observeFinal(options, "D", fixture.name, finalMessages, outputText)
+          headroomEvidence.queryMatches,
+          archiveRecovery,
+        )
+        const latencyMs = rewritten.latencyMs + headroomLatencyMs
+        perFixture.push(
+          buildPerFixtureRecord(
+            fixture,
+            "D",
+            rawText,
+            outputText,
+            latencyMs,
+            recall,
+            degradedReason,
+          ),
+        )
+        latencies.push({ group: "D", fixture: fixture.name, latencyMs })
+        recallResults.push(recall)
+        observeFinal(options, "D", fixture.name, finalMessages, outputText)
+      }
+    } finally {
+      await headroom.close()
     }
   } finally {
     await rtk.shutdown()
-    await headroom.close()
   }
   return { perFixture, latencies, recallResults }
 }

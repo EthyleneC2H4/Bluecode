@@ -48,8 +48,7 @@ export function parseArgs(argv: string[]): CliOptions {
         options.help = true
         break
       default:
-        console.error(`Unknown argument: ${arg}`)
-        options.help = true
+        throw new Error(`Unknown argument: ${arg}`)
     }
   }
   return options
@@ -57,6 +56,9 @@ export function parseArgs(argv: string[]): CliOptions {
 
 /** Baseline operations always evaluate now; quick mode may never freeze a baseline. */
 export function resolveExecution(options: CliOptions): EvaluationExecution {
+  if (options.check && options.updateBaseline) {
+    throw new Error("--check cannot be combined with --update-baseline")
+  }
   if (options.updateBaseline && options.quick) {
     throw new Error("--quick cannot be combined with --update-baseline")
   }
@@ -82,7 +84,13 @@ Options:
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<number> {
-  const options = parseArgs(argv)
+  let options: CliOptions
+  try {
+    options = parseArgs(argv)
+  } catch (error) {
+    console.error(`[eval] ERROR: ${(error as Error).message}`)
+    return 1
+  }
   if (options.help) {
     printHelp()
     return 0

@@ -25,4 +25,14 @@ describe("eval CLI execution mode", () => {
       action: "report",
     })
   })
+
+  test("unknown arguments are rejected instead of becoming successful help", () => {
+    expect(() => parseArgs(["--chek"])).toThrow("Unknown argument: --chek")
+  })
+
+  test("--check and --update-baseline are mutually exclusive", () => {
+    expect(() => resolveExecution(parseArgs(["--check", "--update-baseline"]))).toThrow(
+      "cannot be combined",
+    )
+  })
 })

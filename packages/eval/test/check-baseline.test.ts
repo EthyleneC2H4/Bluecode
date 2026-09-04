@@ -46,14 +46,29 @@ function groupMetrics(overrides: Partial<GroupMetrics>): GroupMetrics {
   };
 }
 
-function makeReport(opts: { dRatio?: number; mustHitRate?: number; p95?: number }): FullReport {
+function makeReport(opts: {
+  dRatio?: number;
+  mustHitRate?: number;
+  p95?: number;
+  archiveFound?: number;
+  archiveTotal?: number;
+}): FullReport {
   const groups = {} as FullReport["groups"];
   for (const g of ["A", "B", "C", "D"] as const) {
     groups[g] = groupMetrics({
       compressionRatio: opts.dRatio ?? 0.5,
       latencyP95Ms: opts.p95 ?? 100,
       ...(g !== "A"
-        ? { contextRecall: { mustHit: { found: 2, total: 2, rate: opts.mustHitRate ?? 1 }, niceToHave: { found: 1, total: 1, rate: 1 } } }
+        ? {
+            contextRecall: { mustHit: { found: 2, total: 2, rate: opts.mustHitRate ?? 1 }, niceToHave: { found: 1, total: 1, rate: 1 } },
+            archiveRecovery: {
+              found: opts.archiveFound ?? 10,
+              total: opts.archiveTotal ?? 10,
+              rate: (opts.archiveTotal ?? 10) > 0
+                ? (opts.archiveFound ?? 10) / (opts.archiveTotal ?? 10)
+                : 1,
+            },
+          }
         : {}),
     });
   }
@@ -139,6 +154,14 @@ describe("check-baseline gate logic", () => {
     expect(v.length).toBe(3); // B, C, D all decline
   });
 
+  test("archive recovery cannot pass by collapsing a non-empty baseline to 0/0", () => {
+    fs.writeFileSync(BASELINE_PATH, JSON.stringify(makeReport({})));
+    writeReport(makeReport({ archiveFound: 0, archiveTotal: 0 }));
+    const r = checkBaseline(false);
+    expect(r.passed).toBe(false);
+    expect(r.violations.filter((x) => x.metric === "archiveRecoveryTotal")).toHaveLength(3);
+  });
+
   test("p95 latency beyond 2x baseline fails", () => {
     fs.writeFileSync(BASELINE_PATH, JSON.stringify(makeReport({})));
     writeReport(makeReport({ p95: 300 }));
@@ -146,6 +169,14 @@ describe("check-baseline gate logic", () => {
     expect(r.passed).toBe(false);
     const v = r.violations.filter((x) => x.metric === "latencyP95");
     expect(v.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("sub-millisecond p95 noise does not fail only because its ratio is large", () => {
+    fs.writeFileSync(BASELINE_PATH, JSON.stringify(makeReport({ p95: 0.03 })));
+    writeReport(makeReport({ p95: 0.18 }));
+    const r = checkBaseline(false);
+    expect(r.passed).toBe(true);
+    expect(r.violations.filter((x) => x.metric === "latencyP95")).toEqual([]);
   });
 
   test("combined violations are listed together, not short-circuited", () => {
