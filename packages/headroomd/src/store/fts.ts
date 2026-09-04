@@ -117,6 +117,18 @@ export function insertChunk(db: Database, chunk: InsertChunkInput): void {
       segmentForIndex(input.rawExcerpt),
       segmentForIndex(input.keywords),
     );
+    db.prepare(
+      `INSERT OR IGNORE INTO chunk_refs(
+         project_id, session_id, history_hash, content_hash, role, turn_index
+       ) VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(
+      input.projectId,
+      input.sessionId,
+      input.historyHash,
+      input.contentHash,
+      input.role,
+      input.turnIndex,
+    );
   });
   write(chunk);
 }
@@ -147,18 +159,31 @@ export function searchChunks(
 ): SearchHit[] {
   const rows = db
     .prepare(
-      `SELECT c.content_hash AS hash, c.project_id AS projectId, c.session_id AS sessionId,
-              c.turn_index AS turnIndex, c.role AS role,
+      `WITH namespace_refs AS (
+         SELECT content_hash, MIN(turn_index) AS turnIndex, MIN(role) AS role
+         FROM chunk_refs
+         WHERE project_id = ? AND session_id = ?
+         GROUP BY content_hash
+       )
+       SELECT c.content_hash AS hash, ? AS projectId, ? AS sessionId,
+              r.turnIndex AS turnIndex, r.role AS role,
               snippet(chunks_fts, 2, '[', ']', '…', 12) AS snip,
               bm25(chunks_fts) AS score
        FROM chunks_fts
        JOIN chunks c ON c.content_hash = chunks_fts.content_hash
+       JOIN namespace_refs r ON r.content_hash = c.content_hash
        WHERE chunks_fts MATCH ?
-         AND c.project_id = ? AND c.session_id = ?
        ORDER BY score
        LIMIT ?`,
     )
-    .all(matchExpression, namespace.projectId, namespace.sessionId, limit) as Array<{
+    .all(
+      namespace.projectId,
+      namespace.sessionId,
+      namespace.projectId,
+      namespace.sessionId,
+      matchExpression,
+      limit,
+    ) as Array<{
     hash: string;
     projectId: string;
     sessionId: string;

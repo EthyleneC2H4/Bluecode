@@ -425,6 +425,37 @@ describe("indexLooksLost failure shapes", () => {
     expect(indexLooksLost(handle, meta)).toBe(false);
   });
 
+  test("duplicate archive occurrences do not cause perpetual rebuilds", async () => {
+    const { meta, index: handle } = await freshDb("duplicate-refs");
+    const hash = "duplicate".padEnd(64, "d");
+    for (let msgSeq = 0; msgSeq < 3; msgSeq++) {
+      insertCasMeta(meta, {
+        hash,
+        projectId: "p",
+        sessionId: "s",
+        role: "user",
+        turnIndex: msgSeq,
+        msgSeq,
+        historyHash: "hh",
+        createdAt: 1,
+      });
+    }
+    insertChunk(handle.db, {
+      contentHash: hash,
+      projectId: "p",
+      sessionId: "s",
+      role: "user",
+      turnIndex: 0,
+      historyHash: "hh",
+      summaryText: "duplicate",
+      rawExcerpt: "duplicate",
+      keywords: "duplicate",
+    });
+    record(handle, 1, 0);
+
+    expect(indexLooksLost(handle, meta)).toBe(false);
+  });
+
   test("legacy single-column rebuild_state is migrated away on reopen", async () => {
     const { dir } = await freshDb("migrate");
     const indexPath = path.join(dir, "index.db");

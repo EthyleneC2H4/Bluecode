@@ -4,7 +4,7 @@
  * contract (delete index.db -> auto rebuild -> identical answers).
  */
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtemp, readdir, rm, stat, unlink, chmod, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat, unlink, chmod, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ChatMessage } from "@bluecode/contracts";
@@ -258,6 +258,76 @@ describe("engine retrieve", () => {
     ).toEqual({ found: false });
   });
 
+  test("identical forked histories remain recoverable in each session namespace", async () => {
+    const { engine } = await freshEngine();
+    const messages = history(8);
+    const first = await engine.compress({ ...BASE_PARAMS, messages });
+    const second = await engine.compress({
+      ...BASE_PARAMS,
+      sessionId: "s2",
+      messages,
+    });
+
+    expect(first.compacted).toBe(true);
+    expect(second.compacted).toBe(true);
+    expect(second.historyHash).toBe(first.historyHash);
+
+    for (const [sessionId, result] of [
+      ["s1", first],
+      ["s2", second],
+    ] as const) {
+      const restored = await engine.retrieve({
+        namespace: { projectId: "p1", sessionId },
+        historyHash: result.historyHash!,
+        limit: 50,
+      });
+      if (!("found" in restored) || !restored.found || !("items" in restored)) {
+        throw new Error(`expected recoverable history for ${sessionId}`);
+      }
+      expect(restored.items.map((item) => item.contentHash)).toEqual(
+        result.refs.map((ref) => ref.contentHash),
+      );
+      expect(restored.partial).toBe(false);
+    }
+
+    const forkQuery = await engine.retrieve({
+      namespace: { projectId: "p1", sessionId: "s2" },
+      query: "alpha",
+    });
+    if (!("hits" in forkQuery)) throw new Error("expected fork query hits");
+    expect(forkQuery.hits.length).toBeGreaterThan(0);
+  });
+
+  test("overlapping incremental histories remain complete in one session", async () => {
+    const { engine } = await freshEngine();
+    const first = await engine.compress({ ...BASE_PARAMS, messages: history(4) });
+    const second = await engine.compress({ ...BASE_PARAMS, messages: history(5) });
+    expect(first.compacted).toBe(true);
+    expect(second.compacted).toBe(true);
+    expect(second.historyHash).not.toBe(first.historyHash);
+
+    const restored = await engine.retrieve({
+      namespace: { projectId: "p1", sessionId: "s1" },
+      historyHash: second.historyHash!,
+      limit: 50,
+    });
+    if (!("found" in restored) || !restored.found || !("items" in restored)) {
+      throw new Error("expected complete incremental history");
+    }
+    expect(restored.items.map((item) => item.contentHash)).toEqual(
+      second.refs.map((ref) => ref.contentHash),
+    );
+    expect(restored.partial).toBe(false);
+
+    const query = await engine.retrieve({
+      namespace: { projectId: "p1", sessionId: "s1" },
+      query: "alpha",
+      limit: 50,
+    });
+    if (!("hits" in query)) throw new Error("expected incremental query hits");
+    expect(new Set(query.hits.map((hit) => hit.hash)).size).toBe(query.hits.length);
+  });
+
   test("by-history reports missing and corrupt objects as a partial page", async () => {
     const { dir, engine } = await freshEngine();
     const compressed = await engine.compress({ ...BASE_PARAMS, messages: history(6) });
@@ -392,6 +462,44 @@ describe("rebuild consistency (mandatory)", () => {
       hash: compressed.refs[refIndex]!.contentHash,
     });
     expect(byHash).toEqual({ found: true, content: expect.any(String) });
+  });
+
+  test("rebuild preserves fork and incremental archive associations", async () => {
+    const { dir, engine } = await freshEngine();
+    const forkHistory = history(4);
+    const first = await engine.compress({ ...BASE_PARAMS, messages: forkHistory });
+    const fork = await engine.compress({ ...BASE_PARAMS, sessionId: "s2", messages: forkHistory });
+    const incremental = await engine.compress({ ...BASE_PARAMS, messages: history(5) });
+    const indexPath = path.join(dir, "index.db");
+    const staleWal = await readFile(`${indexPath}-wal`);
+    const staleShm = await readFile(`${indexPath}-shm`);
+    engine.close();
+    await unlink(indexPath);
+    // The derived database is documented as independently deletable. Simulate
+    // a crash/filesystem cleanup that removes only the main file while stale
+    // SQLite sidecars survive; startup must discard those derived sidecars.
+    await writeFile(`${indexPath}-wal`, staleWal);
+    await writeFile(`${indexPath}-shm`, staleShm);
+
+    const revived = await createEngine({ dataDir: dir });
+    engines.push(revived);
+    for (const [sessionId, result] of [
+      ["s1", first],
+      ["s2", fork],
+      ["s1", incremental],
+    ] as const) {
+      const restored = await revived.retrieve({
+        namespace: { projectId: "p1", sessionId },
+        historyHash: result.historyHash!,
+        limit: 50,
+      });
+      if (!("found" in restored) || !restored.found || !("items" in restored)) {
+        throw new Error(`expected rebuilt history for ${sessionId}`);
+      }
+      expect(restored.items.map((item) => item.contentHash)).toEqual(
+        result.refs.map((ref) => ref.contentHash),
+      );
+    }
   });
 });
 

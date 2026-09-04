@@ -12,6 +12,7 @@
  * Both run WAL + NORMAL synchronous.
  */
 import { Database } from "bun:sqlite";
+import { existsSync, rmSync } from "node:fs";
 import type { ChatMessage } from "@bluecode/contracts";
 import { estimateTokens } from "@bluecode/shared";
 import { readMessageObject } from "./objects";
@@ -45,6 +46,19 @@ CREATE TABLE IF NOT EXISTS cas_meta(
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS cas_meta_session ON cas_meta(project_id, session_id);
+CREATE TABLE IF NOT EXISTS archive_refs(
+  project_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  history_hash TEXT NOT NULL,
+  msg_seq INTEGER NOT NULL,
+  hash TEXT NOT NULL,
+  role TEXT NOT NULL,
+  turn_index INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (project_id, session_id, history_hash, msg_seq)
+);
+CREATE INDEX IF NOT EXISTS archive_refs_hash
+  ON archive_refs(project_id, session_id, hash);
 `;
 
 /** Single source of truth for the heal-bookkeeping table (schema + migration). */
@@ -74,6 +88,17 @@ CREATE TABLE IF NOT EXISTS chunks(
   raw_excerpt TEXT NOT NULL,
   keywords TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS chunk_refs(
+  project_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  history_hash TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  role TEXT NOT NULL,
+  turn_index INTEGER NOT NULL,
+  PRIMARY KEY (project_id, session_id, history_hash, content_hash)
+);
+CREATE INDEX IF NOT EXISTS chunk_refs_session
+  ON chunk_refs(project_id, session_id, content_hash);
 -- One-row heal bookkeeping from the last full rebuild:
 --   expected_chunks — chunk rows the rebuild wrote;
 --   skipped         — cas_meta rows it could NOT index (object missing or
@@ -101,14 +126,40 @@ function openDbWith(path: string, schema: string): HeadroomDb {
 }
 
 export function openMetaDb(path: string): HeadroomDb {
-  return openDbWith(path, META_SCHEMA);
+  const handle = openDbWith(path, META_SCHEMA);
+  // Additive compatibility backfill: old v1 databases only have cas_meta.
+  // Keep that object ledger intact and derive one archive occurrence for
+  // every legacy row; no destructive table migration is required.
+  handle.db.exec(`
+    INSERT OR IGNORE INTO archive_refs(
+      project_id, session_id, history_hash, msg_seq,
+      hash, role, turn_index, created_at
+    )
+    SELECT project_id, session_id, history_hash, msg_seq,
+           hash, role, turn_index, created_at
+    FROM cas_meta
+  `);
+  return handle;
 }
 
 export function openIndexDb(path: string): HeadroomDb {
+  // index.db is entirely derived. If only its main file was removed, SQLite
+  // must not replay stale WAL/SHM pages against the newly created database.
+  if (!existsSync(path)) {
+    rmSync(`${path}-wal`, { force: true });
+    rmSync(`${path}-shm`, { force: true });
+  }
   const handle = openDbWith(path, INDEX_SCHEMA);
   handle.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     content_hash UNINDEXED, summary_text, raw_excerpt, keywords
   )`);
+  handle.db.exec(`
+    INSERT OR IGNORE INTO chunk_refs(
+      project_id, session_id, history_hash, content_hash, role, turn_index
+    )
+    SELECT project_id, session_id, history_hash, content_hash, role, turn_index
+    FROM chunks
+  `);
   migrateRebuildState(handle.db);
   return handle;
 }
@@ -196,6 +247,23 @@ export function insertCasMeta(handle: HeadroomDb, meta: CasMetaInput): void {
       meta.historyHash,
       meta.createdAt,
     );
+  handle.db
+    .prepare(
+      `INSERT OR IGNORE INTO archive_refs(
+         project_id, session_id, history_hash, msg_seq,
+         hash, role, turn_index, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      meta.projectId,
+      meta.sessionId,
+      meta.historyHash,
+      meta.msgSeq,
+      meta.hash,
+      meta.role,
+      meta.turnIndex,
+      meta.createdAt,
+    );
 }
 
 export function countCasMeta(handle: HeadroomDb): number {
@@ -206,9 +274,28 @@ export function countCasMeta(handle: HeadroomDb): number {
 export function countSessions(handle: HeadroomDb): number {
   return (
     handle.db
-      .prepare(`SELECT COUNT(*) AS n FROM (SELECT DISTINCT project_id, session_id FROM cas_meta)`)
+      .prepare(`SELECT COUNT(*) AS n FROM (SELECT DISTINCT project_id, session_id FROM archive_refs)`)
       .get() as { n: number }
   ).n;
+}
+
+function countArchiveRefs(handle: HeadroomDb): number {
+  // chunk_refs deliberately deduplicates repeated occurrences of the same
+  // content inside one history; compare the equivalent logical cardinality.
+  return (
+    handle.db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM (
+           SELECT 1 FROM archive_refs
+           GROUP BY project_id, session_id, history_hash, hash
+         )`,
+      )
+      .get() as { n: number }
+  ).n;
+}
+
+function countChunkRefs(handle: HeadroomDb): number {
+  return (handle.db.prepare(`SELECT COUNT(*) AS n FROM chunk_refs`).get() as { n: number }).n;
 }
 
 export interface CasMetaPageRow {
@@ -227,7 +314,7 @@ export function ownsCasMeta(
   return (
     handle.db
       .prepare(
-        `SELECT 1 FROM cas_meta
+        `SELECT 1 FROM archive_refs
          WHERE project_id = ? AND session_id = ? AND hash = ?`,
       )
       .get(namespace.projectId, namespace.sessionId, hash) !== null
@@ -242,7 +329,7 @@ export function hasHistoryMeta(
   return (
     handle.db
       .prepare(
-        `SELECT 1 FROM cas_meta
+        `SELECT 1 FROM archive_refs
          WHERE project_id = ? AND session_id = ? AND history_hash = ? LIMIT 1`,
       )
       .get(namespace.projectId, namespace.sessionId, historyHash) !== null
@@ -260,7 +347,7 @@ export function listHistoryMeta(
   return handle.db
     .prepare(
       `SELECT hash, role, turn_index AS turnIndex, msg_seq AS msgSeq
-       FROM cas_meta
+       FROM archive_refs
        WHERE project_id = ? AND session_id = ? AND history_hash = ?
        ORDER BY msg_seq ASC
        LIMIT ? OFFSET ?`,
@@ -317,6 +404,28 @@ export function hasChunk(handle: HeadroomDb, contentHash: string): boolean {
   );
 }
 
+export function hasChunkRef(
+  handle: HeadroomDb,
+  namespace: { projectId: string; sessionId: string },
+  historyHash: string,
+  contentHash: string,
+): boolean {
+  return (
+    handle.db
+      .prepare(
+        `SELECT 1 FROM chunk_refs
+         WHERE project_id = ? AND session_id = ?
+           AND history_hash = ? AND content_hash = ?`,
+      )
+      .get(
+        namespace.projectId,
+        namespace.sessionId,
+        historyHash,
+        contentHash,
+      ) !== null
+  );
+}
+
 export function countChunks(handle: HeadroomDb): number {
   return (handle.db.prepare(`SELECT COUNT(*) AS n FROM chunks`).get() as { n: number }).n;
 }
@@ -343,10 +452,16 @@ export function indexLooksLost(indexHandle: HeadroomDb, metaHandle: HeadroomDb):
     .prepare(`SELECT expected_chunks AS expectedChunks, skipped FROM rebuild_state`)
     .get() as { expectedChunks: number; skipped: number } | null;
   if (recorded === null) {
-    return countCasMeta(metaHandle) > 0 && countChunks(indexHandle) < countCasMeta(metaHandle);
+    return (
+      (countCasMeta(metaHandle) > 0 && countChunks(indexHandle) < countCasMeta(metaHandle)) ||
+      countChunkRefs(indexHandle) < countArchiveRefs(metaHandle)
+    );
   }
   const chunks = countChunks(indexHandle);
-  return chunks < recorded.expectedChunks || chunks + recorded.skipped < countCasMeta(metaHandle);
+  return (
+    chunks < recorded.expectedChunks ||
+    countChunkRefs(indexHandle) + recorded.skipped < countArchiveRefs(metaHandle)
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -388,28 +503,32 @@ export async function rebuildFromObjects(
   const metas = metaHandle.db
     .prepare(
       `SELECT hash, project_id, session_id, role, turn_index, msg_seq, history_hash, created_at
-       FROM cas_meta ORDER BY project_id, session_id, msg_seq`,
+       FROM archive_refs ORDER BY project_id, session_id, history_hash, msg_seq`,
     )
     .all() as CasMetaRow[];
 
   const resolved: Array<{ meta: CasMetaRow; message: ChatMessage }> = [];
-  let skipped = 0;
+  const skippedRefs = new Set<string>();
   for (const meta of metas) {
+    const refKey = JSON.stringify([
+      meta.project_id,
+      meta.session_id,
+      meta.history_hash,
+      meta.hash,
+    ]);
     try {
       const projection = await readMessageObject(dataDir, meta.hash);
       if (projection === null) {
-        // Vanished object: cas_meta outlives it. Deliberately not warned
-        // (unlike the corrupt branch), but COUNTED — `skipped` means "cas_meta
-        // rows this rebuild could not index", and recording the full permanent
-        // gap is what lets indexLooksLost converge instead of heal-thrashing.
-        skipped += 1;
+        // Vanished object: archive_refs outlives it. Deliberately not warned
+        // (unlike the corrupt branch), but COUNTED once per logical chunk ref.
+        skippedRefs.add(refKey);
         continue;
       }
       resolved.push({ meta, message: { info: projection.info, parts: projection.parts } });
     } catch (err) {
       // Corrupt stored object: degrade to "one item lost" instead of aborting
       // the whole heal. Named hash + error keeps divergence diagnosable.
-      skipped += 1;
+      skippedRefs.add(refKey);
       console.warn(
         `[headroomd] rebuild: skipping corrupt object ${meta.hash}: ${
           err instanceof Error ? err.message : String(err)
@@ -417,6 +536,7 @@ export async function rebuildFromObjects(
       );
     }
   }
+  const skipped = skippedRefs.size;
 
   const chunkWrites: Parameters<typeof insertChunk>[1][] = [];
   const groups = new Map<
@@ -477,9 +597,11 @@ export async function rebuildFromObjects(
     });
   }
 
+  const expectedChunks = new Set(chunkWrites.map((chunk) => chunk.contentHash)).size;
   const apply = indexHandle.db.transaction(() => {
     indexHandle.db.exec("DELETE FROM chunks");
     indexHandle.db.exec("DELETE FROM chunks_fts");
+    indexHandle.db.exec("DELETE FROM chunk_refs");
     indexHandle.db.exec("DELETE FROM histories");
     for (const chunk of chunkWrites) insertChunk(indexHandle.db, chunk);
     for (const write of historyWrites) {
@@ -497,9 +619,9 @@ export async function rebuildFromObjects(
     indexHandle.db.exec("DELETE FROM rebuild_state");
     indexHandle.db
       .prepare(`INSERT INTO rebuild_state(expected_chunks, skipped) VALUES (?, ?)`)
-      .run(chunkWrites.length, skipped);
+      .run(expectedChunks, skipped);
   });
   apply();
 
-  return { chunks: chunkWrites.length, histories: historyWrites.length, skipped };
+  return { chunks: expectedChunks, histories: historyWrites.length, skipped };
 }

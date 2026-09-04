@@ -111,7 +111,9 @@ export async function turnHashes(turns: Turn[]): Promise<string[][]> {
   const out: string[][] = [];
   for (const turn of turns) {
     const hashes: string[] = [];
-    for (const message of turn.messages) hashes.push(await contentHash(message));
+    for (const message of turn.messages) {
+      hashes.push(await contentHash(message));
+    }
     out.push(hashes);
   }
   return out;

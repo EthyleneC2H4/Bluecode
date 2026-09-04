@@ -27,6 +27,7 @@ import {
   getHistory,
   hasHistoryMeta,
   hasChunk,
+  hasChunkRef,
   indexLooksLost,
   insertCasMeta,
   listHistoryMeta,
@@ -222,7 +223,9 @@ async function planArchive(
 ): Promise<ArchivePlan> {
   const messages = oldTurns.flatMap((turn) => turn.messages);
   const hashes: string[] = [];
-  for (const message of messages) hashes.push(await hashMessage(message));
+  for (const message of messages) {
+    hashes.push(await hashMessage(message));
+  }
   const historyHashValue = await hashHistory(oldTurns);
 
   const existing = getHistory(store.index, historyHashValue);
@@ -327,9 +330,22 @@ async function backfill(
   sessionId: string,
   facts: RowFacts,
 ): Promise<void> {
-  let rowsComplete = true;
+  const namespace = { projectId, sessionId };
+  const metaRows = listHistoryMeta(
+    store.meta,
+    namespace,
+    facts.historyHashValue,
+    0,
+    facts.hashes.length + 1,
+  );
+  let rowsComplete =
+    metaRows.length === facts.hashes.length &&
+    metaRows.every((row, index) => row.hash === facts.hashes[index]);
   for (const hash of facts.hashes) {
-    if (!hasChunk(store.index, hash)) {
+    if (
+      !hasChunk(store.index, hash) ||
+      !hasChunkRef(store.index, namespace, facts.historyHashValue, hash)
+    ) {
       rowsComplete = false;
       break;
     }
@@ -498,7 +514,10 @@ async function retrieve(
 }
 
 /** Missing, unreadable or logically mismatched objects are never returned. */
-async function readValidProjection(dataDir: string, hash: string) {
+async function readValidProjection(
+  dataDir: string,
+  hash: string,
+) {
   try {
     const projection = await readMessageObject(dataDir, hash);
     if (projection === null) return null;

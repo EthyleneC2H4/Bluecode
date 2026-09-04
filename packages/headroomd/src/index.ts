@@ -14,7 +14,7 @@ export {
 } from "./engine";
 export { startHeadroomServer, type HeadroomServerOptions, type HeadroomServerStart } from "./server";
 export { HeadroomClient, type HeadroomClientOptions } from "./client";
-export { COMPACTION_MARKER } from "./turns";
+export { COMPACTION_MARKER, contentHash } from "./turns";
 export {
   buildReplacementMessage,
   buildReplacementText,
