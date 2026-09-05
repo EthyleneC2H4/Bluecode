@@ -254,6 +254,12 @@ test("absolute handshake deadline cannot be extended by drip-fed data", async ()
   const socketPath = path.join(root, "drip.sock")
   const server = net.createServer((s) => {
     const timer = setInterval(() => s.write(" "), 30)
+    // Deadline expiry closes the peer while the drip timer may still write.
+    // Those disconnect errors belong to this fixture, not to the client.
+    s.on("error", (error: NodeJS.ErrnoException) => {
+      clearInterval(timer)
+      if (error.code !== "EPIPE" && error.code !== "ECONNRESET") throw error
+    })
     s.on("close", () => clearInterval(timer))
   })
   await new Promise<void>((r) => server.listen(socketPath, r))
@@ -262,7 +268,9 @@ test("absolute handshake deadline cannot be extended by drip-fed data", async ()
     await expect(attemptConnect(socketPath)).rejects.toThrow(/timeout/)
     expect(Date.now() - start).toBeLessThan(1400)
   } finally {
-    server.close()
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    )
   }
 })
 test("daemon rejects coalesced requests beyond admission capacity", async () => {
