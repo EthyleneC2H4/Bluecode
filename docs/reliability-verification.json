@@ -1,0 +1,83 @@
+{
+  "date": "2026-09-05",
+  "platform": "Darwin arm64",
+  "branch": "codex/rtk-headroom-reliability",
+  "baselineCommit": "7aed67d",
+  "runtime": {
+    "node": "v26.3.0",
+    "bun": "1.4.0"
+  },
+  "checks": [
+    {
+      "command": "bun install --frozen-lockfile",
+      "exitCode": 0
+    },
+    {
+      "command": "bun run verify",
+      "exitCode": 0,
+      "tests": 473,
+      "failed": 0,
+      "assertions": 4681,
+      "files": 60,
+      "seconds": 44.32,
+      "includes": [
+        "strict workspace typecheck",
+        "dependency direction (7 packages)",
+        "host bundle excludes bun:sqlite"
+      ]
+    },
+    {
+      "command": "bun run packages/eval/src/cli.ts --update-baseline --benchmarks --report-path .superpowers/sdd/2026-09-05-reliability/final-report.json",
+      "exitCode": 0
+    },
+    {
+      "command": "bun run eval --check --skip-latency --report-path <isolated-report>",
+      "exitCode": 0
+    },
+    {
+      "command": "bun run packages/eval/src/cli.ts --invariants --retrieval-strategy eager-recovery --report-path packages/eval/evidence/eager-recovery.json",
+      "exitCode": 1,
+      "expected": true,
+      "violations": [
+        "combinedNetInput"
+      ]
+    }
+  ],
+  "independentFinalReview": {
+    "criticalOpen": 0,
+    "importantOpen": 0,
+    "closed": [
+      "host visibility projection",
+      "factory dataDir wiring",
+      "rejected RTK create lifecycle",
+      "valid JSONL prefix before overflow"
+    ]
+  },
+  "defaultReplay": {
+    "timestamp": "2026-09-05T05:22:37.305Z",
+    "totalInputTokens": {
+      "A": 582501,
+      "B": 464781,
+      "C": 529923,
+      "D": 435436
+    },
+    "combinedReduction": 0.2524716695765329
+  },
+  "eagerReplay": {
+    "timestamp": "2026-09-05T05:24:12.300Z",
+    "totalInputTokens": {
+      "A": 582501,
+      "B": 464781,
+      "C": 636410,
+      "D": 542029
+    },
+    "combinedReduction": 0.06947970904770984
+  },
+  "limitations": [
+    "Synthetic deterministic replay, not provider usage or LLM task accuracy",
+    "Linux CI configured but not executed locally",
+    "Relative latency gate intentionally skipped; timings still recorded",
+    "RSS measures harness process only; RTK soft deadlines may degrade under load"
+  ],
+  "aiAssisted": true
+}

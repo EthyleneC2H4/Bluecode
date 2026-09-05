@@ -5,26 +5,25 @@
  * byte-for-byte identical. Each fixture contains "golden facts" (must-hit /
  * nice-to-have) that must survive compression or be retrievable from headroomd.
  */
-import {
-  type ChatMessage,
-  type HeadroomCompressParams,
-} from "@bluecode/contracts";
+import { type ChatMessage, type HeadroomCompressParams } from "@bluecode/contracts"
 
 export interface FixtureSample {
-  name: string;
-  description: string;
-  messages: ChatMessage[];
+  name: string
+  description: string
+  messages: ChatMessage[]
   goldenFacts: {
-    mustHit: string[];
-    niceToHave: string[];
-  };
+    mustHit: string[]
+    niceToHave: string[]
+  }
   /** Expected raw token count (o200k_base) for quick verification. */
-  expectedRawTokens?: number;
+  expectedRawTokens?: number
+  criticalFacts?: string[]
+  questions?: Array<{ question: string; query: string; expected: string[] }>
 }
 
 export interface FixtureSet {
-  longSession: FixtureSample;
-  toolOutputs: FixtureSample[];
+  longSession: FixtureSample
+  toolOutputs: FixtureSample[]
 }
 
 const TOOL_OUTPUT_POOL = {
@@ -54,7 +53,7 @@ const TOOL_OUTPUT_POOL = {
 
   // Backspace corruption variant
   backspaceCorruption: generateBackspaceCorruption(),
-};
+}
 
 /**
  * Deterministic PRNG (mulberry32). TOOL_OUTPUT_POOL is built once at module
@@ -64,29 +63,31 @@ const TOOL_OUTPUT_POOL = {
  * every build byte-for-byte reproducible.
  */
 function seededRandom(seed: number): () => number {
-  let state = seed >>> 0;
+  let state = seed >>> 0
   return () => {
-    state = (state + 0x6d2b79f5) | 0;
-    let t = Math.imul(state ^ (state >>> 15), 1 | state);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+    state = (state + 0x6d2b79f5) | 0
+    let t = Math.imul(state ^ (state >>> 15), 1 | state)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
 }
 
 function generateLsOutput(): string {
-  const rand = seededRandom(0x1a2b3c);
-  const lines: string[] = ["total 123456"];
+  const rand = seededRandom(0x1a2b3c)
+  const lines: string[] = ["total 123456"]
   for (let i = 0; i < 220; i++) {
-    const perms = i % 2 === 0 ? "drwxr-xr-x" : "-rw-r--r--";
-    const size = Math.floor(rand() * 10000) + 100;
-    const name = `file_${i.toString().padStart(4, "0")}.${i % 3 === 0 ? "ts" : i % 3 === 1 ? "json" : "md"}`;
-    lines.push(`${perms}  2 user  staff  ${size}  Aug 22 10:00 ${name}`);
+    const perms = i % 2 === 0 ? "drwxr-xr-x" : "-rw-r--r--"
+    const size = Math.floor(rand() * 10000) + 100
+    const name = `file_${i.toString().padStart(4, "0")}.${
+      i % 3 === 0 ? "ts" : i % 3 === 1 ? "json" : "md"
+    }`
+    lines.push(`${perms}  2 user  staff  ${size}  Aug 22 10:00 ${name}`)
   }
-  return lines.join("\n");
+  return lines.join("\n")
 }
 
 function generateGrepOutput(): string {
-  const rand = seededRandom(0x4d5e6f);
+  const rand = seededRandom(0x4d5e6f)
   const files = [
     "src/client.ts",
     "src/server.ts",
@@ -98,39 +99,56 @@ function generateGrepOutput(): string {
     "src/store/cas.ts",
     "test/client.test.ts",
     "test/server.test.ts",
-  ];
-  const patterns = ["compress", "fetch", "spawn", "timeout", "protocol", "degraded", "restart", "breaker", "handshake"];
-  const lines: string[] = [];
+  ]
+  const patterns = [
+    "compress",
+    "fetch",
+    "spawn",
+    "timeout",
+    "protocol",
+    "degraded",
+    "restart",
+    "breaker",
+    "handshake",
+  ]
+  const lines: string[] = []
 
   for (const file of files) {
     for (const pattern of patterns) {
-      const lineNum = Math.floor(rand() * 500) + 1;
-      const context = `function ${pattern}Handler() { return process${pattern}(); }`;
-      lines.push(`${file}:${lineNum}:${context}`);
+      const lineNum = Math.floor(rand() * 500) + 1
+      const context = `function ${pattern}Handler() { return process${pattern}(); }`
+      lines.push(`${file}:${lineNum}:${context}`)
     }
   }
   // Add some extra lines to exceed 100
   for (let i = 0; i < 20; i++) {
-    lines.push(`src/utils.ts:${Math.floor(rand() * 200) + 1}:const ${i} = "extra";`);
+    lines.push(`src/utils.ts:${Math.floor(rand() * 200) + 1}:const ${i} = "extra";`)
   }
-  return lines.join("\n");
+  return lines.join("\n")
 }
 
 function generateReadOutput(): string {
-  const lines: string[] = [];
+  const lines: string[] = []
   for (let i = 1; i <= 300; i++) {
     if (i % 50 === 0) {
       // Token rides along on every 50th line too: the %30 tokens below skip
       // multiples of 50, so collectors anchoring on the 50-step grid would
       // otherwise reference facts (e.g. must-hit-150) that never exist.
-      lines.push(`${i.toString().padStart(4, " ")} | // GOLDEN FACT: critical error at line ${i} in function handleCompress [must-hit-${i}]`);
+      lines.push(
+        `${i
+          .toString()
+          .padStart(
+            4,
+            " "
+          )} | // GOLDEN FACT: critical error at line ${i} in function handleCompress [must-hit-${i}]`
+      )
     } else if (i % 30 === 0) {
-      lines.push(`${i.toString().padStart(4, " ")} | const GOLDEN_FACT_TOKEN = "must-hit-${i}";`);
+      lines.push(`${i.toString().padStart(4, " ")} | const GOLDEN_FACT_TOKEN = "must-hit-${i}";`)
     } else {
-      lines.push(`${i.toString().padStart(4, " ")} | const line${i} = "sample content ${i}";`);
+      lines.push(`${i.toString().padStart(4, " ")} | const line${i} = "sample content ${i}";`)
     }
   }
-  return lines.join("\n");
+  return lines.join("\n")
 }
 
 function generateGitDiff(): string {
@@ -172,7 +190,7 @@ index 3333333..4444444 100644
 +test("timeout returns passthrough", async () => {
 +    // ...
 +});
-`;
+`
 }
 
 function generateTestOutput(): string {
@@ -193,129 +211,199 @@ Test Suites: 1 failed, 4 passed
 Tests:       3 failed, 25 passed
 Snapshots:   0 total
 Time:        2.3s
-Ran all test suites.`;
+Ran all test suites.`
 }
 
 function generateNoiseText(): string {
   const words = [
-    "lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing", "elit",
-    "sed", "do", "eiusmod", "tempor", "incididunt", "ut", "labore", "et", "dolore",
-    "magna", "aliqua", "ut", "enim", "ad", "minim", "veniam", "quis", "nostrud",
-    "exercitation", "ullamco", "laboris", "nisi", "ut", "aliquip", "ex", "ea",
-    "commodo", "consequat", "duis", "aute", "irure", "dolor", "in", "reprehenderit",
-  ];
-  const rand = seededRandom(0xfeed);
-  const lines: string[] = [];
+    "lorem",
+    "ipsum",
+    "dolor",
+    "sit",
+    "amet",
+    "consectetur",
+    "adipiscing",
+    "elit",
+    "sed",
+    "do",
+    "eiusmod",
+    "tempor",
+    "incididunt",
+    "ut",
+    "labore",
+    "et",
+    "dolore",
+    "magna",
+    "aliqua",
+    "ut",
+    "enim",
+    "ad",
+    "minim",
+    "veniam",
+    "quis",
+    "nostrud",
+    "exercitation",
+    "ullamco",
+    "laboris",
+    "nisi",
+    "ut",
+    "aliquip",
+    "ex",
+    "ea",
+    "commodo",
+    "consequat",
+    "duis",
+    "aute",
+    "irure",
+    "dolor",
+    "in",
+    "reprehenderit",
+  ]
+  const rand = seededRandom(0xfeed)
+  const lines: string[] = []
   for (let i = 0; i < 500; i++) {
-    const lineWords = [];
+    const lineWords = []
     for (let j = 0; j < 20; j++) {
-      lineWords.push(words[Math.floor(rand() * words.length)]);
+      lineWords.push(words[Math.floor(rand() * words.length)])
     }
     // Sparse anchors on every 50th line: with zero embedded facts, recall
     // on this fixture is vacuous (nothing CAN survive) and the structure
     // invariant "every fixture has >= 1 must-hit" fails.
-    let line = lineWords.join(" ");
-    if (i % 50 === 0) line += ` GOLDEN FACT: noise-marker-${i}`;
-    lines.push(line);
+    let line = lineWords.join(" ")
+    if (i % 50 === 0) line += ` GOLDEN FACT: noise-marker-${i}`
+    lines.push(line)
   }
-  return lines.join("\n");
+  return lines.join("\n")
 }
 
 function generateAnsiColors(): string {
-  const colors = ["\x1b[31m", "\x1b[32m", "\x1b[33m", "\x1b[34m", "\x1b[35m", "\x1b[36m", "\x1b[0m"];
-  const lines: string[] = [];
+  const colors = ["\x1b[31m", "\x1b[32m", "\x1b[33m", "\x1b[34m", "\x1b[35m", "\x1b[36m", "\x1b[0m"]
+  const lines: string[] = []
   for (let i = 0; i < 100; i++) {
-    const color = colors[i % colors.length];
-    lines.push(`${color}[INFO] Processing item ${i}... GOLDEN FACT: ansi-marker-${i}\x1b[0m`);
+    const color = colors[i % colors.length]
+    lines.push(`${color}[INFO] Processing item ${i}... GOLDEN FACT: ansi-marker-${i}\x1b[0m`)
   }
-  return lines.join("\n");
+  return lines.join("\n")
 }
 
 function generateCarriageReturn(): string {
-  const lines: string[] = [];
+  const lines: string[] = []
   for (let i = 0; i <= 100; i += 10) {
-    lines.push(`\rProgress: [${"=".repeat(i / 10)}${" ".repeat(10 - i / 10)}] ${i}% GOLDEN FACT: progress-${i}`);
+    lines.push(
+      `\rProgress: [${"=".repeat(i / 10)}${" ".repeat(
+        10 - i / 10
+      )}] ${i}% GOLDEN FACT: progress-${i}`
+    )
   }
-  lines.push("\rProgress: [==========] 100% GOLDEN FACT: progress-complete");
-  return lines.join("");
+  lines.push("\rProgress: [==========] 100% GOLDEN FACT: progress-complete")
+  return lines.join("")
 }
 
 function generateBackspaceCorruption(): string {
-  let result = "";
+  let result = ""
   for (let i = 0; i < 50; i++) {
-    result += `Line ${i}: correct text`;
+    result += `Line ${i}: correct text`
     // Add backspace corruption
-    result += "\b\b\b\b\bcorrupted";
-    result += " GOLDEN FACT: backspace-marker-" + i + "\n";
+    result += "\b\b\b\b\bcorrupted"
+    result += " GOLDEN FACT: backspace-marker-" + i + "\n"
   }
-  return result;
+  return result
 }
 
 // Long session: ≥50 turns with alternating user/assistant/tool
 function generateLongSession(): FixtureSample {
-  const messages: ChatMessage[] = [];
+  const messages: ChatMessage[] = []
   const topics = [
-    "authentication", "database", "api", "frontend", "testing",
-    "deployment", "monitoring", "security", "performance", "refactoring",
-  ];
+    "authentication",
+    "database",
+    "api",
+    "frontend",
+    "testing",
+    "deployment",
+    "monitoring",
+    "security",
+    "performance",
+    "refactoring",
+  ]
 
   for (let turn = 0; turn < 55; turn++) {
-    const topic = topics[turn % topics.length];
-    const isUser = turn % 3 !== 2; // 2/3 user, 1/3 assistant with tool
+    const topic = topics[turn % topics.length]
+    const isUser = turn % 3 !== 2 // 2/3 user, 1/3 assistant with tool
 
     // Nice-to-have refs ride on the first 10 turns so recall has a real
     // softer tier — facts absent from the source can never be "found".
-    const niceToHaveRef = turn < 10 ? ` Context ref: nice-to-have-${turn}-${topic}` : "";
+    const niceToHaveRef = turn < 10 ? ` Context ref: nice-to-have-${turn}-${topic}` : ""
     if (isUser) {
       messages.push({
         info: { id: `msg-${turn}`, role: "user" },
-        parts: [{ type: "text", text: `User question about ${topic} - turn ${turn}. GOLDEN FACT: user-query-${turn}-${topic}${niceToHaveRef}` }],
-      });
+        parts: [
+          {
+            type: "text",
+            text: `User question about ${topic} - turn ${turn}. GOLDEN FACT: user-query-${turn}-${topic}${niceToHaveRef}`,
+          },
+        ],
+      })
     } else {
       // Assistant with tool output
-      const toolNames = ["ls", "grep", "read", "diff", "test"];
-      const tool = toolNames[turn % toolNames.length];
-      const poolKey = tool === "ls" ? "lsLarge" : tool === "grep" ? "grepHits" : tool === "read" ? "readWithLines" : tool === "diff" ? "gitDiff" : "testOutput";
-      const output = (TOOL_OUTPUT_POOL[poolKey as keyof typeof TOOL_OUTPUT_POOL] ?? "") as string;
+      const toolNames = ["ls", "grep", "read", "diff", "test"]
+      const tool = toolNames[turn % toolNames.length]
+      const poolKey =
+        tool === "ls"
+          ? "lsLarge"
+          : tool === "grep"
+          ? "grepHits"
+          : tool === "read"
+          ? "readWithLines"
+          : tool === "diff"
+          ? "gitDiff"
+          : "testOutput"
+      const output = (TOOL_OUTPUT_POOL[poolKey as keyof typeof TOOL_OUTPUT_POOL] ?? "") as string
 
       messages.push({
         info: { id: `msg-${turn}`, role: "assistant" },
         parts: [
-          { type: "text", text: `I'll help with ${topic}. GOLDEN FACT: assistant-response-${turn}${niceToHaveRef}` },
-          { type: "tool", tool: tool as string, state: { status: "completed", output: output as string } },
+          {
+            type: "text",
+            text: `I'll help with ${topic}. GOLDEN FACT: assistant-response-${turn}${niceToHaveRef}`,
+          },
+          {
+            type: "tool",
+            tool: tool as string,
+            state: { status: "completed", output: output as string },
+          },
         ],
-      });
+      })
     }
   }
 
   // Collect all golden facts from the session. A Set: tool kinds recur every
   // 5 turns, so array pushes would duplicate identical facts and inflate the
   // recall denominators.
-  const mustHit = new Set<string>();
-  const niceToHave = new Set<string>();
+  const mustHit = new Set<string>()
+  const niceToHave = new Set<string>()
 
   for (let turn = 0; turn < 55; turn++) {
-    const topic = topics[turn % topics.length];
+    const topic = topics[turn % topics.length]
     // user-query facts exist only in user turns (turn % 3 !== 2); collecting
     // them unconditionally listed facts the session never contained.
     if (turn % 3 !== 2) {
-      mustHit.add(`user-query-${turn}-${topic}`);
+      mustHit.add(`user-query-${turn}-${topic}`)
     }
     if (turn % 3 === 2) {
-      mustHit.add(`assistant-response-${turn}`);
-      const toolNames = ["ls", "grep", "read", "diff", "test"];
-      const tool = toolNames[turn % toolNames.length];
+      mustHit.add(`assistant-response-${turn}`)
+      const toolNames = ["ls", "grep", "read", "diff", "test"]
+      const tool = toolNames[turn % toolNames.length]
       if (tool === "read") {
         for (let i = 50; i <= 300; i += 50) {
-          mustHit.add(`must-hit-${i}`);
+          mustHit.add(`must-hit-${i}`)
         }
       } else if (tool === "diff") {
-        mustHit.add("budget increased for large outputs");
-        mustHit.add("new timeout handling");
-        mustHit.add("new protocol version handling");
+        mustHit.add("budget increased for large outputs")
+        mustHit.add("new timeout handling")
+        mustHit.add("new protocol version handling")
       } else if (tool === "test") {
-        mustHit.add('degraded reason "timeout" at test line 15');
-        mustHit.add("compression ratio threshold 0.85");
+        mustHit.add('degraded reason "timeout" at test line 15')
+        mustHit.add("compression ratio threshold 0.85")
       }
     }
   }
@@ -324,7 +412,7 @@ function generateLongSession(): FixtureSample {
   // is ls/grep/read/diff/test only; those markers belong to their own fixtures.
 
   for (let i = 0; i < 10; i++) {
-    niceToHave.add(`nice-to-have-${i}-${topics[i]}`);
+    niceToHave.add(`nice-to-have-${i}-${topics[i]}`)
   }
 
   return {
@@ -332,7 +420,7 @@ function generateLongSession(): FixtureSample {
     description: "55-turn synthetic conversation with tool outputs",
     messages,
     goldenFacts: { mustHit: [...mustHit], niceToHave: [...niceToHave] },
-  };
+  }
 }
 
 // Individual tool output fixtures
@@ -341,10 +429,18 @@ function generateToolOutputFixtures(): FixtureSample[] {
     {
       name: "tool-ls-large",
       description: "Large ls -la output (200+ lines)",
-      messages: [{
-        info: { id: "tool-ls-1", role: "assistant" },
-        parts: [{ type: "tool", tool: "ls", state: { status: "completed", output: TOOL_OUTPUT_POOL.lsLarge } }],
-      }],
+      messages: [
+        {
+          info: { id: "tool-ls-1", role: "assistant" },
+          parts: [
+            {
+              type: "tool",
+              tool: "ls",
+              state: { status: "completed", output: TOOL_OUTPUT_POOL.lsLarge },
+            },
+          ],
+        },
+      ],
       goldenFacts: {
         mustHit: ["file_0000.ts", "file_0100.json", "file_0219.ts"],
         niceToHave: ["total 123456"],
@@ -353,10 +449,18 @@ function generateToolOutputFixtures(): FixtureSample[] {
     {
       name: "tool-grep-hits",
       description: "Multi-file grep hits (100+ lines)",
-      messages: [{
-        info: { id: "tool-grep-1", role: "assistant" },
-        parts: [{ type: "tool", tool: "grep", state: { status: "completed", output: TOOL_OUTPUT_POOL.grepHits } }],
-      }],
+      messages: [
+        {
+          info: { id: "tool-grep-1", role: "assistant" },
+          parts: [
+            {
+              type: "tool",
+              tool: "grep",
+              state: { status: "completed", output: TOOL_OUTPUT_POOL.grepHits },
+            },
+          ],
+        },
+      ],
       goldenFacts: {
         mustHit: ["compressHandler", "fetchHandler", "spawnHandler", "timeoutHandler"],
         niceToHave: ["protocolHandler", "degradedHandler"],
@@ -365,10 +469,18 @@ function generateToolOutputFixtures(): FixtureSample[] {
     {
       name: "tool-read-with-lines",
       description: "Read with line numbers (300 lines)",
-      messages: [{
-        info: { id: "tool-read-1", role: "assistant" },
-        parts: [{ type: "tool", tool: "read", state: { status: "completed", output: TOOL_OUTPUT_POOL.readWithLines } }],
-      }],
+      messages: [
+        {
+          info: { id: "tool-read-1", role: "assistant" },
+          parts: [
+            {
+              type: "tool",
+              tool: "read",
+              state: { status: "completed", output: TOOL_OUTPUT_POOL.readWithLines },
+            },
+          ],
+        },
+      ],
       goldenFacts: {
         mustHit: Array.from({ length: 6 }, (_, i) => `must-hit-${50 * (i + 1)}`),
         niceToHave: ["critical error at line 50", "critical error at line 300"],
@@ -377,22 +489,42 @@ function generateToolOutputFixtures(): FixtureSample[] {
     {
       name: "tool-git-diff",
       description: "Git diff with multiple hunks",
-      messages: [{
-        info: { id: "tool-diff-1", role: "assistant" },
-        parts: [{ type: "tool", tool: "diff", state: { status: "completed", output: TOOL_OUTPUT_POOL.gitDiff } }],
-      }],
+      messages: [
+        {
+          info: { id: "tool-diff-1", role: "assistant" },
+          parts: [
+            {
+              type: "tool",
+              tool: "diff",
+              state: { status: "completed", output: TOOL_OUTPUT_POOL.gitDiff },
+            },
+          ],
+        },
+      ],
       goldenFacts: {
-        mustHit: ["budget increased for large outputs", "new timeout handling", "new protocol version handling"],
+        mustHit: [
+          "budget increased for large outputs",
+          "new timeout handling",
+          "new protocol version handling",
+        ],
         niceToHave: ["test for timeout degradation"],
       },
     },
     {
       name: "tool-test-output",
       description: "Test runner output with failures",
-      messages: [{
-        info: { id: "tool-test-1", role: "assistant" },
-        parts: [{ type: "tool", tool: "test", state: { status: "completed", output: TOOL_OUTPUT_POOL.testOutput } }],
-      }],
+      messages: [
+        {
+          info: { id: "tool-test-1", role: "assistant" },
+          parts: [
+            {
+              type: "tool",
+              tool: "test",
+              state: { status: "completed", output: TOOL_OUTPUT_POOL.testOutput },
+            },
+          ],
+        },
+      ],
       goldenFacts: {
         mustHit: ['degraded reason "timeout" at test line 15', "compression ratio threshold 0.85"],
         niceToHave: ["Test Suites: 1 failed", "Tests: 3 failed"],
@@ -401,10 +533,18 @@ function generateToolOutputFixtures(): FixtureSample[] {
     {
       name: "tool-noise",
       description: "Pure noise text with sparse golden markers",
-      messages: [{
-        info: { id: "tool-noise-1", role: "assistant" },
-        parts: [{ type: "tool", tool: "cat", state: { status: "completed", output: TOOL_OUTPUT_POOL.noise } }],
-      }],
+      messages: [
+        {
+          info: { id: "tool-noise-1", role: "assistant" },
+          parts: [
+            {
+              type: "tool",
+              tool: "cat",
+              state: { status: "completed", output: TOOL_OUTPUT_POOL.noise },
+            },
+          ],
+        },
+      ],
       goldenFacts: {
         // Markers land on every 50th line (see generateNoiseText).
         mustHit: ["noise-marker-0", "noise-marker-250", "noise-marker-450"],
@@ -414,10 +554,18 @@ function generateToolOutputFixtures(): FixtureSample[] {
     {
       name: "tool-ansi-colors",
       description: "ANSI color codes variant",
-      messages: [{
-        info: { id: "tool-ansi-1", role: "assistant" },
-        parts: [{ type: "tool", tool: "cat", state: { status: "completed", output: TOOL_OUTPUT_POOL.ansiColors } }],
-      }],
+      messages: [
+        {
+          info: { id: "tool-ansi-1", role: "assistant" },
+          parts: [
+            {
+              type: "tool",
+              tool: "cat",
+              state: { status: "completed", output: TOOL_OUTPUT_POOL.ansiColors },
+            },
+          ],
+        },
+      ],
       goldenFacts: {
         mustHit: ["ansi-marker-0", "ansi-marker-99"],
         niceToHave: ["[INFO] Processing item 50"],
@@ -426,10 +574,18 @@ function generateToolOutputFixtures(): FixtureSample[] {
     {
       name: "tool-carriage-return",
       description: "Carriage return progress bar variant",
-      messages: [{
-        info: { id: "tool-cr-1", role: "assistant" },
-        parts: [{ type: "tool", tool: "cat", state: { status: "completed", output: TOOL_OUTPUT_POOL.carriageReturn } }],
-      }],
+      messages: [
+        {
+          info: { id: "tool-cr-1", role: "assistant" },
+          parts: [
+            {
+              type: "tool",
+              tool: "cat",
+              state: { status: "completed", output: TOOL_OUTPUT_POOL.carriageReturn },
+            },
+          ],
+        },
+      ],
       goldenFacts: {
         mustHit: ["progress-0", "progress-100", "progress-complete"],
         niceToHave: ["Progress: [====    ] 50%"],
@@ -438,37 +594,54 @@ function generateToolOutputFixtures(): FixtureSample[] {
     {
       name: "tool-backspace-corruption",
       description: "Backspace corruption variant",
-      messages: [{
-        info: { id: "tool-bs-1", role: "assistant" },
-        parts: [{ type: "tool", tool: "cat", state: { status: "completed", output: TOOL_OUTPUT_POOL.backspaceCorruption } }],
-      }],
+      messages: [
+        {
+          info: { id: "tool-bs-1", role: "assistant" },
+          parts: [
+            {
+              type: "tool",
+              tool: "cat",
+              state: { status: "completed", output: TOOL_OUTPUT_POOL.backspaceCorruption },
+            },
+          ],
+        },
+      ],
       goldenFacts: {
         mustHit: ["backspace-marker-0", "backspace-marker-49"],
         niceToHave: ["corrupted"],
       },
     },
-  ];
+  ]
 }
 
 export function buildFixtures(): FixtureSet {
   return {
     longSession: generateLongSession(),
     toolOutputs: generateToolOutputFixtures(),
-  };
+  }
 }
 
 export function allFixtures(): FixtureSample[] {
-  const set = buildFixtures();
-  return [set.longSession, ...set.toolOutputs];
+  const set = buildFixtures()
+  return [set.longSession, ...set.toolOutputs, engineeringReplay()]
 }
 
 export function quickFixtures(): FixtureSample[] {
-  const set = buildFixtures();
+  const set = buildFixtures()
   // For quick mode: just the long session + 3 tool outputs
-  return [set.longSession, set.toolOutputs[0]!, set.toolOutputs[2]!, set.toolOutputs[4]!];
+  return [
+    set.longSession,
+    set.toolOutputs[0]!,
+    set.toolOutputs[2]!,
+    set.toolOutputs[4]!,
+    engineeringReplay(),
+  ]
 }
 
-export function fixturesToHeadroomParams(fixture: FixtureSample, contextWindowTokens = 8192): HeadroomCompressParams {
+export function fixturesToHeadroomParams(
+  fixture: FixtureSample,
+  contextWindowTokens = 8192
+): HeadroomCompressParams {
   return {
     sessionId: `eval-${fixture.name}`,
     projectId: "default",
@@ -476,5 +649,75 @@ export function fixturesToHeadroomParams(fixture: FixtureSample, contextWindowTo
     contextWindowTokens,
     triggerRatio: 0.7,
     retainRecentTurns: 4,
-  };
+  }
+}
+/** New corpus: answers and natural questions are hand-authored independently of the matcher. */
+function engineeringReplay(): FixtureSample {
+  const decisions = [
+    ["database engine selected", "Database engine selected: PostgreSQL-17.", "PostgreSQL-17"],
+    ["authentication policy chosen", "Authentication policy chosen: PKCE-S256.", "PKCE-S256"],
+    ["cache eviction strategy", "Cache eviction strategy: LRU-4096.", "LRU-4096"],
+    ["deployment region approved", "Deployment region approved: ap-southeast-3.", "ap-southeast-3"],
+    ["telemetry transport configured", "Telemetry transport configured: OTLP-gRPC.", "OTLP-gRPC"],
+    [
+      "database migration identifier",
+      "Database migration identifier: migration_20260905.",
+      "migration_20260905",
+    ],
+    ["rollback image selected", "Rollback image selected: bluecode:v2.3.1.", "bluecode:v2.3.1"],
+    [
+      "integration verification result",
+      "Integration verification result: suite-84-passed.",
+      "suite-84-passed",
+    ],
+    ["remaining incident ticket", "Remaining incident ticket: INC-2741.", "INC-2741"],
+    ["release approval owner", "Release approval owner: team-platform-ops.", "team-platform-ops"],
+  ] as const
+  const constraints =
+    "Never delete production data. Keep the authentication audit trail. Preserve rollback support."
+  const messages: ChatMessage[] = []
+  for (let turn = 0; turn < 18; turn++) {
+    messages.push({
+      info: { id: `engineering-user-${turn}`, role: "user" },
+      parts: [
+        {
+          type: "text",
+          text: turn === 0 ? constraints : `Continue engineering review stage ${turn}.`,
+        },
+      ],
+    })
+    messages.push({
+      info: { id: `engineering-assistant-${turn}`, role: "assistant" },
+      parts: [
+        { type: "text", text: decisions[turn]?.[1] ?? `Completed review stage ${turn}.` },
+        {
+          type: "tool",
+          tool: "mcp_build_log",
+          state: {
+            status: "completed",
+            output:
+              "Build progress: dependency scan completed successfully.\n".repeat(36) +
+              `Stage ${turn} verified.`,
+          },
+        },
+      ],
+    })
+  }
+  messages.push({
+    info: { id: "engineering-active", role: "user" },
+    parts: [{ type: "text", text: "Report the agreed architecture and release decisions." }],
+  })
+  return {
+    name: "engineering-replay",
+    description:
+      "18 complete engineering turns, active request, persistent constraints and independent natural questions",
+    messages,
+    goldenFacts: { mustHit: decisions.map((d) => d[2]), niceToHave: [] },
+    criticalFacts: constraints.split(". ").map((s) => s.replace(/\.$/, "")),
+    questions: decisions.map(([query, , answer]) => ({
+      question: `What was the ${query}?`,
+      query: `What was the ${query}?`,
+      expected: [answer],
+    })),
+  }
 }

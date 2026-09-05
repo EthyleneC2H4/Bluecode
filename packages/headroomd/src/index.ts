@@ -6,15 +6,11 @@
  * replacement messages without importing daemon internals (it must never
  * import turns/store directly — the daemon owns segmentation).
  */
-export { VERSION } from "./version";
-export {
-  createEngine,
-  type Engine,
-  type EngineOptions,
-} from "./engine";
-export { startHeadroomServer, type HeadroomServerOptions, type HeadroomServerStart } from "./server";
-export { HeadroomClient, type HeadroomClientOptions } from "./client";
-export { COMPACTION_MARKER, contentHash } from "./turns";
+export { VERSION } from "./version"
+export { createEngine, type Engine, type EngineOptions } from "./engine"
+export { startHeadroomServer, type HeadroomServerOptions, type HeadroomServerStart } from "./server"
+export { HeadroomClient, type HeadroomClientOptions } from "./client"
+export { COMPACTION_MARKER, contentHash } from "./turns"
 export {
   buildReplacementMessage,
   buildReplacementText,
@@ -22,4 +18,6 @@ export {
   type CompactionApplyStatus,
   type CompactionPlan,
   type MaterializedCompaction,
-} from "./compaction";
+} from "./compaction"
+
+export { migrateLegacyHeadroom, createLegacyReader } from "./migration"

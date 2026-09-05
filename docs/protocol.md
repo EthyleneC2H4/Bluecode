@@ -1,65 +1,53 @@
 # 协议规范
 
-两套独立 wire 协议，schema 权威定义于 `packages/contracts`（zod，运行时校验）。共同约定：**JSONL** 帧格式（每行一个 JSON 对象，`\n` 分隔）、请求带协议版本 `v: 1` 与唯一 `id`、响应以同 `id` 关联、错误码共享 `contracts/errors.ts`。
+权威定义：[RTK schema](../packages/contracts/src/rtk.ts)、[headroom schema](../packages/contracts/src/headroom.ts)、[共享错误](../packages/contracts/src/errors.ts)。RTK wire 为 **v3**，headroom wire 为 **v2**；旧进程需要停机后升级，不能混用握手版本。
 
-## 通用帧形状（两协议一致）
+## 公共传输
 
-```jsonc
-// 请求
-{ "v": 1, "id": "<uuid>", "op": "<见下>", "params": { … } }
-// 成功响应
-{ "v": 1, "id": "<同请求>", "ok": true, "result": { … } }
-// 失败响应
-{ "v": 1, "id": "<同请求>", "ok": false,
-  "error": { "code": "E_PROTOCOL" | "E_UNKNOWN_OP" | "E_INVALID_PARAMS" | "E_INTERNAL", "message": "…", "detail?": … } }
+JSONL 一行一帧，限制单帧 UTF-8 字节数为 8MiB。多帧粘包不会按整块累计；字符串分片中的代理对/流式 decoder 尾部均有回归。请求与响应使用唯一 `id`；迟到响应不匹配后续请求。
+
+若同次读取中先有完整响应、后有超大帧，FrameOverflowError.completedLines保留合法前缀；客户端先完成这些响应，再按组件策略计协议错误或关闭连接，不能因操作系统分块差异丢弃已完整接收的响应。
+
+```json
+{"v":3,"id":"request-1","op":"compress","params":{}}
+{"v":3,"id":"request-1","ok":true,"result":{}}
 ```
 
-错误映射约定：未知 op → E_UNKNOWN_OP；参数校验失败 → E_INVALID_PARAMS；帧解析失败 → E_PROTOCOL；其余 → E_INTERNAL。
+上例仅展示 envelope，`params/result` 必须满足对应 op 的完整 schema。headroom 将 `v` 改为 `2`。启动 hello 分别是 `{"proto":3,"pid":123}` / `{"proto":2,"pid":123}`。headroom 连接握手采用绝对 1 秒期限和 64KiB 上限；EOF/close 立即失败。启动进程 stdout 支持分片 hello；已有兼容 daemon 的启动竞争以结构化状态处理。
 
-## 握手
+## RTK ops
 
-连接建立后 server 先发一行 hello 帧，client 在超时窗内未读到即判定 spawn/连接失败：
+| op | 主要字段 |
+| --- | --- |
+| `compress` | `tool, output, title?, toolArgs?, source?, provenance?, metadata?, sessionId, callId?, budgetTokens?` |
+| `fetch` | `hash: sha256:<64hex>, sessionId, cursor?, maxTokens?, maxBytes?` |
+| `ping`, `stats` | 运维状态；测试专用故障 op 仅测试模式开放 |
 
-```jsonc
-{ "proto": 1, "pid": <int> }   // rtk: contracts/rtk.ts helloSchema
-                               // headroomd: 同形状（client.ts 按 {proto,pid} 解析）
-```
+生产插件将 session ownership 编码为 `JSON.stringify([projectId, sessionID])`。工具参数只跨越安全 scalar 投影；未知复杂参数不会迫使解析器采用低置信策略。
 
-## rtk ops（stdio：stdin/stdout）
+`compress` 返回实际 `status: compressed|unchanged|skipped|degraded`，同时保留 `compressed` 兼容字段、`rawHash`、strategy、token 估算、`targetTokens/actualTokens/budgetExceeded`、`omittedRanges`、diagnostics。`actualTokens` 是实际输出的快速估算，离线 exact token 指标另行计算。原始内容指经过既有 sanitize/redaction 管线后的规范化文本，默认 redactor 为 identity。
 
-| op | params → result | 备注 |
-|---|---|---|
-| `compress` | `{ output, tool }` → 压缩文本 + `{ rawHash, strategy, compressed, outTokensEst, rawTokensEst, degraded? }` | 热路径 |
-| `fetch` | `{ hash: "sha256:<64hex>" }` → `{ found, content? }` | found:true 时 content 必填 |
-| `ping` / `stats` | 空 → pong / 计数器 | **插件热路径禁用**（串行队列队头阻塞，Task 5 审查裁决） |
-| `simulateCrash` | 空 | 仅测试注入：server 环境须 BLUECODE_TEST=1，否则答 E_PROTOCOL |
+客户端 `CompressOutcome` 的 compressed/passthrough 分支遵守 wire 实际结果；`no_gain` 不算故障。超载、存储容量、存储错误独立可观测。`fetch` 返回 `found:true,content,nextCursor,truncated` 或 `found:false`。损坏对象返回错误，不作为成功原文使用。[客户端与引擎](../packages/rtk/src)。
 
-## headroomd ops（Unix domain socket）
+## headroom ops
 
-| op | params → result | 备注 |
-|---|---|---|
-| `compress` | `{ sessionId, projectId, messages: ChatMessage[], contextWindowTokens, triggerRatio, retainRecentTurns }` → `{ compacted, historyHash, summary, refs[], replacedMessageIds[], rawTokens, summaryTokens, freedTokens }` | 水位不足或保留轮不足时 `compacted:false` 零副作用返回 |
-| `retrieve` | hash 模式 `{ namespace:{projectId,sessionId}, hash }`（裸 hex）→ `{ found, content? }`；query 模式 `{ namespace, query, limit? }`（默认 5，协议上限 50，越界 → E_INVALID_PARAMS）→ `{ hits: [{ score, hash, projectId, sessionId, turnIndex, role, snippet }] }` | 二选一，都缺/都有 → E_INVALID_PARAMS；插件工具层把 LLM 传入的 limit clamp 到 50（截断而非报错） |
-| `health` | 空 → `{ ok, pid, uptimeMs, sessions }` | 插件热路径禁用（同 ping/stats 裁决） |
+| op | 语义 |
+| --- | --- |
+| `compress` | `projectId,sessionId,messages,contextWindowTokens,targetTokens?,epoch?,protectedMessageIds?,triggerRatio?,retainRecentTurns?` → 计划 |
+| `retrieve` | namespace 加 hash/historyHash/query 三选一，以及分页预算 |
+| `view.get` | namespace → 已发布计划快照或 null |
+| `view.set` | `{namespace,plan}` → null；计划必须匹配该 namespace 的确认归档 |
+| `view.clear` | namespace → null；不删除原始对象 |
+| `health` | PID、运行时间、已归档 namespace 数 |
 
-## 哈希命名空间（wire 层不互通；插件工具层桥接）
+消息投影只含已知 text/tool，工具包含 `callId/input/status/output/error`。宿主未表示的模型可见内容应由插件将整条消息标记 protected。内容 digest 对有序完整投影与版本求 SHA-256；headroom hash 为裸 64hex，和 RTK 引用前缀不同。
 
-| 组件 | 形式 | 寻址语义 |
-|---|---|---|
-| rtk | `sha256:` 前缀 + 64 位小写 hex | gzip 字节摘要寻址 |
-| headroomd | 裸 64 位小写 hex | 内容逻辑寻址（对象存储编码为 gzip，完整性靠 gzip CRC + JSON.parse） |
+`compacted:true` 必须提供 `historyHash/summary/memory/sourceDigests/refs/replacedMessageIds`。源 digest、ref、ID 长度一致，逐项 digest=ref.contentHash，ID 唯一且 token 会计自洽；`freedTokens>0`。`compacted:false` 必须完全惰性，无替换引用、无释放量。`epoch` 由生产插件显式提供。
 
-两个 daemon 各自只认自己的形式（跨协议寻址会得到 found:false 或报错）。桥接发生在 `headroom_retrieve`
-工具层：带 `sha256:` 前缀的 hash 直接路由给 rtk 的 `fetch`，裸 hash 走 headroomd——LLM 用单一工具即可
-回取两类原文，无需感知底层归属。
+三种 retrieve 都有界；history 保留旧 `nextOffset`，新调用应使用可表示消息内部位置的 `nextCursor`。完整历史中的坏/缺失对象报告 `partial/missingHashes`；hash 读取发生完整性错误时抛出。query 返回 BM25 命中、namespace、chunkId、UTF-16 offsets、snippet 与 cursor；cursor 绑定查询、limit 与有序证据快照，失效后需重新查询。[引擎](../packages/headroomd/src/engine.ts)。
 
-## 消息投影契约（ChatMessage）
+直接 daemon 响应预算约束原文内容；插件工具进一步约束最终 JSON。默认2048/32KiB、硬限8192/128KiB均采用UTF-8保守token上界。改变 cursor 所绑定的引用或 namespace 会被拒绝；分页不能截断返回后却越过剩余尾部。
 
-插件向 headroomd 投影 opencode SDK 消息时只携带契约已知内容：
+## 持久版本与升级
 
-```jsonc
-{ "info": { "id": "msg_…", "role": "user" | "assistant", "tokens?": {…} },   // tokens 仅客户端使用，daemon schema 剥离
-  "parts": [ { "type": "text", "text": "…" } | { "type": "tool", "tool": "<name>", "state": { "status": "…", "output?": "…" } } ] }
-```
-
-reasoning / step-start / step-finish 等上游 part 无 wire 表示，投影时丢弃（映射成伪 tool part 会被 daemon 以 E_INVALID_PARAMS 拒收——devlog #34）。
+新存储分别在 `storage-v2/rtk` 与 `storage-v2/headroom`。headroom 保留旧 hash 的校验读法，RTK 提供只读 legacy reader；项目 ownership 迁移需要显式映射，绝无跨项目 fallback。离线迁移保留源，复制/校验/重建/配额检查完成后才切换目录。[迁移说明](operations.md)。

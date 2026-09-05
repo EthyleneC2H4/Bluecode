@@ -12,7 +12,7 @@
  * client does NOT auto-reconnect afterwards — the plugin owns the watchdog
  * policy and simply builds a fresh client.
  */
-import net from "node:net";
+import net from "node:net"
 import {
   headroomCompressResultSchema,
   headroomResponseSchema,
@@ -23,33 +23,34 @@ import {
   type HeadroomRetrieveParams,
   type HeadroomRetrieveResult,
   type HealthResult,
-} from "@bluecode/contracts";
+  type Namespace,
+} from "@bluecode/contracts"
 import {
   bunSpawnArgv,
   createLineReconstructor,
   encodeFrame,
   FrameOverflowError,
   newRequestId,
-} from "@bluecode/shared";
+} from "@bluecode/shared"
 import {
   retrieveByHashResultSchema,
   retrieveByHistoryResultSchema,
   retrieveByQueryResultSchema,
-} from "@bluecode/contracts";
+} from "@bluecode/contracts"
 
 export interface HeadroomClientOptions {
   /** Resolves socketPath as `<dataDir>/headroomd.sock` when socketPath is absent. */
-  dataDir?: string;
-  socketPath?: string;
+  dataDir?: string
+  socketPath?: string
   /** Recipe for launching a fresh daemon when the socket is not answering. */
-  spawn?: { entry: string; cwd?: string; args?: string[] };
+  spawn?: { entry: string; cwd?: string; args?: string[] }
   /** Per-request timeout. Default 5000ms. */
-  timeoutMs?: number;
+  timeoutMs?: number
   /**
    * Frame cap fed to the line reconstructor (shared default: 64 MiB). Exposing
    * it lets flood-hardening be unit-tested without 64 MiB buffers.
    */
-  maxFrameBytes?: number;
+  maxFrameBytes?: number
 }
 
 /**
@@ -62,36 +63,37 @@ export interface HeadroomClientOptions {
  */
 export function daemonSpawnArgv(
   spawn: { entry: string; args?: string[] },
-  execPath: string = process.execPath,
+  execPath: string = process.execPath
 ): string[] {
-  return [...bunSpawnArgv(spawn.entry, execPath), ...(spawn.args ?? [])];
+  return [...bunSpawnArgv(spawn.entry, execPath), ...(spawn.args ?? [])]
 }
 
 interface PendingRequest {
-  resolve(value: unknown): void;
-  reject(err: Error): void;
-  timer: ReturnType<typeof setTimeout>;
+  resolve(value: unknown): void
+  reject(err: Error): void
+  timer: ReturnType<typeof setTimeout>
+  bytes: number
 }
 
-const CONNECT_TIMEOUT_MS = 1000;
-const MAX_RECONNECT_ATTEMPTS = 5;
+const CONNECT_TIMEOUT_MS = 1000
+const MAX_RECONNECT_ATTEMPTS = 5
 /**
  * A real daemon's handshake is one short JSON line; anything near this size
  * without a newline is not speaking our protocol. Caps the pre-handshake
  * accumulator so a rogue listener on the socket path cannot grow client
  * memory without bound while the timeout clock runs.
  */
-const MAX_HANDSHAKE_BYTES = 64 * 1024;
+const MAX_HANDSHAKE_BYTES = 64 * 1024
 
 function defaultSocketPath(options: HeadroomClientOptions): string {
-  if (options.socketPath !== undefined) return options.socketPath;
-  if (options.dataDir !== undefined) return `${options.dataDir}/headroomd.sock`;
-  throw new Error("headroomd client: needs socketPath or dataDir");
+  if (options.socketPath !== undefined) return options.socketPath
+  if (options.dataDir !== undefined) return `${options.dataDir}/headroomd.sock`
+  throw new Error("headroomd client: needs socketPath or dataDir")
 }
 
 /** Result of one connect attempt: the live socket plus unconsumed bytes. */
 export interface AttemptedConnection {
-  readonly socket: net.Socket;
+  readonly socket: net.Socket
   /**
    * Bytes received past the handshake line that no reader has seen yet. The
    * consumer MUST feed these into its frame pipeline before awaiting more
@@ -99,7 +101,7 @@ export interface AttemptedConnection {
    * unshifted bytes whenever the real reader attaches outside the same emit
    * tick (verified on Bun 1.4), so re-emission cannot be relied on here.
    */
-  readonly pending: Buffer;
+  readonly pending: Buffer
 }
 
 /**
@@ -115,101 +117,129 @@ export interface AttemptedConnection {
  */
 export function attemptConnect(socketPath: string): Promise<AttemptedConnection> {
   return new Promise((resolve, reject) => {
-    const socket = net.connect(socketPath);
-    let acc: Buffer = Buffer.alloc(0);
+    const socket = net.connect(socketPath)
+    let acc: Buffer = Buffer.alloc(0)
+    let settled = false
+    const timer = setTimeout(
+      () => fail(new Error(`headroomd: connect timeout on ${socketPath}`)),
+      CONNECT_TIMEOUT_MS
+    )
+    const cleanup = () => {
+      clearTimeout(timer)
+      socket.removeListener("data", handler)
+      socket.removeListener("end", onEnd)
+      socket.removeListener("close", onEnd)
+    }
     const fail = (err: Error) => {
-      socket.destroy();
-      reject(err);
-    };
+      if (settled) return
+      settled = true
+      cleanup()
+      socket.destroy()
+      reject(err)
+    }
+    const onEnd = () => fail(new Error("headroomd: connection ended before handshake"))
     // Named so it can be removed before resolve — the HeadroomClient
     // constructor attaches its own data listener, and leaving this one
     // attached would deliver every later frame twice.
     const handler = (chunk: Buffer): void => {
-      acc = acc.length === 0 ? chunk : Buffer.concat([acc, chunk]);
-      const nl = acc.indexOf(0x0a);
+      acc = acc.length === 0 ? chunk : Buffer.concat([acc, chunk])
+      const nl = acc.indexOf(0x0a)
       if (nl === -1) {
         // The accumulator used to be unbounded while the timeout clock ran.
         if (acc.length > MAX_HANDSHAKE_BYTES) {
           fail(
             new Error(
-              `headroomd: handshake exceeded ${MAX_HANDSHAKE_BYTES} bytes without a newline`,
-            ),
-          );
+              `headroomd: handshake exceeded ${MAX_HANDSHAKE_BYTES} bytes without a newline`
+            )
+          )
         }
-        return; // keep waiting; CONNECT_TIMEOUT_MS is the bound
+        return // keep waiting; CONNECT_TIMEOUT_MS is the bound
       }
-      const handshakeBytes = acc.subarray(0, nl);
-      const rest = acc.subarray(nl + 1);
-      let handshake = "";
+      if (nl > MAX_HANDSHAKE_BYTES) {
+        fail(new Error("headroomd: handshake exceeded byte cap"))
+        return
+      }
+      const handshakeBytes = acc.subarray(0, nl)
+      const rest = acc.subarray(nl + 1)
+      let handshake = ""
       try {
-        handshake = handshakeBytes.toString("utf8"); // trailing \r is JSON whitespace
-        const parsed = JSON.parse(handshake) as { proto?: unknown; pid?: unknown };
-        if (parsed.proto !== HEADROOM_PROTOCOL_VERSION || typeof parsed.pid !== "number") {
-          fail(new Error(`headroomd: bad handshake ${handshake}`));
-          return;
+        handshake = handshakeBytes.toString("utf8") // trailing \r is JSON whitespace
+        const parsed = JSON.parse(handshake) as { proto?: unknown; pid?: unknown }
+        if (
+          parsed.proto !== HEADROOM_PROTOCOL_VERSION ||
+          !Number.isSafeInteger(parsed.pid) ||
+          (parsed.pid as number) <= 0
+        ) {
+          fail(new Error(`headroomd: bad handshake ${handshake}`))
+          return
         }
       } catch {
-        fail(new Error(`headroomd: handshake not JSON: ${handshake}`));
-        return;
+        fail(new Error(`headroomd: handshake not JSON: ${handshake}`))
+        return
       }
-      socket.setTimeout(0);
-      socket.removeListener("data", handler);
-      resolve({ socket, pending: rest });
-    };
-    socket.setTimeout(CONNECT_TIMEOUT_MS);
-    socket.once("timeout", () => fail(new Error(`headroomd: connect timeout on ${socketPath}`)));
-    socket.once("error", (err) => fail(err));
-    socket.on("data", handler);
-  });
+      if (settled) return
+      settled = true
+      cleanup()
+      resolve({ socket, pending: rest })
+    }
+    socket.once("end", onEnd)
+    socket.once("close", onEnd)
+    socket.once("error", (err) => fail(err))
+    socket.on("data", handler)
+  })
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 export class HeadroomClient {
-  private readonly socket: net.Socket;
-  private readonly timeoutMs: number;
-  private readonly pending = new Map<string, PendingRequest>();
-  private readonly lines: ReturnType<typeof createLineReconstructor>;
-  private readonly decoder = new TextDecoder();
-  private closed = false;
+  private readonly socket: net.Socket
+  private readonly timeoutMs: number
+  private readonly pending = new Map<string, PendingRequest>()
+  private readonly lines: ReturnType<typeof createLineReconstructor>
+  private readonly decoder = new TextDecoder()
+  private closed = false
 
   private constructor(
     socket: net.Socket,
     timeoutMs: number,
     maxFrameBytes?: number,
-    pendingBytes?: Buffer,
+    pendingBytes?: Buffer
   ) {
-    this.socket = socket;
-    this.timeoutMs = timeoutMs;
+    this.socket = socket
+    this.timeoutMs = timeoutMs
     this.lines = createLineReconstructor(
       // exactOptionalPropertyTypes: stay absent rather than undefined.
-      ...(maxFrameBytes !== undefined ? [{ maxFrameBytes }] : []),
-    );
-    socket.on("data", (chunk: Buffer) => this.onData(chunk));
-    socket.on("error", () => this.failAll(new Error("headroomd: connection error")));
-    socket.on("close", () => this.failAll(new Error("headroomd: connection closed")));
+      { maxFrameBytes: maxFrameBytes ?? 8 * 1024 * 1024 }
+    )
+    socket.on("data", (chunk: Buffer) => this.onData(chunk))
+    socket.on("error", () => this.failAll(new Error("headroomd: connection error")))
+    socket.on("end", () => {
+      this.failAll(new Error("headroomd: connection ended"))
+      socket.destroy()
+    })
+    socket.on("close", () => this.failAll(new Error("headroomd: connection closed")))
     // attemptConnect may have already pulled in response frames riding behind
     // the handshake. Feed them synchronously BEFORE any queued event can
     // fire — single-threaded delivery keeps wire order intact.
-    if (pendingBytes !== undefined && pendingBytes.length > 0) this.onData(pendingBytes);
+    if (pendingBytes !== undefined && pendingBytes.length > 0) this.onData(pendingBytes)
   }
 
   /** Connect, spawning a daemon via `spawn` when the socket is dead. */
   static async connect(options: HeadroomClientOptions): Promise<HeadroomClient> {
-    const socketPath = defaultSocketPath(options);
-    const timeoutMs = options.timeoutMs ?? 5000;
+    const socketPath = defaultSocketPath(options)
+    const timeoutMs = options.timeoutMs ?? 5000
 
-    let connectError: unknown;
+    let connectError: unknown
     try {
-      const { socket, pending } = await attemptConnect(socketPath);
-      return new HeadroomClient(socket, timeoutMs, options.maxFrameBytes, pending);
+      const { socket, pending } = await attemptConnect(socketPath)
+      return new HeadroomClient(socket, timeoutMs, options.maxFrameBytes, pending)
     } catch (err) {
       if (options.spawn === undefined) {
-        throw new Error(`headroomd: cannot connect to ${socketPath}: ${(err as Error).message}`);
+        throw new Error(`headroomd: cannot connect to ${socketPath}: ${(err as Error).message}`)
       }
-      connectError = err;
+      connectError = err
     }
 
     // bunSpawnArgv, not [execPath, "run", entry]: inside a compiled host the
@@ -222,7 +252,7 @@ export class HeadroomClient {
       env: { ...process.env } as Record<string, string>,
       stdout: "pipe", // boot handshake line, for spawn-side validation
       stderr: "pipe", // captured so boot failures are diagnosable
-    });
+    })
 
     // Boot confirmation: one handshake line on stdout, bounded wait. Single
     // promise (not Promise.race) with a settled guard so no losing branch can
@@ -232,183 +262,228 @@ export class HeadroomClient {
     // released so a dying child cannot pin the plugin process. The old version
     // leaked the child and abandoned its readers on exactly these paths.
     await new Promise<void>((resolve, reject) => {
-      let settled = false;
+      let settled = false
       function fail(err: Error): void {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        child.kill(); // default SIGTERM on purpose — see comment above
-        if (typeof (child as { unref?: () => void }).unref === "function") child.unref();
-        reject(err);
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        child.kill() // default SIGTERM on purpose — see comment above
+        if (typeof (child as { unref?: () => void }).unref === "function") child.unref()
+        reject(err)
       }
       const timer: ReturnType<typeof setTimeout> = setTimeout(
         () => fail(new Error("headroomd: spawned daemon did not boot within 5s")),
-        5000,
-      );
-      const decoder = new TextDecoder();
-      let stderrText = "";
+        5000
+      )
+      const decoder = new TextDecoder()
+      let stderrText = ""
       // The drain loop runs UNCONDITIONALLY and never cancels: cancel()'s
       // fd-release behavior varies across Bun versions, and an undrained pipe
       // blocks a chatty daemon mid-write forever (a live daemon must never sit
       // on a full stderr pipe). Only accumulation is capped — it exists for
       // boot diagnostics alone; after the cap every chunk is read and dropped.
-      const stderrReader = child.stderr.getReader();
+      const stderrReader = child.stderr.getReader()
       const drainStderr = (): void => {
-        stderrReader.read().then(({ value, done }) => {
-          if (done) return;
-          if (stderrText.length < 4000) stderrText += decoder.decode(value, { stream: true });
-          drainStderr();
-        }, () => {});
-      };
-      drainStderr();
-      const reader = child.stdout.getReader();
-      reader.read().then(
-        ({ value }) => {
-          const text = value === undefined ? "" : decoder.decode(value);
-          if (!text.includes('"proto"')) {
-            fail(
-              new Error(
-                `headroomd: spawned daemon printed no handshake line (stdout ${JSON.stringify(text)}; stderr ${JSON.stringify(stderrText.trim())})`,
-              ),
-            );
-            return;
-          }
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          reader.cancel().catch(() => {});
-          resolve();
-        },
-        (err: unknown) => {
-          fail(err instanceof Error ? err : new Error(String(err)));
-        },
-      );
-    });
+        stderrReader.read().then(
+          ({ value, done }) => {
+            if (done) return
+            if (stderrText.length < 4000) stderrText += decoder.decode(value, { stream: true })
+            drainStderr()
+          },
+          () => {}
+        )
+      }
+      drainStderr()
+      const reader = child.stdout.getReader()
+      void (async () => {
+        let acc = Buffer.alloc(0)
+        for (;;) {
+          const { value, done } = await reader.read()
+          if (done) throw new Error(`headroomd: spawned daemon EOF before handshake: ${stderrText}`)
+          acc = Buffer.concat([acc, Buffer.from(value)])
+          const nl = acc.indexOf(10)
+          if (acc.length > MAX_HANDSHAKE_BYTES)
+            throw new Error("headroomd: spawned handshake too large")
+          if (nl < 0) continue
+          const hello = JSON.parse(acc.subarray(0, nl).toString("utf8"))
+          if (
+            hello.proto !== HEADROOM_PROTOCOL_VERSION ||
+            !Number.isSafeInteger(hello.pid) ||
+            hello.pid <= 0
+          )
+            throw new Error("headroomd: invalid spawned handshake")
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          // Drain remaining stdout too; the child may still flush its exit path.
+          void (async () => {
+            while (!(await reader.read()).done) {}
+          })().catch(() => {})
+          resolve()
+          return
+        }
+      })().catch((error) => fail(error instanceof Error ? error : new Error(String(error))))
+    })
 
     // A long-lived daemon must not keep the plugin process alive on exit.
-    if (typeof (child as { unref?: () => void }).unref === "function") child.unref();
+    if (typeof (child as { unref?: () => void }).unref === "function") child.unref()
 
-    let lastError: unknown = connectError;
+    let lastError: unknown = connectError
     for (let attempt = 0; attempt < MAX_RECONNECT_ATTEMPTS; attempt++) {
-      await sleep(250 * 2 ** attempt);
+      if (attempt > 0) await sleep(250 * 2 ** (attempt - 1))
       try {
-        const { socket, pending } = await attemptConnect(socketPath);
-        return new HeadroomClient(socket, timeoutMs, options.maxFrameBytes, pending);
+        const { socket, pending } = await attemptConnect(socketPath)
+        return new HeadroomClient(socket, timeoutMs, options.maxFrameBytes, pending)
       } catch (err) {
-        lastError = err;
+        lastError = err
       }
     }
-    child.kill();
+    child.kill()
     throw new Error(
       `headroomd: daemon at ${socketPath} unreachable after ${MAX_RECONNECT_ATTEMPTS} reconnect attempts: ` +
-        `${(lastError as Error)?.message ?? "unknown"}`,
-    );
+        `${(lastError as Error)?.message ?? "unknown"}`
+    )
   }
 
   compress(params: HeadroomCompressParams): Promise<HeadroomCompressResult> {
-    return this.request(
-      "compress",
-      params,
-      (value) => headroomCompressResultSchema.safeParse(value),
-    );
+    return this.request("compress", params, (value) =>
+      headroomCompressResultSchema.safeParse(value)
+    )
   }
 
   retrieve(params: HeadroomRetrieveParams): Promise<HeadroomRetrieveResult> {
     // Result shape depends on the mode; validate against the matching member.
     return this.request("retrieve", params, (value) => {
-      if ("query" in params) return retrieveByQueryResultSchema.safeParse(value);
-      if ("historyHash" in params) return retrieveByHistoryResultSchema.safeParse(value);
-      return retrieveByHashResultSchema.safeParse(value);
-    });
+      if ("query" in params) return retrieveByQueryResultSchema.safeParse(value)
+      if ("historyHash" in params) return retrieveByHistoryResultSchema.safeParse(value)
+      return retrieveByHashResultSchema.safeParse(value)
+    })
+  }
+
+  getView(namespace: Namespace): Promise<HeadroomCompressResult | null> {
+    return this.request("view.get", namespace, (value) =>
+      headroomCompressResultSchema.nullable().safeParse(value)
+    )
+  }
+  setView(namespace: Namespace, plan: HeadroomCompressResult): Promise<void> {
+    return this.request("view.set", { namespace, plan }, (value) => ({
+      success: value === null,
+      data: undefined,
+    }))
+  }
+  clearView(namespace: Namespace): Promise<void> {
+    return this.request("view.clear", namespace, (value) => ({
+      success: value === null,
+      data: undefined,
+    }))
   }
 
   health(): Promise<HealthResult> {
-    return this.request("health", {}, (value) => healthResultSchema.safeParse(value));
+    return this.request("health", {}, (value) => healthResultSchema.safeParse(value))
   }
 
   /** Graceful close: in-flight requests were rejected by the close event. */
   close(): Promise<void> {
-    this.closed = true;
+    this.closed = true
     // A socket the daemon already tore down has fired (or will never fire)
     // its 'close' event — waiting on it here would hang forever.
-    if (this.socket.destroyed) return Promise.resolve();
+    if (this.socket.destroyed) return Promise.resolve()
     return new Promise((resolve) => {
-      this.socket.once("close", () => resolve());
-      this.socket.end();
-    });
+      this.failAll(new Error("headroomd: client closed"))
+      const timer = setTimeout(() => this.socket.destroy(), 1000)
+      this.socket.once("close", () => {
+        clearTimeout(timer)
+        resolve()
+      })
+      this.socket.end()
+    })
   }
 
   private request<T>(
     op: string,
     params: unknown,
-    validate: (value: unknown) => { success: boolean; data?: unknown; error?: unknown },
+    validate: (value: unknown) => { success: boolean; data?: unknown; error?: unknown }
   ): Promise<T> {
     if (this.closed || this.socket.destroyed) {
-      return Promise.reject(new Error("headroomd: client is closed"));
+      return Promise.reject(new Error("headroomd: client is closed"))
     }
-    const id = newRequestId("hm");
+    const frame = encodeFrame({ v: HEADROOM_PROTOCOL_VERSION, id: "pending", op, params })
+    if (
+      this.pending.size >= 32 ||
+      this.socket.writableLength +
+        [...this.pending.values()].reduce((n, p) => n + p.bytes, 0) +
+        Buffer.byteLength(frame) >
+        8 * 1024 * 1024
+    )
+      return Promise.reject(new Error("headroomd: request capacity exceeded"))
+    const id = newRequestId("hm")
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         // Retire the id: a late response finds no pending entry and is dropped.
-        this.pending.delete(id);
-        reject(new Error(`headroomd: ${op} timed out after ${this.timeoutMs}ms`));
-      }, this.timeoutMs);
+        this.pending.delete(id)
+        reject(new Error(`headroomd: ${op} timed out after ${this.timeoutMs}ms`))
+      }, this.timeoutMs)
       this.pending.set(id, {
         resolve: resolve as (value: unknown) => void,
         reject,
         timer,
-      });
-      this.socket.write(encodeFrame({ v: HEADROOM_PROTOCOL_VERSION, id, op, params }));
+        bytes: Buffer.byteLength(frame),
+      })
+      this.socket.write(encodeFrame({ v: HEADROOM_PROTOCOL_VERSION, id, op, params }))
     }).then((value) => {
-      const checked = validate(value);
+      const checked = validate(value)
       if (!checked.success) {
-        throw new Error(`headroomd: ${op} result failed its wire schema`);
+        throw new Error(`headroomd: ${op} result failed its wire schema`)
       }
-      return checked.data as T;
-    });
+      return checked.data as T
+    })
   }
 
   private onData(chunk: Buffer): void {
-    let lines: string[];
+    let lines: string[]
+    let damage: Error | undefined
     try {
-      lines = this.lines.push(this.decoder.decode(chunk, { stream: true }));
+      lines = this.lines.push(this.decoder.decode(chunk, { stream: true }))
     } catch (err) {
       // Frame overflow is unrecoverable protocol damage: the reconstructor
       // already dropped the partial frame, so frame boundaries can no longer
       // be trusted — fail every in-flight request with the SPECIFIC error
       // (distinctly classified in logs as FrameOverflowError + cap) and tear
       // the socket down instead of letting generic "connection closed" mask it.
-      this.socket.destroy();
-      this.failAll(err instanceof FrameOverflowError ? err : new Error(String(err)));
-      return;
+      damage = err instanceof FrameOverflowError ? err : new Error(String(err))
+      lines = err instanceof FrameOverflowError ? err.completedLines : []
     }
     for (const line of lines) {
-      let parsed: unknown;
+      let parsed: unknown
       try {
-        parsed = JSON.parse(line);
+        parsed = JSON.parse(line)
       } catch {
-        continue; // never a valid response; drop
+        continue // never a valid response; drop
       }
-      const checked = headroomResponseSchema.safeParse(parsed);
-      if (!checked.success) continue; // protocol damage: drop, don't crash
-      const pending = this.pending.get(checked.data.id);
-      if (pending === undefined) continue; // late frame after timeout: drop
-      this.pending.delete(checked.data.id);
-      clearTimeout(pending.timer);
+      const checked = headroomResponseSchema.safeParse(parsed)
+      if (!checked.success) continue // protocol damage: drop, don't crash
+      const pending = this.pending.get(checked.data.id)
+      if (pending === undefined) continue // late frame after timeout: drop
+      this.pending.delete(checked.data.id)
+      clearTimeout(pending.timer)
       if (checked.data.ok) {
-        pending.resolve(checked.data.result);
+        pending.resolve(checked.data.result)
       } else {
-        const { code, message } = checked.data.error;
-        pending.reject(new Error(`headroomd ${code}: ${message}`));
+        const { code, message } = checked.data.error
+        pending.reject(new Error(`headroomd ${code}: ${message}`))
       }
+    }
+    if (damage) {
+      this.socket.destroy()
+      this.failAll(damage)
     }
   }
 
   private failAll(err: Error): void {
     for (const [, pending] of this.pending) {
-      clearTimeout(pending.timer);
-      pending.reject(err);
+      clearTimeout(pending.timer)
+      pending.reject(err)
     }
-    this.pending.clear();
+    this.pending.clear()
   }
 }

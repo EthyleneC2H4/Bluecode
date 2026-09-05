@@ -1,3 +1,4 @@
+import { aggregateReplay, type ReplayMetrics, type ReplayAggregate } from "./replay-metrics"
 /** Exact-token and correctness metrics for the real A/B/C/D pipelines. */
 import { createExactTokenCounter } from "@bluecode/shared"
 import type { FixtureSample } from "./fixtures"
@@ -44,6 +45,7 @@ interface RecallAggregate {
 }
 
 export interface GroupMetrics {
+  replay?: ReplayAggregate
   compressionRatio: number
   longOutputRatio: number
   latencyP50Ms: number
@@ -55,6 +57,7 @@ export interface GroupMetrics {
 }
 
 export interface PerFixtureRecord {
+  replay?: ReplayMetrics
   fixture: string
   group: EvalGroup
   rawTokens: number
@@ -70,7 +73,10 @@ export interface PerFixtureRecord {
 }
 
 export interface FullReport {
+  concurrency?: import("./runner").ConcurrencySample[]
   meta: {
+    semanticsVersion?: 2
+    measurement?: string
     timestamp: string
     tokenCounter: "o200k_base"
     versions: { node: string; bun: string }
@@ -120,7 +126,7 @@ export function computeGroupMetrics(
   group: EvalGroup,
   perFixture: PerFixtureRecord[],
   latencies: LatencySample[],
-  recallResults: RecallResult[],
+  recallResults: RecallResult[]
 ): GroupMetrics {
   const groupFixtures = perFixture.filter((fixture) => fixture.group === group)
   const groupLatencies = latencies
@@ -132,19 +138,13 @@ export function computeGroupMetrics(
   const totalRaw = groupFixtures.reduce((sum, fixture) => sum + fixture.rawTokens, 0)
   const totalOut = groupFixtures.reduce((sum, fixture) => sum + fixture.outTokens, 0)
   const longFixtures = groupFixtures.filter(
-    (fixture) => fixture.rawTokens * 4 > LONG_OUTPUT_THRESHOLD,
+    (fixture) => fixture.rawTokens * 4 > LONG_OUTPUT_THRESHOLD
   )
   const longRaw = longFixtures.reduce((sum, fixture) => sum + fixture.rawTokens, 0)
   const longOut = longFixtures.reduce((sum, fixture) => sum + fixture.outTokens, 0)
 
-  const archiveFound = groupRecalls.reduce(
-    (sum, result) => sum + result.archiveRecovery.found,
-    0,
-  )
-  const archiveTotal = groupRecalls.reduce(
-    (sum, result) => sum + result.archiveRecovery.total,
-    0,
-  )
+  const archiveFound = groupRecalls.reduce((sum, result) => sum + result.archiveRecovery.found, 0)
+  const archiveTotal = groupRecalls.reduce((sum, result) => sum + result.archiveRecovery.total, 0)
 
   const degradedCounts: DegradedCounts = {
     spawn_failed: 0,
@@ -158,14 +158,16 @@ export function computeGroupMetrics(
   }
   const degradedTotal = Object.values(degradedCounts).reduce((sum, count) => sum + count, 0)
 
+  const replay = aggregateReplay(groupFixtures.flatMap((row) => (row.replay ? [row.replay] : [])))
   return {
+    ...(replay ? { replay } : {}),
     compressionRatio: computeCompressionRatio(totalRaw, totalOut),
     longOutputRatio: computeCompressionRatio(longRaw, longOut),
     latencyP50Ms: percentile(groupLatencies, 50),
     latencyP95Ms: percentile(groupLatencies, 95),
     contextRecall: aggregateRecall(groupRecalls.map((result) => result.context)),
     queryRecall: aggregateRecall(
-      groupRecalls.flatMap((result) => result.query === null ? [] : [result.query]),
+      groupRecalls.flatMap((result) => (result.query === null ? [] : [result.query]))
     ),
     archiveRecovery: {
       found: archiveFound,
@@ -199,7 +201,7 @@ export function evaluateRecall(
   group: EvalGroup,
   activeContext: string | null,
   queryMatches: string[] | null,
-  archiveRecovery: { found: number; total: number },
+  archiveRecovery: { found: number; total: number }
 ): RecallResult {
   const contextText = activeContext ?? ""
   const querySet = queryMatches === null ? null : new Set(queryMatches)
@@ -219,7 +221,7 @@ export function buildPerFixtureRecord(
   outputText: string,
   latencyMs: number,
   recall: RecallResult,
-  degradedReason: keyof DegradedCounts | null,
+  degradedReason: keyof DegradedCounts | null
 ): PerFixtureRecord {
   return {
     fixture: fixture.name,
@@ -240,7 +242,7 @@ export function buildPerFixtureRecord(
 export function aggregateReport(
   perFixture: PerFixtureRecord[],
   latencies: LatencySample[],
-  recallResults: RecallResult[],
+  recallResults: RecallResult[]
 ): FullReport {
   const groups = {} as Record<EvalGroup, GroupMetrics>
   for (const group of ["A", "B", "C", "D"] as const) {
@@ -248,6 +250,9 @@ export function aggregateReport(
   }
   return {
     meta: {
+      semanticsVersion: 2,
+      measurement:
+        "Deterministic offline plugin replay proxy, not provider usage or task-solving ability. o200k_base of role-tagged visible text; all fixed host calls and model-visible retrieval outputs counted. Integrity-only archive probes excluded. Queue/service split unavailable from current public clients; RPC/hook/drain elapsed measured. RSS is the harness process only.",
       timestamp: new Date().toISOString(),
       tokenCounter: "o200k_base",
       versions: { node: process.version, bun: Bun.version },

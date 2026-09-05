@@ -22,5 +22,10 @@
   "dependencies": {
     "@bluecode/contracts": "workspace:^",
     "@bluecode/shared": "workspace:^"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./pure": "./src/pure.ts"
   }
 }

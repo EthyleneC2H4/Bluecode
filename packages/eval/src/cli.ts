@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
+import { validateReliability } from "./reliability"
 /** CLI for full/quick evaluation, baseline refresh and regression checking. */
 import path from "node:path"
-import { runEvaluation, dispose as disposeRunner } from "./runner"
+import { runEvaluation, runConcurrencyBenchmarks, dispose as disposeRunner } from "./runner"
 import { aggregateReport, dispose as disposeMetrics } from "./metrics"
 import { writeReport, printSummary } from "./report"
 import { checkBaseline } from "./check-baseline"
@@ -13,24 +14,52 @@ export interface CliOptions {
   check: boolean
   updateBaseline: boolean
   skipLatency: boolean
+  benchmarks: boolean
+  invariants: boolean
   help: boolean
+  retrievalStrategy?: "query-only" | "eager-recovery"
+  reportPath?: string
+  baselinePath?: string
 }
 
 export interface EvaluationExecution {
   quick: boolean
-  action: "report" | "check" | "update-baseline"
+  action: "report" | "check" | "update-baseline" | "invariants"
 }
 
 export function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
+    benchmarks: false,
+    invariants: false,
     quick: false,
     check: false,
     updateBaseline: false,
     skipLatency: false,
     help: false,
   }
-  for (const arg of argv) {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]
     switch (arg) {
+      case "--retrieval-strategy": {
+        const strategy = argv[++i]
+        if (strategy !== "query-only" && strategy !== "eager-recovery")
+          throw new Error("--retrieval-strategy requires query-only or eager-recovery")
+        options.retrievalStrategy = strategy
+        break
+      }
+      case "--report-path":
+      case "--baseline-path": {
+        const value = argv[++i]
+        if (!value || value.startsWith("--")) throw new Error(`${arg} requires a path`)
+        options[arg === "--report-path" ? "reportPath" : "baselinePath"] = value
+        break
+      }
+      case "--benchmarks":
+        options.benchmarks = true
+        break
+      case "--invariants":
+        options.invariants = true
+        break
       case "--quick":
         options.quick = true
         break
@@ -62,6 +91,7 @@ export function resolveExecution(options: CliOptions): EvaluationExecution {
   if (options.updateBaseline && options.quick) {
     throw new Error("--quick cannot be combined with --update-baseline")
   }
+  if (options.invariants) return { quick: false, action: "invariants" }
   if (options.updateBaseline) return { quick: false, action: "update-baseline" }
   if (options.check) return { quick: false, action: "check" }
   return { quick: options.quick, action: "report" }
@@ -78,7 +108,12 @@ Options:
   --quick              Run with reduced fixture set (faster iteration)
   --check              Run a fresh full evaluation, then compare to baseline
   --update-baseline    Run a fresh full evaluation, then update baseline
-  --skip-latency       Skip only the p95 latency gate
+  --retrieval-strategy  query-only (default) or eager-recovery stress scenario
+  --benchmarks         Include real-client 1/8/32 concurrency observations
+  --invariants         Run fresh full evaluation and absolute reliability targets
+  --report-path PATH   Report destination (or EVAL_REPORT_PATH)
+  --baseline-path PATH Baseline destination (or EVAL_BASELINE_PATH)
+  --skip-latency       Skip only the relative p95 latency gate
   --help, -h           Show this help
 `)
 }
@@ -108,26 +143,54 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   try {
     const runnerResult = await runEvaluation({
       quick: execution.quick,
+      ...(options.retrievalStrategy ? { retrievalStrategy: options.retrievalStrategy } : {}),
       headroomEntry: DEFAULT_HEADROOM_ENTRY,
     })
     const report = aggregateReport(
       runnerResult.perFixture,
       runnerResult.latencies,
-      runnerResult.recallResults,
+      runnerResult.recallResults
     )
-    writeReport(report)
+    if (options.benchmarks) report.concurrency = await runConcurrencyBenchmarks()
+    writeReport(report, options.reportPath)
     printSummary(report)
 
+    const reliability = validateReliability(report)
+    for (const violation of reliability)
+      console.error(
+        `[eval] ABSOLUTE TARGET FAILED ${violation.metric} [${violation.group}]: ${violation.current} (target ${violation.target})`
+      )
+    if (execution.action === "invariants") return reliability.length ? 1 : 0
+    if (execution.action === "check" && reliability.length) return 1
+
     if (execution.action === "update-baseline") {
-      return checkBaseline(true, { skipLatency: options.skipLatency }).passed ? 0 : 1
+      return checkBaseline(true, {
+        skipLatency: options.skipLatency,
+        ...(options.baselinePath ? { baselinePath: options.baselinePath } : {}),
+        ...(options.reportPath ? { reportPath: options.reportPath } : {}),
+      }).passed
+        ? 0
+        : 1
     }
     if (execution.action === "check") {
-      return checkBaseline(false, { skipLatency: options.skipLatency }).passed ? 0 : 1
+      return checkBaseline(false, {
+        skipLatency: options.skipLatency,
+        ...(options.baselinePath ? { baselinePath: options.baselinePath } : {}),
+        ...(options.reportPath ? { reportPath: options.reportPath } : {}),
+      }).passed
+        ? 0
+        : 1
     }
 
-    const baselineCheck = checkBaseline(false, { skipLatency: options.skipLatency })
+    const baselineCheck = checkBaseline(false, {
+      skipLatency: options.skipLatency,
+      ...(options.baselinePath ? { baselinePath: options.baselinePath } : {}),
+      ...(options.reportPath ? { reportPath: options.reportPath } : {}),
+    })
     if (!baselineCheck.passed) {
-      console.error("[eval] WARNING: Current results violate baseline (run with --check for a gate)")
+      console.error(
+        "[eval] WARNING: Current results violate baseline (run with --check for a gate)"
+      )
     }
     return 0
   } catch (error) {
@@ -141,8 +204,10 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
 }
 
 if (import.meta.main) {
-  main().then((code) => process.exit(code)).catch((error) => {
-    console.error(`[eval] FATAL: ${error instanceof Error ? error.message : String(error)}`)
-    process.exit(1)
-  })
+  main()
+    .then((code) => process.exit(code))
+    .catch((error) => {
+      console.error(`[eval] FATAL: ${error instanceof Error ? error.message : String(error)}`)
+      process.exit(1)
+    })
 }

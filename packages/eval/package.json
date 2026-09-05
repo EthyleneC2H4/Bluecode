@@ -1,5 +1,5 @@
 {
-  "//": "Dependency direction: contracts <- shared <- {rtk-core, headroomd, rtk, plugin, eval}. Eval orchestrates the REAL rtk + headroomd clients (brief requirement), so unlike leaf packages it depends on both process packages; plugin precedent applies (leaf packages declare what they wire).",
+  "//": "Dependency direction: eval -> plugin public runtime/retrieval adapter, rtk + headroomd real clients, contracts + shared. No custom view materializer.",
   "name": "@bluecode/eval",
   "description": "A/B/C/D evaluation harness with exact token accounting and frozen-baseline regression gates",
   "keywords": [
@@ -23,6 +23,7 @@
     "@bluecode/contracts": "workspace:^",
     "@bluecode/shared": "workspace:^",
     "@bluecode/rtk": "workspace:^",
-    "@bluecode/headroomd": "workspace:^"
+    "@bluecode/headroomd": "workspace:^",
+    "@bluecode/plugin": "workspace:^"
   }
 }

@@ -15,10 +15,10 @@
  * imported by a sidecar, and sidecar internals (rtk vs headroomd) must stay
  * mutually unaware.
  */
-import { readFileSync, readdirSync } from "node:fs";
-import path from "node:path";
+import { readFileSync, readdirSync } from "node:fs"
+import path from "node:path"
 
-const PACKAGES_DIR = path.join(import.meta.dir, "..", "packages");
+const PACKAGES_DIR = path.join(import.meta.dir, "..", "packages")
 
 const ALLOWED_EDGES: Record<string, readonly string[]> = {
   contracts: [],
@@ -27,54 +27,54 @@ const ALLOWED_EDGES: Record<string, readonly string[]> = {
   headroomd: ["contracts", "shared"],
   rtk: ["rtk-core", "contracts", "shared"],
   plugin: ["rtk", "headroomd", "contracts", "shared"],
-  eval: ["rtk", "headroomd", "contracts", "shared"],
-};
-
-interface Violation {
-  from: string;
-  to: string;
-  kind: "undeclared-package" | "forbidden-edge" | "missing-declaration";
+  eval: ["rtk", "headroomd", "contracts", "shared", "plugin"],
 }
 
-const violations: Violation[] = [];
+interface Violation {
+  from: string
+  to: string
+  kind: "undeclared-package" | "forbidden-edge" | "missing-declaration"
+}
 
-const discovered = readdirSync(PACKAGES_DIR);
+const violations: Violation[] = []
+
+const discovered = readdirSync(PACKAGES_DIR)
 
 const packageNames = new Set<string>(
   // Package dir names equal their @bluecode/<name> suffixes by convention;
   // verify against package.json to keep the gate honest if that ever drifts.
   discovered.filter((dir) => {
     try {
-      const pkg = JSON.parse(readFileSync(path.join(PACKAGES_DIR, dir, "package.json"), "utf8"));
-      return typeof pkg.name === "string" && pkg.name.startsWith("@bluecode/");
+      const pkg = JSON.parse(readFileSync(path.join(PACKAGES_DIR, dir, "package.json"), "utf8"))
+      return typeof pkg.name === "string" && pkg.name.startsWith("@bluecode/")
     } catch {
-      return false;
+      return false
     }
-  }),
-);
+  })
+)
 
 function internalDeps(pkgJsonPath: string): string[] {
   const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf8")) as {
-    dependencies?: Record<string, string>;
-    devDependencies?: Record<string, string>;
-    peerDependencies?: Record<string, string>;
-  };
-  const all = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies };
-  return Object.keys(all).filter((name) => name.startsWith("@bluecode/"));
+    dependencies?: Record<string, string>
+    devDependencies?: Record<string, string>
+    peerDependencies?: Record<string, string>
+  }
+  const all = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies }
+  return Object.keys(all).filter((name) => name.startsWith("@bluecode/"))
 }
 
 for (const dir of discovered) {
-  if (!packageNames.has(dir)) continue;
-  const declared = internalDeps(path.join(PACKAGES_DIR, dir, "package.json"));
+  if (!packageNames.has(dir)) continue
+  const declared = internalDeps(path.join(PACKAGES_DIR, dir, "package.json"))
   for (const dep of declared) {
-    const target = dep.replace("@bluecode/", "");
+    const target = dep.replace("@bluecode/", "")
     if (!ALLOWED_EDGES[dir]?.includes(target)) {
-      violations.push({ from: dir, to: target, kind: "forbidden-edge" });
+      violations.push({ from: dir, to: target, kind: "forbidden-edge" })
     }
   }
   for (const allowed of ALLOWED_EDGES[dir] ?? []) {
     if (!declared.includes(`@bluecode/${allowed}`)) {
-      violations.push({ from: dir, to: allowed, kind: "missing-declaration" });
+      violations.push({ from: dir, to: allowed, kind: "missing-declaration" })
     }
   }
 }
@@ -83,29 +83,35 @@ for (const dir of discovered) {
 // a new package without a gate entry would otherwise skip checking entirely.
 for (const name of packageNames) {
   if (!(name in ALLOWED_EDGES)) {
-    violations.push({ from: name, to: "(gate)", kind: "undeclared-package" });
+    violations.push({ from: name, to: "(gate)", kind: "undeclared-package" })
   }
 }
 for (const name of Object.keys(ALLOWED_EDGES)) {
   if (!packageNames.has(name)) {
-    violations.push({ from: "(gate)", to: name, kind: "undeclared-package" });
+    violations.push({ from: "(gate)", to: name, kind: "undeclared-package" })
   }
 }
 
 if (violations.length > 0) {
-  console.error("dependency-direction check FAILED:");
+  console.error("dependency-direction check FAILED:")
   for (const v of violations) {
     if (v.kind === "undeclared-package") {
-      console.error(`  - package/gate mismatch: ${v.from} ↔ ${v.to} (add it to ALLOWED_EDGES or fix packages/)`);
+      console.error(
+        `  - package/gate mismatch: ${v.from} ↔ ${v.to} (add it to ALLOWED_EDGES or fix packages/)`
+      )
     } else if (v.kind === "missing-declaration") {
-      console.error(`  - ${v.from}: expected dependency on @bluecode/${v.to} is missing from package.json`);
+      console.error(
+        `  - ${v.from}: expected dependency on @bluecode/${v.to} is missing from package.json`
+      )
     } else {
       console.error(
-        `  - ${v.from} -> @bluecode/${v.to}: edge not allowed (allowed: [${(ALLOWED_EDGES[v.from] ?? []).join(", ") || "none"}])`,
-      );
+        `  - ${v.from} -> @bluecode/${v.to}: edge not allowed (allowed: [${
+          (ALLOWED_EDGES[v.from] ?? []).join(", ") || "none"
+        }])`
+      )
     }
   }
-  process.exit(1);
+  process.exit(1)
 }
 
-console.log(`dependency-direction OK (${packageNames.size} packages, graph matches the gate)`);
+console.log(`dependency-direction OK (${packageNames.size} packages, graph matches the gate)`)

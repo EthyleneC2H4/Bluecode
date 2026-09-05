@@ -1,300 +1,67 @@
-<div align="center">
-
 # BlueCode
 
-**Context-engineering sidecars for [opencode](https://github.com/anomalyco/opencode)** —
-compress tool output in the hot path, archive long-session history behind a searchable store,
-and degrade to transparent passthrough instead of ever losing a byte.
+Context engineering for [OpenCode](https://github.com/anomalyco/opencode): an RTK tool-output sidecar and a headroomd history archive, mounted through one plugin.
 
-[![CI](https://github.com/EthyleneC2H4/Bluecode/actions/workflows/ci.yml/badge.svg)](https://github.com/EthyleneC2H4/Bluecode/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Bun](https://img.shields.io/badge/Bun-%E2%89%A51.4-fbf0df?logo=bun&logoColor=black)](https://bun.sh)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](tsconfig.base.json)
-[![Tests](https://img.shields.io/badge/tests-298%20passing-brightgreen)](#quick-start)
+[简体中文](README.zh-CN.md) · [Architecture](docs/architecture.md) · [Operations](docs/operations.md) · [Implementation and evidence](docs/reliability-implementation.md)
 
-[Features](#features) · [Architecture](#architecture) · [Packages](#packages) · [Quick Start](#quick-start) · [Benchmarks](#benchmarks) · [Documentation](#documentation)
+This is an independent learning implementation, not vivo's private BlueCode source. Evaluation uses local synthetic data.
 
-English · [简体中文](README.zh-CN.md)
+## How it works
 
-</div>
+| Component | Responsibility |
+|---|---|
+| RTK | Condenses recognized command output, preserving code, changed diff lines and complete failure diagnostics. The 512-token target is soft; protected content can exceed it. |
+| headroomd | Archives completed turns, builds evidence memory, and persists a view that can be reapplied to each fresh host message array. Recent turns, active tools and unsupported content remain protected. |
+| Plugin | Owns clients and state per instance; binds retrieval to actual project/session IDs; coordinates model limits and upstream compaction. |
+| Retrieval | Searches full-content chunks with FTS5/BM25 and restores verified archives through bounded cursors. Retrieval output bypasses RTK. |
 
----
+RTK uses protocol v3 over stdio; headroomd uses protocol v2 over a Unix socket. Durable data lives outside temporary runtime sockets. Errors preserve host-visible content or pause planning; retrieval reports missing or corrupt archives explicitly. RTK stores the sanitized text it receives, which may already have been truncated by the host.
 
-## Why
+## Run locally
 
-Long-running coding-agent sessions slowly drown their context window: every `ls`, `grep`,
-test run and log dump lands verbatim in the transcript, and turn history keeps piling up.
-Sooner or later the host silently truncates or compacts — and the detail your task still
-depends on vanishes mid-flight.
+Use **Bun 1.4.0**. Linux and macOS are intended platforms. Local verification was on macOS; Linux has a configured CI job, with execution results pending.
 
-BlueCode attacks both paths from a single opencode plugin, **with zero changes to the host core**:
-
-| Sidecar | Transport | Job |
-|---|---|---|
-| **rtk** | stdio JSONL, pre-warmed resident process | Classify each tool result and compress it to a token budget — anchors preserved, byte-exact original stored for retrieval |
-| **headroomd** | Unix domain socket daemon | Watch a per-session token waterline; when it trips, replace aged turns with a deterministic summary backed by a SQLite/FTS archive |
-
-Every elided byte stays retrievable via the `headroom_retrieve` tool (exact hash lookup or
-BM25 full-text query), and every failure mode degrades to *unchanged passthrough* — never to
-silent data loss.
-
-## Features
-
-- **Zero-core-change mounting** — rides documented hook surfaces plus opencode's tuple-form
-  plugin options (`"plugin": [["file://…", options]]`). Six surfaces wired:
-  `tool.execute.after`, `experimental.chat.messages.transform`, `experimental.session.compacting`,
-  `event` (idle waterline), custom tool `headroom_retrieve`, and `dispose`.
-- **Hot-path compression (rtk)** — two-tier classifier picks one of six strategies
-  (`ls | grep | read | diff | test`, plus a never-discards fallback for unknown shapes),
-  protects anchor lines by priority, trims to a
-  token budget, folds elided runs into `[+N lines elided …]` markers, and stamps
-  `metadata.bluecode { rawHash, strategy, compressed }` onto the rewritten output.
-- **Long-session daemon (headroomd)** — on `session.idle`, when projected tokens cross
-  `contextWindow × triggerRatio` (default `0.7`), turns are segmented, summarized by a fully
-  deterministic extractive summarizer (no LLM, no clock, no randomness — byte-stable), archived,
-  and replaced by a single `COMPACTION_MARKER` message carrying per-turn hash refs.
-- **Nothing-lost retrieval** — originals are kept byte-exact as gzip objects addressed by logical
-  content hash (CAS with atomic publish); retrieval supports exact-hash mode and FTS5 BM25 query
-  mode with CJK-aware pre-segmentation and session-scoped predicates.
-- **Failure containment matrix** — per-request timeout → crash detection → exponential restart
-  backoff → circuit breaker with periodic recovery probes; any failure yields unchanged
-  passthrough tagged `metadata.bluecode.degraded`. The conversation never notices.
-- **Rebuildable storage** — split-durability design: the ownership ledger (`meta.db`) is durable;
-  the derived search index (`index.db`) can be deleted at any time and self-heals on startup by
-  rebuilding from CAS objects.
-- **Reproducible eval harness + regression gate** — four controlled groups driving real sidecar
-  clients over deterministic seeded fixtures, exact o200k_base token counts, and a baseline gate
-  (`--check`) that fails CI on quality regressions.
-
-## Architecture
-
-```mermaid
-flowchart TB
-    subgraph HOST["opencode host (unmodified, tested on 1.18.x)"]
-        MODEL["LLM agent loop"]
-        TOOL["tool execution"]
-        MSGS["session messages"]
-        SDK["SDK client"]
-    end
-
-    subgraph PLUGIN["@bluecode/plugin — six hook surfaces"]
-        H1["tool.execute.after → rtk-hook"]
-        H4["event: session.idle → waterline check"]
-        H2["chat.messages.transform → apply-plan"]
-        H3["session.compacting → fallback context"]
-        H5["custom tool: headroom_retrieve"]
-    end
-
-    subgraph RTK["rtk sidecar (stdio JSONL, pre-warmed)"]
-        RS["JSONL server"]
-        RENG["classify → strategy → anchors → budget"]
-    end
-
-    subgraph HRD["headroomd daemon (Unix domain socket)"]
-        HS["UDS server"]
-        HENG["turns → deterministic summary"]
-        HRET["retrieve: hash ∨ BM25"]
-    end
-
-    subgraph STORE["dataDir (per-user tmpdir, uid-namespaced)"]
-        CAS["objects/ — contentHash → gzip JSON"]
-        META[("meta.db — cas_meta ledger")]
-        IDX[("index.db — histories / chunks / chunks_fts")]
-    end
-
-    TOOL -- "output" --> H1
-    H1 -- "compress" --> RS
-    RS --> RENG
-    RENG -- "rawHash object" --> CAS
-    H1 -- "in-place rewrite + metadata.bluecode" --> TOOL
-    TOOL --> MODEL
-    H4 -- "fetch recent msgs" --> SDK
-    H4 -- "compact?" --> HS
-    HS --> HENG
-    HENG -- "write order: objects → meta → index" --> CAS
-    HENG --> META
-    HENG --> IDX
-    H4 -- "pendingPlan" --> H2
-    H2 -- "COMPACTION_MARKER splice" --> MSGS
-    MODEL --> H5
-    H3 -- "upstream fallback context" --> MODEL
-    H5 -- "hash or query" --> HRET
-    HRET --> IDX
-    HRET -- "byte-exact original" --> CAS
-    H1 -. "timeout / crash / breaker OPEN → passthrough unchanged" .-> TOOL
-    H4 -. "daemon dead → session continues (degraded)" .-> MSGS
+```sh
+bun install --frozen-lockfile
+bun run verify
+bun run eval --check --skip-latency
 ```
 
-Three data paths:
+Verification runs strict workspace typechecks, tests, dependency checks and a host bundle check that rejects SQLite imports. Evaluation requires no model credentials.
 
-1. **Hot path (synchronous)** — every finished tool call flows through rtk; compressed text is
-   rewritten in place before the model sees it. Outputs ≤ 512 bytes take a client-side fast path
-   with no IPC at all.
-2. **Idle path (asynchronous)** — when the session goes idle above the token waterline,
-   headroomd summarizes and archives aged turns; the plan is applied on the next message
-   transform.
-3. **Retrieval path** — the model calls `headroom_retrieve` with a rawHash (byte-exact original)
-   or a free-text query (ranked BM25 hits from the archive).
+Mount the checkout through OpenCode's tuple-form configuration:
 
-If either sidecar dies mid-session, that path degrades gracefully — passthrough for rtk,
-compaction pause for headroomd — while the rest of the session carries on. Restart the host to
-recover the failed component.
-
-## Packages
-
-| Package | Role | Highlights |
-|---|---|---|
-| [`@bluecode/contracts`](packages/contracts) | Wire-protocol schemas & shared error codes | zod schemas for both protocols, ChatMessage projection |
-| [`@bluecode/shared`](packages/shared) | Primitives | JSONL framing, CAS, ANSI stripping, exact token counting, redaction hooks |
-| [`@bluecode/rtk-core`](packages/rtk-core) | Pure compression pipeline | classifier + six strategies + anchor protection + budget trimming (no I/O) |
-| [`@bluecode/rtk`](packages/rtk) | stdio JSONL sidecar | pre-warmed server + degradation-matrix client (warmup / timeout / restart / circuit breaker) |
-| [`@bluecode/headroomd`](packages/headroomd) | UDS history daemon | turn segmentation, deterministic summaries, SQLite/FTS archive, startup self-heal |
-| [`@bluecode/plugin`](packages/plugin) | opencode plugin | six hook surfaces wiring both sidecars — zero core changes |
-| [`@bluecode/eval`](packages/eval) | Evaluation harness | four-group A/B/C/D runner, golden-fact metrics, baseline freeze + gate |
-
-~8.7k lines of source, ~6.0k lines of tests across 37 test files. Dependency direction:
-`plugin → {rtk, headroomd} → {contracts, shared}` — leaf packages never depend on each other.
-
-## Quick Start
-
-Requires [Bun](https://bun.sh) ≥ 1.4 (tested on Bun 1.4.0). No LLM API key is needed to build,
-test or evaluate — only for live sessions.
-
-> [!IMPORTANT]
-> **POSIX only.** headroomd communicates over a Unix domain socket and both sidecars rely on
-> POSIX permissions (socket `0600`, data-dir `0700`), so Linux and macOS are supported;
-> **Windows is not** (no WSL workaround — the socket path is a filesystem path by design).
-
-```bash
-git clone https://github.com/EthyleneC2H4/Bluecode.git bluecode
-cd bluecode
-bun install
-
-bun run verify            # typecheck all workspaces + full test suite
-bun run eval --quick      # reduced fixture set (harness smoke)
-bun run eval              # full A/B/C/D run → packages/eval/eval-report.json
-bun run eval --check      # regression gate vs packages/eval/baseline.json (exit 1 on violation)
-```
-
-### Mount into a real opencode project
-
-Add the tuple-form entry to your project's `opencode.json` (path must be an absolute `file://`
-URL pointing at the checked-out `packages/plugin`):
-
-```jsonc
+```json
 {
-  "plugin": [
-    [
-      "file:///absolute/path/to/bluecode/packages/plugin",
-      {
-        "enabled": true,
-        "rtk":      { "budgetTokens": 512, "timeoutMs": 40, "minBytes": 512 },
-        "headroom": { "triggerRatio": 0.7, "retainRecentTurns": 4, "fallback": "upstream" }
-      }
-    ]
-  ]
+  "plugin": [["file:///absolute/path/Bluecode/packages/plugin/src/index.ts", {
+    "mode": "on",
+    "rtk": {"budgetTokens": 512, "timeoutMs": 40, "minBytes": 512},
+    "headroom": {"triggerRatio": 0.7, "targetRatio": 0.55, "retainRecentTurns": 4}
+  }]]
 }
 ```
 
-Then start opencode in a scratch directory. Live verification follows the ten-step checklist in
-[`scripts/smoke.md`](scripts/smoke.md).
+The adapter targets the inspected OpenCode **1.18.21** API. Some hooks are experimental. See [integration notes](docs/integration-notes.md) and [operations](docs/operations.md) for off/shadow/on, allowances, migration and recovery.
 
-> [!NOTE]
-> Hook compatibility is verified against **opencode 1.18.x**. Some mounted surfaces are
-> upstream `experimental.*` APIs and may change in future opencode releases.
+## Measured replay
 
-## Benchmarks
+Eleven fixtures run through four configurations using the production plugin runtime. The o200k_base count covers all fixed model-input representations, repeated context, question calls and retrieval evidence.
 
-Frozen eval baseline ([`packages/eval/baseline.json`](packages/eval/baseline.json), frozen
-2026-08-24): full fixture set (10 deterministic fixtures per group), exact o200k_base token
-counting, Bun 1.4.0. Regenerate anytime with `bun run eval --check`.
+| Configuration | Total input tokens |
+|---|---:|
+| A: passthrough | 582,501 |
+| B: RTK | 464,781 |
+| C: headroomd | 529,923 |
+| D: combined | 435,436 |
 
-| Group | Configuration | Compression ratio¹ (lower = smaller context) | Must-hit recall² | Degraded rate |
-|---|---|---:|---:|---:|
-| A | passthrough baseline | 100% | — ⁵ | 0 |
-| B | rtk only | **35.6%** | 75/94 (79.8%) | 0 |
-| C | headroomd only | **36.5%** | 88/94 (93.6%) | 0 |
-| D | combined (rtk → headroomd) | **9.0%** ⁶ | 74/94 (78.7%) | 0 |
+The combined query-only replay saves **25.25%** total input. Natural-question Recall@5 is 10/10 in C/D; each group preserves 3/3 designated critical constraints and passes 10/10 deterministic answer checks. D restores 108/108 archive items exactly. Ordinary legacy context facts remain 102/104 in B/D and are reported separately.
 
-On the long-session fixture, headroomd reduces accumulated history from **51,083 → 273 tokens**.
+These are deterministic content checks, not measured LLM task-solving accuracy or provider billing. Eager full-document retrieval saves only **6.95%**, failing the 20% cost target. At 32 concurrent calls, RTK degrades 13 times under its 40ms deadline. See [full evidence and limitations](docs/reliability-implementation.md) and [evaluation CLI](packages/eval/README.md).
 
-<details>
-<summary><b>Methodology & caveats</b></summary>
+## Development
 
-1. **Compression ratio** = Σ outTokens / Σ rawTokens, token-weighted across the group's fixtures,
-   exact o200k_base counts (raw total 80,034 tokens per group; B out 28,479, C out 29,224,
-   D out 7,223).
-2. **Recall** uses this project's deliberately generous definition — *"retrievable from
-   headroomd counts as not lost"*: a golden fact hits if it survives by substring in the
-   compressed output, in any retrieved snippet, or in its fetch-by-hash original. Per-item miss
-   lists live in `eval-report.json → perFixture[].recallMisses`. Nice-to-have recall:
-   B 17/23, C 21/23, D 17/23. Residual B/D misses are a deliberate middle-window truncation
-   policy; C misses are tail turns newer than `retainRecentTurns`.
-3. The frozen baseline covers the **full fixture set** (10 deterministic fixtures per group,
-   seeded via mulberry32 for byte-identical regeneration). `bun run eval --quick` runs a
-   reduced smoke set instead.
-4. Latency was measured per-stage in-harness (IPC time on synthetic fixtures); it is reported in
-   the baseline JSON but deliberately **not** marketed as end-to-end agent speed-up. C's tiny
-   p50 reflects that single tool outputs rarely meet the compaction watermark — by design it
-   leaves small outputs untouched.
-5. Group A transforms nothing, so no golden facts are probed.
-6. **D is a lower-bound approximation**: the harness measures the two stages independently
-   (summary computed from pre-rtk history), whereas the real plugin chain lets headroomd read
-   the session *after* rtk rewrote it — real-world combined savings should be ≥ 9.0%.
-7. Every quantitative claim in this repository traces to
-   [`packages/eval/baseline.json`](packages/eval/baseline.json); aspirational numbers are always
-   labeled as targets and never mixed with measurements.
+Seven packages separate contracts, shared primitives, pure RTK strategies, RTK transport/storage, headroomd, the plugin and evaluation. Evaluation imports the production runtime; sidecars remain independent. Legacy plugin helpers remain for compatibility tests, outside the production factory's import graph.
 
-</details>
+See [CONTRIBUTING.md](CONTRIBUTING.md), [protocol](docs/protocol.md), [design](docs/superpowers/specs/2026-09-05-reliability-design.md) and [implementation plan](docs/superpowers/plans/2026-09-05-reliability.md).
 
-## Documentation
-
-| Document | Contents |
-|---|---|
-| [`docs/architecture.md`](docs/architecture.md) | Package layout, rtk/headroomd data flows, key design decisions |
-| [`docs/protocol.md`](docs/protocol.md) | Wire specs: rtk over stdio JSONL, headroomd over UDS — framing, ops, errors |
-| [`docs/integration-notes.md`](docs/integration-notes.md) | Upstream hook verification records vs opencode v1.18.21 (exact file:line citations) |
-| [`docs/devlog.md`](docs/devlog.md) | Development log: hardest bugs, root causes, fixes, lessons |
-| [`scripts/smoke.md`](scripts/smoke.md) | Ten-step live-session verification checklist |
-| [`scripts/refresh-upstream.sh`](scripts/refresh-upstream.sh) | Re-sync the read-only opencode upstream snapshot used for hook verification |
-
-## Project layout
-
-```
-bluecode/
-├── package.json              # bun workspace root: test / typecheck / eval / verify
-├── tsconfig.base.json
-├── docs/                     # architecture, protocol, integration notes, devlog
-├── scripts/                  # smoke checklist + upstream snapshot refresher
-└── packages/
-    ├── contracts/            # wire-protocol zod schemas & error codes
-    ├── shared/               # JSONL framing, CAS, ANSI strip, token count
-    ├── rtk-core/             # pure compression pipeline
-    ├── rtk/                  # stdio sidecar server + client
-    ├── headroomd/            # UDS daemon + SQLite/FTS archive
-    ├── plugin/               # opencode plugin (six hooks)
-    └── eval/                 # A/B/C/D harness + baseline gate
-```
-
-## Contributing
-
-Issues and pull requests are welcome. Before submitting:
-
-```bash
-bun run verify          # typecheck + tests
-bun run eval --check    # benchmark regression gate
-```
-
-Please re-freeze the eval baseline (`bun run eval --update-baseline`) only for intentional
-behavior changes, and say so in the PR.
-
-## Acknowledgments
-
-- [opencode](https://github.com/anomalyco/opencode) — the open-source coding agent BlueCode
-  plugs into. The plugin mechanism, hook surfaces and SDK shapes it exposes made this
-  zero-core-change design possible.
-- Built with [Bun](https://bun.sh), TypeScript, zod and SQLite/FTS5.
-
-## License
-
-[MIT](LICENSE) © wangyixi
+MIT; see [LICENSE](LICENSE). AI assisted implementation and documentation; architectural sources and license boundaries are recorded in the implementation report.

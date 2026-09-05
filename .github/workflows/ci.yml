@@ -11,7 +11,11 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -42,12 +46,21 @@ jobs:
       - name: Dependency direction
         run: bun scripts/check-dependency-direction.ts
 
-      # Full eval run against the frozen baseline. Compression-ratio and
-      # recall gates are enforced; the p95-latency gate is skipped because
-      # shared runners are too noisy for a 2x wall-clock bound.
-      - name: Eval regression gate
+      - name: Host bundle excludes SQLite
+        run: bun run check:host
+
+      # One fresh full replay gates absolute reliability and relative regression.
+      # Shared runner latency is reported but hardware-sensitive p95 is not a wall gate.
+      - name: Full plugin replay reliability and regression gate
         env:
           EVAL_SKIP_LATENCY: "1"
-        run: |
-          bun run eval
-          bun run eval --check
+          EVAL_REPORT_PATH: ${{ runner.temp }}/eval-report.json
+        run: bun run eval --check --benchmarks
+
+      - name: Publish evaluation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-${{ matrix.os }}
+          path: ${{ runner.temp }}/eval-report.json
+          if-no-files-found: warn

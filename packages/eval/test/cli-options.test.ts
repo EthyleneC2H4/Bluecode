@@ -15,7 +15,7 @@ describe("eval CLI execution mode", () => {
       action: "update-baseline",
     })
     expect(() => resolveExecution(parseArgs(["--quick", "--update-baseline"]))).toThrow(
-      "--quick cannot be combined",
+      "--quick cannot be combined"
     )
   })
 
@@ -32,7 +32,25 @@ describe("eval CLI execution mode", () => {
 
   test("--check and --update-baseline are mutually exclusive", () => {
     expect(() => resolveExecution(parseArgs(["--check", "--update-baseline"]))).toThrow(
-      "cannot be combined",
+      "cannot be combined"
     )
+  })
+})
+
+test("report and baseline destinations are injected through CLI flags", () => {
+  expect(
+    parseArgs([
+      "--report-path",
+      "/tmp/custom-report.json",
+      "--baseline-path",
+      "/tmp/custom-base.json",
+    ])
+  ).toMatchObject({ reportPath: "/tmp/custom-report.json", baselinePath: "/tmp/custom-base.json" })
+})
+
+test("invariants mode evaluates full data without needing a regression baseline", () => {
+  expect(resolveExecution(parseArgs(["--quick", "--invariants"]))).toEqual({
+    quick: false,
+    action: "invariants",
   })
 })

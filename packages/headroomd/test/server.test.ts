@@ -2,249 +2,377 @@
  * Daemon-level integration: UDS handshake, full-chain ops over the socket,
  * error-path resilience, single-instance arbitration, and idle exit.
  */
-import { afterAll, describe, expect, test } from "bun:test";
-import net from "node:net";
-import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import type { ChatMessage } from "@bluecode/contracts";
-import { startHeadroomServer } from "../src/server";
+import { afterAll, describe, expect, test } from "bun:test"
+import net from "node:net"
+import { spawn } from "node:child_process"
+import { createInterface } from "node:readline"
+import { existsSync } from "node:fs"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import type { ChatMessage } from "@bluecode/contracts"
+import { startHeadroomServer } from "../src/server"
 
-const dirs: string[] = [];
-const stops: Array<() => void> = [];
+const dirs: string[] = []
+const stops: Array<() => void> = []
 
 afterAll(async () => {
-  for (const stop of stops) stop();
-  for (const dir of dirs) await rm(dir, { recursive: true, force: true });
-});
+  for (const stop of stops) stop()
+  for (const dir of dirs) await rm(dir, { recursive: true, force: true })
+})
 
 async function freshDir(): Promise<string> {
-  const dir = await mkdtemp(path.join(tmpdir(), "bluecode-hd-srv-"));
-  dirs.push(dir);
-  return dir;
+  const dir = await mkdtemp(path.join(tmpdir(), "bluecode-hd-srv-"))
+  dirs.push(dir)
+  return dir
 }
 
 function user(id: string, text: string): ChatMessage {
-  return { info: { id, role: "user" }, parts: [{ type: "text", text }] };
+  return { info: { id, role: "user" }, parts: [{ type: "text", text }] }
 }
 
 interface RawClient {
-  pid: number;
+  pid: number
   /** Underlying socket, for asserting server-initiated teardown. */
-  socket: net.Socket;
-  sendRaw(text: string): void;
+  socket: net.Socket
+  sendRaw(text: string): void
   /** Send one request frame; resolve on the response carrying its id. */
-  roundtrip(value: unknown, timeoutMs?: number): Promise<Record<string, unknown>>;
+  roundtrip(value: unknown, timeoutMs?: number): Promise<Record<string, unknown>>
   /** Resolve on the NEXT response frame regardless of id (error frames use UNKNOWN_ID). */
-  nextResponse(timeoutMs?: number): Promise<Record<string, unknown>>;
-  close(): void;
+  nextResponse(timeoutMs?: number): Promise<Record<string, unknown>>
+  close(): void
 }
 
 /** Minimal protocol participant for asserting on raw frames. */
 function rawConnect(socketPath: string): Promise<RawClient> {
   return new Promise((resolve, reject) => {
-    const socket = net.connect(socketPath);
-    let buffer = "";
-    let handshaken = false;
-    const byId = new Map<string, (frame: Record<string, unknown>) => void>();
-    const anyWaiters: Array<(frame: Record<string, unknown>) => void> = [];
-    const queue: Record<string, unknown>[] = [];
-    let seq = 0;
+    const socket = net.connect(socketPath)
+    let buffer = ""
+    let handshaken = false
+    const byId = new Map<string, (frame: Record<string, unknown>) => void>()
+    const anyWaiters: Array<(frame: Record<string, unknown>) => void> = []
+    const queue: Record<string, unknown>[] = []
+    let seq = 0
 
     const dispatch = (frame: Record<string, unknown>): void => {
-      const waiter = byId.get(frame.id as string);
+      const waiter = byId.get(frame.id as string)
       if (waiter !== undefined) {
-        byId.delete(frame.id as string);
-        waiter(frame);
-        return;
+        byId.delete(frame.id as string)
+        waiter(frame)
+        return
       }
-      const any = anyWaiters.shift();
-      if (any !== undefined) any(frame);
-      else queue.push(frame);
-    };
+      const any = anyWaiters.shift()
+      if (any !== undefined) any(frame)
+      else queue.push(frame)
+    }
 
-    socket.on("error", reject);
+    socket.on("error", reject)
     socket.on("data", (chunk: Buffer) => {
-      buffer += chunk.toString("utf8");
+      buffer += chunk.toString("utf8")
       for (;;) {
-        const nl = buffer.indexOf("\n");
-        if (nl === -1) break;
-        const line = buffer.slice(0, nl);
-        buffer = buffer.slice(nl + 1);
-        let frame: Record<string, unknown>;
+        const nl = buffer.indexOf("\n")
+        if (nl === -1) break
+        const line = buffer.slice(0, nl)
+        buffer = buffer.slice(nl + 1)
+        let frame: Record<string, unknown>
         try {
-          frame = JSON.parse(line);
+          frame = JSON.parse(line)
         } catch {
-          continue;
+          continue
         }
-        // First frame is the daemon handshake {"proto":1,"pid":N}.
+        // First frame is the daemon handshake {"proto":2,"pid":N}.
         if (!handshaken && typeof frame.pid === "number") {
-          handshaken = true;
+          handshaken = true
           resolve({
             pid: frame.pid,
             socket,
             sendRaw: (text) => socket.write(text),
             roundtrip: (value, timeoutMs = 2000) =>
               new Promise((res, rej) => {
-                const id = `t${++seq}`;
-                const timer = setTimeout(() => rej(new Error("raw roundtrip timeout")), timeoutMs);
+                const id = `t${++seq}`
+                const timer = setTimeout(() => rej(new Error("raw roundtrip timeout")), timeoutMs)
                 byId.set(id, (response) => {
-                  clearTimeout(timer);
-                  res(response);
-                });
-                socket.write(`${JSON.stringify({ ...(value as object), id })}\n`);
+                  clearTimeout(timer)
+                  res(response)
+                })
+                socket.write(`${JSON.stringify({ ...(value as object), id })}\n`)
               }),
             nextResponse: (timeoutMs = 2000) =>
               new Promise((res, rej) => {
-                const queued = queue.shift();
+                const queued = queue.shift()
                 if (queued !== undefined) {
-                  res(queued as Record<string, unknown>);
-                  return;
+                  res(queued as Record<string, unknown>)
+                  return
                 }
-                const timer = setTimeout(() => rej(new Error("no response arrived")), timeoutMs);
+                const timer = setTimeout(() => rej(new Error("no response arrived")), timeoutMs)
                 anyWaiters.push((frame) => {
-                  clearTimeout(timer);
-                  res(frame);
-                });
+                  clearTimeout(timer)
+                  res(frame)
+                })
               }),
             close: () => socket.destroy(),
-          });
-          continue;
+          })
+          continue
         }
-        dispatch(frame);
+        dispatch(frame)
       }
-    });
-    setTimeout(() => reject(new Error("rawConnect timeout")), 2000).unref();
-  });
+    })
+    setTimeout(() => reject(new Error("rawConnect timeout")), 2000).unref()
+  })
 }
 
 describe("socket protocol", () => {
   test("handshake, full-chain ops, and error resilience", async () => {
-    const dir = await freshDir();
-    const started = await startHeadroomServer({ dataDir: dir });
-    if (started.status !== "listening") throw new Error("expected listening");
-    stops.push(started.stop);
+    const dir = await freshDir()
+    const started = await startHeadroomServer({ dataDir: dir })
+    if (started.status !== "listening") throw new Error("expected listening")
+    stops.push(started.stop)
 
-    const client = await rawConnect(started.socketPath);
+    const client = await rawConnect(started.socketPath)
 
     // compress over the wire
-    const messages: ChatMessage[] = [];
+    const messages: ChatMessage[] = []
     for (let i = 0; i < 4; i++) {
       messages.push(
         user(
           `u${i}`,
-          `第 ${i} 轮问题：分析模块 alpha。${"逐项检查输入、状态转换、恢复路径和异常边界。".repeat(16)}`,
-        ),
-      );
+          `第 ${i} 轮问题：分析模块 alpha。${"逐项检查输入、状态转换、恢复路径和异常边界。".repeat(
+            16
+          )}`
+        )
+      )
     }
+    for (let i = messages.length - 1; i >= 0; i--)
+      messages.splice(i + 1, 0, {
+        info: { id: `a${i}`, role: "assistant" },
+        parts: [{ type: "text", text: "Progress repeated. ".repeat(200) }],
+      })
     const compressed = await client.roundtrip({
-      v: 1,
+      v: 2,
       op: "compress",
-      params: { sessionId: "s1", projectId: "p1", contextWindowTokens: 100_000, messages, retainRecentTurns: 2 },
-    });
-    expect(compressed.ok).toBe(true);
-    const result = compressed.result as Record<string, unknown>;
-    expect(result.compacted).toBe(true);
-    expect(result.replacedMessageIds).toEqual(["u0", "u1"]);
+      params: {
+        sessionId: "s1",
+        projectId: "p1",
+        contextWindowTokens: 100_000,
+        targetTokens: 0,
+        messages,
+        retainRecentTurns: 1,
+      },
+    })
+    expect(compressed.ok).toBe(true)
+    const result = compressed.result as Record<string, unknown>
+    expect(result.compacted).toBe(true)
+    expect(result.replacedMessageIds).toEqual(["u0", "a0", "u1", "a1"])
 
     // retrieve by hash over the wire
-    const refs = result.refs as Array<{ contentHash: string }>;
+    const refs = result.refs as Array<{ contentHash: string }>
     const fetched = await client.roundtrip({
-      v: 1,
+      v: 2,
       op: "retrieve",
       params: { namespace: { projectId: "p1", sessionId: "s1" }, hash: refs[0]!.contentHash },
-    });
-    expect(fetched.ok).toBe(true);
-    expect(fetched.result).toMatchObject({ found: true });
+    })
+    expect(fetched.ok).toBe(true)
+    expect(fetched.result).toMatchObject({ found: true })
 
     // health over the wire
-    const health = await client.roundtrip({ v: 1, op: "health", params: {} });
-    expect(health.result).toMatchObject({ ok: true, sessions: 1 });
+    const health = await client.roundtrip({ v: 2, op: "health", params: {} })
+    expect(health.result).toMatchObject({ ok: true, sessions: 1 })
 
     // unknown op -> E_UNKNOWN_OP
-    const unknown = await client.roundtrip({ v: 1, op: "teleport", params: {} });
-    expect(unknown.ok).toBe(false);
-    expect((unknown.error as Record<string, unknown>).code).toBe("E_UNKNOWN_OP");
+    const unknown = await client.roundtrip({ v: 2, op: "teleport", params: {} })
+    expect(unknown.ok).toBe(false)
+    expect((unknown.error as Record<string, unknown>).code).toBe("E_UNKNOWN_OP")
 
     // malformed JSON -> E_PROTOCOL (reply carries UNKNOWN_ID)
-    client.sendRaw("{not json\n");
-    const protocolError = await client.nextResponse();
-    expect(protocolError.ok).toBe(false);
-    expect((protocolError.error as Record<string, unknown>).code).toBe("E_PROTOCOL");
+    client.sendRaw("{not json\n")
+    const protocolError = await client.nextResponse()
+    expect(protocolError.ok).toBe(false)
+    expect((protocolError.error as Record<string, unknown>).code).toBe("E_PROTOCOL")
 
     // invalid params -> E_INVALID_PARAMS
-    const invalid = await client.roundtrip({ v: 1, op: "compress", params: { nope: 1 } });
-    expect(invalid.ok).toBe(false);
-    expect((invalid.error as Record<string, unknown>).code).toBe("E_INVALID_PARAMS");
+    const invalid = await client.roundtrip({ v: 2, op: "compress", params: { nope: 1 } })
+    expect(invalid.ok).toBe(false)
+    expect((invalid.error as Record<string, unknown>).code).toBe("E_INVALID_PARAMS")
 
     // The loop survived everything above.
-    const stillAlive = await client.roundtrip({ v: 1, op: "health", params: {} });
-    expect(stillAlive.ok).toBe(true);
+    const stillAlive = await client.roundtrip({ v: 2, op: "health", params: {} })
+    expect(stillAlive.ok).toBe(true)
 
-    client.close();
-  });
+    client.close()
+  })
 
   test("second instance yields already-running; dead socket is rebound", async () => {
-    const dir = await freshDir();
-    const first = await startHeadroomServer({ dataDir: dir });
-    if (first.status !== "listening") throw new Error("expected listening");
-    stops.push(first.stop);
+    const dir = await freshDir()
+    const first = await startHeadroomServer({ dataDir: dir })
+    if (first.status !== "listening") throw new Error("expected listening")
+    stops.push(first.stop)
 
-    const second = await startHeadroomServer({ dataDir: dir });
-    expect(second.status).toBe("already-running");
+    const second = await startHeadroomServer({ dataDir: dir })
+    expect(second.status).toBe("already-running")
     if (second.status === "already-running") {
-      expect(second.socketPath).toBe(first.socketPath);
+      expect(second.socketPath).toBe(first.socketPath)
     }
 
     // A dead socket file is unlinked and rebound, not reported as running.
-    first.stop();
+    first.stop()
     for (let i = 0; i < 50 && existsSync(first.socketPath); i++) {
-      await new Promise((r) => setTimeout(r, 20));
+      await new Promise((r) => setTimeout(r, 20))
     }
-    const revived = await startHeadroomServer({ dataDir: dir });
-    expect(revived.status).toBe("listening");
-    if (revived.status === "listening") stops.push(revived.stop);
-  });
+    const revived = await startHeadroomServer({ dataDir: dir })
+    expect(revived.status).toBe("listening")
+    if (revived.status === "listening") stops.push(revived.stop)
+  })
 
   test("idle exit removes socket and pid files", async () => {
-    const dir = await freshDir();
-    const started = await startHeadroomServer({ dataDir: dir, idleExitMs: 300 });
+    const dir = await freshDir()
+    const started = await startHeadroomServer({ dataDir: dir, idleExitMs: 300 })
 
-    if (started.status !== "listening") throw new Error("expected listening");
+    if (started.status !== "listening") throw new Error("expected listening")
     await Promise.race([
       started.done,
       new Promise((_, rej) => setTimeout(() => rej(new Error("idle exit never fired")), 5000)),
-    ]);
+    ])
     // Poll until BOTH artifacts are gone: shutdown unlinks them in sequence,
     // so the socket may vanish a tick before the pid file does.
-    const clean = () => !existsSync(started.socketPath) && !existsSync(path.join(dir, "headroomd.pid"));
+    const clean = () =>
+      !existsSync(started.socketPath) && !existsSync(path.join(dir, "headroomd.pid"))
     for (let i = 0; i < 50 && !clean(); i++) {
-      await new Promise((r) => setTimeout(r, 20));
+      await new Promise((r) => setTimeout(r, 20))
     }
-    expect(clean()).toBe(true);
-  });
-});
+    expect(clean()).toBe(true)
+  })
+})
 
 describe("frame overflow handling", () => {
   test("oversized frame answers best-effort E_PROTOCOL then destroys the client", async () => {
-    const dir = await freshDir();
-    const started = await startHeadroomServer({ dataDir: dir, maxFrameBytes: 1024 });
-    if (started.status !== "listening") throw new Error("expected listening");
-    stops.push(started.stop);
+    const dir = await freshDir()
+    const started = await startHeadroomServer({ dataDir: dir, maxFrameBytes: 1024 })
+    if (started.status !== "listening") throw new Error("expected listening")
+    stops.push(started.stop)
 
-    const client = await rawConnect(started.socketPath);
-    const closedByServer = new Promise<void>((resolve) => client.socket.once("close", resolve));
+    const client = await rawConnect(started.socketPath)
+    const closedByServer = new Promise<void>((resolve) => client.socket.once("close", resolve))
 
     // One giant unterminated frame: past maxFrameBytes with no newline.
-    client.sendRaw("x".repeat(2000));
+    client.sendRaw("x".repeat(2000))
 
-    const overflow = await client.nextResponse();
-    expect(overflow.ok).toBe(false);
-    expect((overflow.error as Record<string, unknown>).code).toBe("E_PROTOCOL");
-    expect(String((overflow.error as Record<string, unknown>).message)).toContain("1024");
+    const overflow = await client.nextResponse()
+    expect(overflow.ok).toBe(false)
+    expect((overflow.error as Record<string, unknown>).code).toBe("E_PROTOCOL")
+    expect(String((overflow.error as Record<string, unknown>).message)).toContain("1024")
 
     // The connection does not survive the overflow: server tore it down.
-    await closedByServer;
-  });
-});
+    await closedByServer
+  })
+})
+
+describe("cold-start writer arbitration", () => {
+  test("concurrent processes on one cold socket return a winner and already-running", async () => {
+    const dataDir = await freshDir()
+    const moduleUrl = new URL("../src/server.ts", import.meta.url).href
+    const script = `
+      import { startHeadroomServer } from ${JSON.stringify(moduleUrl)}
+      process.stdout.write("ready\\n")
+      await new Promise(resolve => process.stdin.once("data", resolve))
+      process.stdin.pause()
+      try {
+        const started = await startHeadroomServer({dataDir: ${JSON.stringify(
+          dataDir
+        )}, idleExitMs: 0})
+        process.stdout.write(JSON.stringify({status: started.status}) + "\\n")
+        if (started.status === "listening") {
+          process.on("SIGTERM", () => started.stop())
+          await started.done
+        }
+      } catch (error) {
+        process.stdout.write(JSON.stringify({status: "error", message: String(error) + " cause: " + String(error.cause?.stack ?? "")}) + "\\n")
+        process.exitCode = 1
+      }
+    `
+    const children = Array.from({ length: 2 }, () => {
+      const child = spawn(process.execPath, ["--eval", script])
+      const lines = createInterface({ input: child.stdout })[Symbol.asyncIterator]()
+      let stderr = ""
+      child.stderr.on("data", (chunk) => {
+        stderr += String(chunk)
+      })
+      return { child, lines, stderr: () => stderr }
+    })
+    try {
+      expect(
+        await Promise.all(children.map(async (item) => (await item.lines.next()).value))
+      ).toEqual(["ready", "ready"])
+      for (const { child } of children) child.stdin.end("start\n")
+      const results = await Promise.all(
+        children.map(async (item) => {
+          const line = (await item.lines.next()).value
+          if (!line) throw new Error(`child exited before startup result: ${item.stderr()}`)
+          return JSON.parse(line) as { status: string; message?: string }
+        })
+      )
+      expect(results.sort((a, b) => a.status.localeCompare(b.status))).toEqual([
+        { status: "already-running" },
+        { status: "listening" },
+      ])
+      const client = await rawConnect(path.join(dataDir, "headroomd.sock"))
+      try {
+        expect((await client.roundtrip({ v: 2, op: "health", params: {} })).ok).toBe(true)
+      } finally {
+        client.close()
+      }
+    } finally {
+      await Promise.all(
+        children.map(async ({ child, lines }) => {
+          const exited =
+            child.exitCode !== null || child.signalCode !== null
+              ? Promise.resolve()
+              : new Promise<void>((resolve) => child.once("exit", () => resolve()))
+          child.kill("SIGTERM")
+          await exited
+          await lines.return?.()
+        })
+      )
+    }
+  })
+
+  test("same storage root with a different socket stays writer-exclusive", async () => {
+    const dataDir = await freshDir()
+    const first = await startHeadroomServer({ dataDir, idleExitMs: 0 })
+    if (first.status !== "listening") throw new Error("expected first writer")
+    try {
+      const startedAt = Date.now()
+      await expect(
+        startHeadroomServer({ dataDir, socketPath: path.join(dataDir, "other.sock") })
+      ).rejects.toThrow(/writer lock/)
+      expect(Date.now() - startedAt).toBeLessThan(2800)
+      expect(existsSync(path.join(dataDir, "other.sock"))).toBe(false)
+      const client = await rawConnect(first.socketPath)
+      try {
+        expect((await client.roundtrip({ v: 2, op: "health", params: {} })).ok).toBe(true)
+      } finally {
+        client.close()
+      }
+    } finally {
+      first.stop()
+      await first.done
+    }
+  })
+
+  test("corrupt writer metadata is not treated as writer contention", async () => {
+    const dataDir = await freshDir()
+    const { mkdir, writeFile } = await import("node:fs/promises")
+    const storeDir = path.join(dataDir, "storage-v2", "headroom")
+    await mkdir(storeDir, { recursive: true })
+    await writeFile(path.join(storeDir, "writer-lock.db"), "invalid sqlite database")
+    await expect(startHeadroomServer({ dataDir })).rejects.toMatchObject({ code: "SQLITE_NOTADB" })
+    expect(existsSync(path.join(dataDir, "headroomd.sock"))).toBe(false)
+  })
+
+  test("engine initialization failures other than writer contention propagate", async () => {
+    const dataDir = await freshDir()
+    await expect(startHeadroomServer({ dataDir, maxStorageBytes: 0 })).rejects.toThrow(
+      "Invalid storage capacity"
+    )
+    expect(existsSync(path.join(dataDir, "headroomd.sock"))).toBe(false)
+  })
+})

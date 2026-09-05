@@ -1,5 +1,28 @@
 # integration-notes — opencode 上游 hook 核实记录
 
+## 2026-09-05 实现接线更新
+
+生产入口为 [plugin/src/index.ts](../packages/plugin/src/index.ts)，通过实例级
+[runtime](../packages/plugin/src/runtime.ts) 注册九类表面：chat.message、chat.params、
+experimental.chat.system.transform、tool.execute.after、experimental.chat.messages.transform、
+experimental.session.compacting、event、自定义检索工具和 dispose。模型元数据来自实际
+hook/SDK provider 信息，未知窗口暂停规划，不再使用固定的大窗口兜底。
+
+每次 transform 以宿主本次提供的可见数组为准；idle 只调度该快照，不能直接以
+session.messages() 的完整旧历史替换它。持久视图通过 namespace、epoch、消息 ID、
+完整内容 digest 校验后才可应用；compacted 清理旧状态，compacting 只注入仍匹配当前可见来源的记忆。
+
+MCP 路径只修改 text，图像/附件保留；未知 part、工具附件及运行中工具保护原样保留。
+session.deleted 按上游 properties.info.id 清理。宿主 bundle 检查确保客户端与纯适配入口不引入
+bun:sqlite；旧 helper 仅保留用于兼容测试。详见[架构](architecture.md)及[验收](reliability-implementation.md)。
+
+适配器还保护宿主可见性语义：ignored文本、带error的assistant、state.time.compacted工具、
+interrupted metadata.output均保留原宿主消息，不将隐藏正文变成普通摘要。
+生产工厂通过spawn.args显式传入headroom的dataDir，不依赖进程级环境修改；
+无全局BLUECODE_DATA_DIR的真实冷启动由专用子进程回归覆盖。
+
+以下为历史上游源码核实记录；SDK 方法“存在”不表示当前实现会用它读取完整会话做规划。
+
 核实对象：**刷新后**的 opencode 源码快照 `opencode/opencode-dev/`（版本 **1.18.21**，tag v1.18.21，2026-08-22 由 `scripts/refresh-upstream.sh` 刷新）。基线对照：v1.18.10。
 
 ---

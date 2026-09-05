@@ -11,27 +11,28 @@
  *
  * Both run WAL + NORMAL synchronous.
  */
-import { Database } from "bun:sqlite";
-import { existsSync, rmSync } from "node:fs";
-import type { ChatMessage } from "@bluecode/contracts";
-import { estimateTokens } from "@bluecode/shared";
-import { readMessageObject } from "./objects";
-import { insertChunk } from "./fts";
+import { initializeManifests, getManifest } from "./manifests"
+import { Database } from "bun:sqlite"
+import { existsSync, rmSync, renameSync } from "node:fs"
+import type { ChatMessage } from "@bluecode/contracts"
+import { estimateTokens } from "@bluecode/shared"
+import { readMessageObject, renderProjection } from "./objects"
+import { insertChunk, initializeSegments } from "./fts"
 import {
   messageExcerpt,
   messageSummary,
   messageTokens,
   keywords as keywordize,
   historySummary,
-} from "../summarize";
-import { type Turn, splitTurns } from "../turns";
+} from "../summarize"
+import { type Turn, splitTurns } from "../turns"
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2
 
 export interface HeadroomDb {
-  readonly db: Database;
-  readonly path: string;
-  close(): void;
+  readonly db: Database
+  readonly path: string
+  close(): void
 }
 
 const META_SCHEMA = `
@@ -59,13 +60,13 @@ CREATE TABLE IF NOT EXISTS archive_refs(
 );
 CREATE INDEX IF NOT EXISTS archive_refs_hash
   ON archive_refs(project_id, session_id, hash);
-`;
+`
 
 /** Single source of truth for the heal-bookkeeping table (schema + migration). */
 const REBUILD_STATE_DDL = `CREATE TABLE IF NOT EXISTS rebuild_state(
   expected_chunks INTEGER NOT NULL,
   skipped INTEGER NOT NULL DEFAULT 0
-)`;
+)`
 
 const INDEX_SCHEMA = `
 CREATE TABLE IF NOT EXISTS histories(
@@ -110,23 +111,30 @@ CREATE INDEX IF NOT EXISTS chunk_refs_session
 --                     recorded expectation" and falls back to the legacy
 --                     comparison. See indexLooksLost and migrateRebuildState.
 ${REBUILD_STATE_DDL}
-`;
+`
 
 function openDbWith(path: string, schema: string): HeadroomDb {
-  const db = new Database(path, { create: true });
-  db.exec("PRAGMA journal_mode = WAL");
-  db.exec("PRAGMA synchronous = NORMAL");
-  db.exec(schema);
-  const version = (db.prepare("PRAGMA user_version").get() as { user_version: number })
-    .user_version;
-  if (version === 0) {
-    db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+  const db = new Database(path, { create: true })
+  try {
+    db.exec("PRAGMA journal_mode = WAL")
+    db.exec("PRAGMA synchronous = NORMAL")
+    db.exec(schema)
+    const version = (db.prepare("PRAGMA user_version").get() as { user_version: number })
+      .user_version
+    if (version === 0) {
+      db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
+    }
+    return { db, path, close: () => db.close() }
+  } catch (error) {
+    db.close()
+    throw error
   }
-  return { db, path, close: () => db.close() };
 }
 
 export function openMetaDb(path: string): HeadroomDb {
-  const handle = openDbWith(path, META_SCHEMA);
+  const handle = openDbWith(path, META_SCHEMA)
+  handle.db.exec("PRAGMA synchronous = FULL")
+  initializeManifests(handle)
   // Additive compatibility backfill: old v1 databases only have cas_meta.
   // Keep that object ledger intact and derive one archive occurrence for
   // every legacy row; no destructive table migration is required.
@@ -138,30 +146,41 @@ export function openMetaDb(path: string): HeadroomDb {
     SELECT project_id, session_id, history_hash, msg_seq,
            hash, role, turn_index, created_at
     FROM cas_meta
-  `);
-  return handle;
+  `)
+  return handle
 }
 
 export function openIndexDb(path: string): HeadroomDb {
   // index.db is entirely derived. If only its main file was removed, SQLite
   // must not replay stale WAL/SHM pages against the newly created database.
   if (!existsSync(path)) {
-    rmSync(`${path}-wal`, { force: true });
-    rmSync(`${path}-shm`, { force: true });
+    rmSync(`${path}-wal`, { force: true })
+    rmSync(`${path}-shm`, { force: true })
   }
-  const handle = openDbWith(path, INDEX_SCHEMA);
+  let handle: HeadroomDb
+  try {
+    handle = openDbWith(path, INDEX_SCHEMA)
+  } catch (error) {
+    const code = (error as { code?: string }).code
+    if (code !== "SQLITE_NOTADB" && code !== "SQLITE_CORRUPT") throw error
+    const suffix = `.corrupt-${Date.now()}`
+    for (const ext of ["", "-wal", "-shm"])
+      if (existsSync(`${path}${ext}`)) renameSync(`${path}${ext}`, `${path}${suffix}${ext}`)
+    handle = openDbWith(path, INDEX_SCHEMA)
+  }
   handle.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     content_hash UNINDEXED, summary_text, raw_excerpt, keywords
-  )`);
+  )`)
   handle.db.exec(`
     INSERT OR IGNORE INTO chunk_refs(
       project_id, session_id, history_hash, content_hash, role, turn_index
     )
     SELECT project_id, session_id, history_hash, content_hash, role, turn_index
     FROM chunks
-  `);
-  migrateRebuildState(handle.db);
-  return handle;
+  `)
+  initializeSegments(handle.db)
+  migrateRebuildState(handle.db)
+  return handle
 }
 
 /**
@@ -172,47 +191,77 @@ export function openIndexDb(path: string): HeadroomDb {
  * and the next heal re-records fresh state and converges.
  */
 function migrateRebuildState(db: Database): void {
-  const columns = db.prepare(`PRAGMA table_info(rebuild_state)`).all() as Array<{ name: string }>;
+  const columns = db.prepare(`PRAGMA table_info(rebuild_state)`).all() as Array<{ name: string }>
   if (columns.length > 0 && !columns.some((column) => column.name === "skipped")) {
-    db.exec(`DROP TABLE rebuild_state`);
-    db.exec(REBUILD_STATE_DDL);
+    db.exec(`DROP TABLE rebuild_state`)
+    db.exec(REBUILD_STATE_DDL)
   }
 }
 
 /** The pair of databases one daemon instance works against. */
 export interface HeadroomStore {
-  readonly meta: HeadroomDb;
-  readonly index: HeadroomDb;
-  close(): void;
+  readonly meta: HeadroomDb
+  readonly index: HeadroomDb
+  close(): void
 }
 
 export function openStore(dataDir: string): HeadroomStore {
-  const meta = openMetaDb(`${dataDir}/meta.db`);
-  const index = openIndexDb(`${dataDir}/index.db`);
+  const meta = openMetaDb(`${dataDir}/meta.db`)
+  let index: HeadroomDb
+  try {
+    index = openIndexDb(`${dataDir}/index.db`)
+  } catch (error) {
+    meta.close()
+    throw error
+  }
   return {
     meta,
     index,
     close: () => {
-      index.close();
-      meta.close();
+      index.close()
+      meta.close()
     },
-  };
+  }
 }
 
 /** True when the on-disk schema is not the one this build speaks. */
 export function schemaMismatch(handle: HeadroomDb): boolean {
   const version = (handle.db.prepare("PRAGMA user_version").get() as { user_version: number })
-    .user_version;
-  return version !== SCHEMA_VERSION;
+    .user_version
+  return version !== SCHEMA_VERSION
 }
 
 /** Structural probe of the fts index; false signals a needed rebuild. */
 export function ftsHealthy(handle: HeadroomDb): boolean {
   try {
-    handle.db.prepare("INSERT INTO chunks_fts(chunks_fts) VALUES('integrity-check')").run();
-    return true;
+    handle.db.prepare("INSERT INTO chunks_fts(chunks_fts) VALUES('integrity-check')").run()
+    handle.db.prepare("INSERT INTO segment_fts(segment_fts) VALUES('integrity-check')").run()
+    if (
+      (handle.db.prepare("SELECT COUNT(*) AS n FROM segment_inventory").get() as { n: number })
+        .n !== countChunks(handle)
+    )
+      return false
+    if (
+      handle.db
+        .prepare(
+          `SELECT 1 FROM segment_inventory i WHERE
+      i.count != (SELECT COUNT(*) FROM segments s WHERE s.content_hash=i.content_hash) OR
+      i.count != (SELECT COUNT(*) FROM segment_fts f WHERE f.content_hash=i.content_hash) LIMIT 1`
+        )
+        .get()
+    )
+      return false
+    if (
+      handle.db
+        .prepare(
+          "SELECT 1 FROM segments s LEFT JOIN segment_fts f ON f.id=s.id WHERE f.id IS NULL LIMIT 1"
+        )
+        .get()
+    )
+      return false
+    return true
   } catch {
-    return false;
+    return false
   }
 }
 
@@ -221,21 +270,21 @@ export function ftsHealthy(handle: HeadroomDb): boolean {
 // ---------------------------------------------------------------------------
 
 export interface CasMetaInput {
-  hash: string;
-  projectId: string;
-  sessionId: string;
-  role: string;
-  turnIndex: number;
-  msgSeq: number;
-  historyHash: string;
-  createdAt: number;
+  hash: string
+  projectId: string
+  sessionId: string
+  role: string
+  turnIndex: number
+  msgSeq: number
+  historyHash: string
+  createdAt: number
 }
 
 export function insertCasMeta(handle: HeadroomDb, meta: CasMetaInput): void {
   handle.db
     .prepare(
       `INSERT OR IGNORE INTO cas_meta(hash, project_id, session_id, role, turn_index, msg_seq, history_hash, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       meta.hash,
@@ -245,14 +294,14 @@ export function insertCasMeta(handle: HeadroomDb, meta: CasMetaInput): void {
       meta.turnIndex,
       meta.msgSeq,
       meta.historyHash,
-      meta.createdAt,
-    );
+      meta.createdAt
+    )
   handle.db
     .prepare(
       `INSERT OR IGNORE INTO archive_refs(
          project_id, session_id, history_hash, msg_seq,
          hash, role, turn_index, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       meta.projectId,
@@ -262,21 +311,23 @@ export function insertCasMeta(handle: HeadroomDb, meta: CasMetaInput): void {
       meta.hash,
       meta.role,
       meta.turnIndex,
-      meta.createdAt,
-    );
+      meta.createdAt
+    )
 }
 
 export function countCasMeta(handle: HeadroomDb): number {
-  return (handle.db.prepare(`SELECT COUNT(*) AS n FROM cas_meta`).get() as { n: number }).n;
+  return (handle.db.prepare(`SELECT COUNT(*) AS n FROM cas_meta`).get() as { n: number }).n
 }
 
 /** Distinct (project, session) namespaces archived so far — health metric. */
 export function countSessions(handle: HeadroomDb): number {
   return (
     handle.db
-      .prepare(`SELECT COUNT(*) AS n FROM (SELECT DISTINCT project_id, session_id FROM archive_refs)`)
+      .prepare(
+        `SELECT COUNT(*) AS n FROM (SELECT DISTINCT project_id, session_id FROM archive_refs)`
+      )
       .get() as { n: number }
-  ).n;
+  ).n
 }
 
 function countArchiveRefs(handle: HeadroomDb): number {
@@ -288,52 +339,52 @@ function countArchiveRefs(handle: HeadroomDb): number {
         `SELECT COUNT(*) AS n FROM (
            SELECT 1 FROM archive_refs
            GROUP BY project_id, session_id, history_hash, hash
-         )`,
+         )`
       )
       .get() as { n: number }
-  ).n;
+  ).n
 }
 
 function countChunkRefs(handle: HeadroomDb): number {
-  return (handle.db.prepare(`SELECT COUNT(*) AS n FROM chunk_refs`).get() as { n: number }).n;
+  return (handle.db.prepare(`SELECT COUNT(*) AS n FROM chunk_refs`).get() as { n: number }).n
 }
 
 export interface CasMetaPageRow {
-  hash: string;
-  role: "user" | "assistant";
-  turnIndex: number;
-  msgSeq: number;
+  hash: string
+  role: "user" | "assistant"
+  turnIndex: number
+  msgSeq: number
 }
 
 /** Namespace ownership check for direct content-hash retrieval. */
 export function ownsCasMeta(
   handle: HeadroomDb,
   namespace: { projectId: string; sessionId: string },
-  hash: string,
+  hash: string
 ): boolean {
   return (
     handle.db
       .prepare(
         `SELECT 1 FROM archive_refs
-         WHERE project_id = ? AND session_id = ? AND hash = ?`,
+         WHERE project_id = ? AND session_id = ? AND hash = ?`
       )
       .get(namespace.projectId, namespace.sessionId, hash) !== null
-  );
+  )
 }
 
 export function hasHistoryMeta(
   handle: HeadroomDb,
   namespace: { projectId: string; sessionId: string },
-  historyHash: string,
+  historyHash: string
 ): boolean {
   return (
     handle.db
       .prepare(
         `SELECT 1 FROM archive_refs
-         WHERE project_id = ? AND session_id = ? AND history_hash = ? LIMIT 1`,
+         WHERE project_id = ? AND session_id = ? AND history_hash = ? LIMIT 1`
       )
       .get(namespace.projectId, namespace.sessionId, historyHash) !== null
-  );
+  )
 }
 
 /** Read attribution rows in original message order; caller requests limit + 1. */
@@ -342,7 +393,7 @@ export function listHistoryMeta(
   namespace: { projectId: string; sessionId: string },
   historyHash: string,
   offset: number,
-  limit: number,
+  limit: number
 ): CasMetaPageRow[] {
   return handle.db
     .prepare(
@@ -350,9 +401,9 @@ export function listHistoryMeta(
        FROM archive_refs
        WHERE project_id = ? AND session_id = ? AND history_hash = ?
        ORDER BY msg_seq ASC
-       LIMIT ? OFFSET ?`,
+       LIMIT ? OFFSET ?`
     )
-    .all(namespace.projectId, namespace.sessionId, historyHash, limit, offset) as CasMetaPageRow[];
+    .all(namespace.projectId, namespace.sessionId, historyHash, limit, offset) as CasMetaPageRow[]
 }
 
 // ---------------------------------------------------------------------------
@@ -360,12 +411,12 @@ export function listHistoryMeta(
 // ---------------------------------------------------------------------------
 
 export interface HistoryRow {
-  historyHash: string;
-  projectId: string;
-  sessionId: string;
-  summary: string;
-  rawTokens: number;
-  summaryTokens: number;
+  historyHash: string
+  projectId: string
+  sessionId: string
+  summary: string
+  rawTokens: number
+  summaryTokens: number
 }
 
 export function upsertHistory(handle: HeadroomDb, row: HistoryRow, createdAt: number): void {
@@ -374,7 +425,7 @@ export function upsertHistory(handle: HeadroomDb, row: HistoryRow, createdAt: nu
   handle.db
     .prepare(
       `INSERT OR IGNORE INTO histories(history_hash, project_id, session_id, summary, raw_tokens, summary_tokens, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       row.historyHash,
@@ -383,8 +434,8 @@ export function upsertHistory(handle: HeadroomDb, row: HistoryRow, createdAt: nu
       row.summary,
       row.rawTokens,
       row.summaryTokens,
-      createdAt,
-    );
+      createdAt
+    )
 }
 
 export function getHistory(handle: HeadroomDb, historyHash: string): HistoryRow | null {
@@ -392,42 +443,35 @@ export function getHistory(handle: HeadroomDb, historyHash: string): HistoryRow 
     .prepare(
       `SELECT history_hash AS historyHash, project_id AS projectId, session_id AS sessionId,
               summary, raw_tokens AS rawTokens, summary_tokens AS summaryTokens
-       FROM histories WHERE history_hash = ?`,
+       FROM histories WHERE history_hash = ?`
     )
-    .get(historyHash) ?? null) as HistoryRow | null;
+    .get(historyHash) ?? null) as HistoryRow | null
 }
 
 /** Whether an index row exists for this content hash (idempotency probe). */
 export function hasChunk(handle: HeadroomDb, contentHash: string): boolean {
-  return (
-    handle.db.prepare(`SELECT 1 FROM chunks WHERE content_hash = ?`).get(contentHash) !== null
-  );
+  return handle.db.prepare(`SELECT 1 FROM chunks WHERE content_hash = ?`).get(contentHash) !== null
 }
 
 export function hasChunkRef(
   handle: HeadroomDb,
   namespace: { projectId: string; sessionId: string },
   historyHash: string,
-  contentHash: string,
+  contentHash: string
 ): boolean {
   return (
     handle.db
       .prepare(
         `SELECT 1 FROM chunk_refs
          WHERE project_id = ? AND session_id = ?
-           AND history_hash = ? AND content_hash = ?`,
+           AND history_hash = ? AND content_hash = ?`
       )
-      .get(
-        namespace.projectId,
-        namespace.sessionId,
-        historyHash,
-        contentHash,
-      ) !== null
-  );
+      .get(namespace.projectId, namespace.sessionId, historyHash, contentHash) !== null
+  )
 }
 
 export function countChunks(handle: HeadroomDb): number {
-  return (handle.db.prepare(`SELECT COUNT(*) AS n FROM chunks`).get() as { n: number }).n;
+  return (handle.db.prepare(`SELECT COUNT(*) AS n FROM chunks`).get() as { n: number }).n
 }
 
 /**
@@ -450,18 +494,18 @@ export function countChunks(handle: HeadroomDb): number {
 export function indexLooksLost(indexHandle: HeadroomDb, metaHandle: HeadroomDb): boolean {
   const recorded = indexHandle.db
     .prepare(`SELECT expected_chunks AS expectedChunks, skipped FROM rebuild_state`)
-    .get() as { expectedChunks: number; skipped: number } | null;
+    .get() as { expectedChunks: number; skipped: number } | null
   if (recorded === null) {
     return (
       (countCasMeta(metaHandle) > 0 && countChunks(indexHandle) < countCasMeta(metaHandle)) ||
       countChunkRefs(indexHandle) < countArchiveRefs(metaHandle)
-    );
+    )
   }
-  const chunks = countChunks(indexHandle);
+  const chunks = countChunks(indexHandle)
   return (
     chunks < recorded.expectedChunks ||
     countChunkRefs(indexHandle) + recorded.skipped < countArchiveRefs(metaHandle)
-  );
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -469,14 +513,14 @@ export function indexLooksLost(indexHandle: HeadroomDb, metaHandle: HeadroomDb):
 // ---------------------------------------------------------------------------
 
 interface CasMetaRow {
-  hash: string;
-  project_id: string;
-  session_id: string;
-  role: string;
-  turn_index: number;
-  msg_seq: number;
-  history_hash: string;
-  created_at: number;
+  hash: string
+  project_id: string
+  session_id: string
+  role: string
+  turn_index: number
+  msg_seq: number
+  history_hash: string
+  created_at: number
 }
 
 /**
@@ -498,61 +542,56 @@ interface CasMetaRow {
 export async function rebuildFromObjects(
   dataDir: string,
   metaHandle: HeadroomDb,
-  indexHandle: HeadroomDb,
+  indexHandle: HeadroomDb
 ): Promise<{ chunks: number; histories: number; skipped: number }> {
   const metas = metaHandle.db
     .prepare(
       `SELECT hash, project_id, session_id, role, turn_index, msg_seq, history_hash, created_at
-       FROM archive_refs ORDER BY project_id, session_id, history_hash, msg_seq`,
+       FROM archive_refs ORDER BY project_id, session_id, history_hash, msg_seq`
     )
-    .all() as CasMetaRow[];
+    .all() as CasMetaRow[]
 
-  const resolved: Array<{ meta: CasMetaRow; message: ChatMessage }> = [];
-  const skippedRefs = new Set<string>();
+  const resolved: Array<{ meta: CasMetaRow; message: ChatMessage }> = []
+  const skippedRefs = new Set<string>()
   for (const meta of metas) {
-    const refKey = JSON.stringify([
-      meta.project_id,
-      meta.session_id,
-      meta.history_hash,
-      meta.hash,
-    ]);
+    const refKey = JSON.stringify([meta.project_id, meta.session_id, meta.history_hash, meta.hash])
     try {
-      const projection = await readMessageObject(dataDir, meta.hash);
+      const projection = await readMessageObject(dataDir, meta.hash)
       if (projection === null) {
         // Vanished object: archive_refs outlives it. Deliberately not warned
         // (unlike the corrupt branch), but COUNTED once per logical chunk ref.
-        skippedRefs.add(refKey);
-        continue;
+        skippedRefs.add(refKey)
+        continue
       }
-      resolved.push({ meta, message: { info: projection.info, parts: projection.parts } });
+      resolved.push({ meta, message: projection })
     } catch (err) {
       // Corrupt stored object: degrade to "one item lost" instead of aborting
       // the whole heal. Named hash + error keeps divergence diagnosable.
-      skippedRefs.add(refKey);
+      skippedRefs.add(refKey)
       console.warn(
         `[headroomd] rebuild: skipping corrupt object ${meta.hash}: ${
           err instanceof Error ? err.message : String(err)
-        }`,
-      );
+        }`
+      )
     }
   }
-  const skipped = skippedRefs.size;
+  const skipped = skippedRefs.size
 
-  const chunkWrites: Parameters<typeof insertChunk>[1][] = [];
+  const chunkWrites: Parameters<typeof insertChunk>[1][] = []
   const groups = new Map<
     string,
     {
-      projectId: string;
-      sessionId: string;
-      historyHash: string;
-      messages: ChatMessage[];
-      createdAt: number;
+      projectId: string
+      sessionId: string
+      historyHash: string
+      messages: ChatMessage[]
+      createdAt: number
     }
-  >();
+  >()
 
   for (const { meta, message } of resolved) {
-    const summaryText = messageSummary(message);
-    const rawExcerpt = messageExcerpt(message);
+    const summaryText = messageSummary(message)
+    const rawExcerpt = messageExcerpt(message)
     chunkWrites.push({
       contentHash: meta.hash,
       projectId: meta.project_id,
@@ -562,11 +601,12 @@ export async function rebuildFromObjects(
       historyHash: meta.history_hash,
       summaryText,
       rawExcerpt,
+      fullText: renderProjection(message),
       keywords: keywordize(`${summaryText} ${rawExcerpt}`),
-    });
+    })
 
-    const key = `${meta.project_id} ${meta.session_id} ${meta.history_hash}`;
-    let group = groups.get(key);
+    const key = `${meta.project_id} ${meta.session_id} ${meta.history_hash}`
+    let group = groups.get(key)
     if (group === undefined) {
       group = {
         projectId: meta.project_id,
@@ -574,16 +614,21 @@ export async function rebuildFromObjects(
         historyHash: meta.history_hash,
         messages: [],
         createdAt: meta.created_at,
-      };
-      groups.set(key, group);
+      }
+      groups.set(key, group)
     }
-    group.messages.push(message);
+    group.messages.push(message)
   }
 
-  const historyWrites: Array<{ row: HistoryRow; createdAt: number }> = [];
+  const historyWrites: Array<{ row: HistoryRow; createdAt: number }> = []
   for (const group of groups.values()) {
-    const turns: Turn[] = splitTurns(group.messages).map((turn, index) => ({ ...turn, index }));
-    const summary = historySummary(turns);
+    const turns: Turn[] = splitTurns(group.messages).map((turn, index) => ({ ...turn, index }))
+    const saved = getManifest(
+      metaHandle,
+      { projectId: group.projectId, sessionId: group.sessionId },
+      group.historyHash
+    )
+    const summary = saved?.summary ?? historySummary(turns)
     historyWrites.push({
       row: {
         historyHash: group.historyHash,
@@ -594,34 +639,38 @@ export async function rebuildFromObjects(
         summaryTokens: estimateTokens(summary),
       },
       createdAt: group.createdAt,
-    });
+    })
   }
 
-  const expectedChunks = new Set(chunkWrites.map((chunk) => chunk.contentHash)).size;
+  const expectedChunks = new Set(chunkWrites.map((chunk) => chunk.contentHash)).size
   const apply = indexHandle.db.transaction(() => {
-    indexHandle.db.exec("DELETE FROM chunks");
-    indexHandle.db.exec("DELETE FROM chunks_fts");
-    indexHandle.db.exec("DELETE FROM chunk_refs");
-    indexHandle.db.exec("DELETE FROM histories");
-    for (const chunk of chunkWrites) insertChunk(indexHandle.db, chunk);
+    indexHandle.db.exec(
+      "DELETE FROM segments; DELETE FROM segment_fts; DELETE FROM segment_inventory"
+    )
+    indexHandle.db.exec("DELETE FROM chunks")
+    indexHandle.db.exec("DELETE FROM chunks_fts")
+    indexHandle.db.exec("DELETE FROM chunk_refs")
+    indexHandle.db.exec("DELETE FROM histories")
+    for (const chunk of chunkWrites) insertChunk(indexHandle.db, chunk)
     for (const write of historyWrites) {
       // createdAt rides in from cas_meta (rows ordered by msg_seq, so each
       // group's first row is its earliest) — a rebuilt summary keeps the
       // archive's original timestamp instead of resetting to 0. Deterministic
       // because cas_meta itself is the stable input.
-      upsertHistory(indexHandle, write.row, write.createdAt);
+      upsertHistory(indexHandle, write.row, write.createdAt)
     }
     // Record the heal expectation INSIDE the same transaction as the rows it
     // describes, so indexLooksLost can never observe one without the other
     // (delete-then-insert: single-row table needs no unique constraint).
     // skipped rides along: it is the legitimate cas_meta-vs-chunks gap this
     // rebuild converged to, and indexLooksLost subtracts it from cas_meta.
-    indexHandle.db.exec("DELETE FROM rebuild_state");
+    indexHandle.db.exec("DELETE FROM rebuild_state")
     indexHandle.db
       .prepare(`INSERT INTO rebuild_state(expected_chunks, skipped) VALUES (?, ?)`)
-      .run(expectedChunks, skipped);
-  });
-  apply();
+      .run(expectedChunks, skipped)
+  })
+  apply()
+  indexHandle.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
 
-  return { chunks: expectedChunks, histories: historyWrites.length, skipped };
+  return { chunks: expectedChunks, histories: historyWrites.length, skipped }
 }

@@ -1,0 +1,513 @@
+/** Instance-scoped orchestration. Hooks apply ready work; sidecar work is coalesced. */
+import { createHash } from "node:crypto"
+import type {
+  HeadroomCompressParams,
+  HeadroomCompressResult,
+  HeadroomRetrieveParams,
+  HeadroomRetrieveResult,
+  Namespace,
+} from "@bluecode/contracts"
+import type { CompressInput, CompressOutcome, FetchInput, FetchOutcome } from "@bluecode/rtk/client"
+import { estimateTokens, redactLocalPaths } from "@bluecode/shared"
+import type { PluginOptions } from "./config"
+import {
+  applyHostView,
+  projectMessages,
+  sessionOf,
+  upstreamEpoch,
+  type HostMessage,
+} from "./host-adapter"
+
+export interface RtkPort {
+  compress(input: CompressInput): Promise<CompressOutcome>
+  fetch(input: FetchInput): Promise<FetchOutcome>
+  shutdown(): Promise<void>
+}
+export interface HeadroomPort {
+  compress(input: HeadroomCompressParams): Promise<HeadroomCompressResult>
+  retrieve(input: HeadroomRetrieveParams): Promise<HeadroomRetrieveResult>
+  getView(namespace: Namespace): Promise<HeadroomCompressResult | null>
+  setView(namespace: Namespace, plan: HeadroomCompressResult): Promise<void>
+  clearView(namespace: Namespace): Promise<void>
+  close(): Promise<void>
+}
+type Mode = "off" | "shadow" | "on"
+interface Model {
+  providerID?: string
+  id?: string
+  modelID?: string
+  limit?: { context?: number; input?: number; output?: number }
+}
+interface SessionState {
+  snapshot?: HostMessage[]
+  view?: HeadroomCompressResult
+  epoch?: string
+  paused: boolean
+  hydrated: boolean
+  busy: boolean
+  model?: Model
+  maxOutput?: number
+  systemTokens: number
+  attempted?: string
+  generation: number
+}
+export interface RuntimeInput {
+  projectId: string
+  directory: string
+  options: PluginOptions
+  rtk: RtkPort | null
+  headroom: HeadroomPort | null
+  sdk?: {
+    session?: { messages: (input: any) => Promise<any> }
+    config?: { providers: () => Promise<any> }
+  }
+}
+
+export function createPluginRuntime(input: RuntimeInput) {
+  const { options, projectId } = input
+  let disposed = false
+  const sessions = new Map<string, SessionState>()
+  const jobs = new Set<Promise<void>>()
+  const models = new Map<string, { model: Model; expires: number }>()
+  const queue: Array<{ run: () => Promise<void>; bytes: number }> = []
+  let active = 0,
+    queuedBytes = 0
+  const metrics = {
+    plans: 0,
+    applied: 0,
+    invalidated: 0,
+    overloaded: 0,
+    errors: 0,
+    rtkCalls: 0,
+    retrievalBypasses: 0,
+    shadowPlans: 0,
+  }
+  const mode = (component: "rtk" | "headroom"): Mode =>
+    !options.enabled || options.mode === "off"
+      ? "off"
+      : options.mode === "shadow"
+      ? "shadow"
+      : options[component].mode ?? options.mode
+  const namespace = (sessionId: string): Namespace => ({ projectId, sessionId })
+  const track = (operation: Promise<void>) => {
+    const handled = operation
+      .catch((error: unknown) => {
+        metrics.errors++
+        console.warn(
+          `[bluecode] ${redactLocalPaths(error instanceof Error ? error.message : String(error))}`
+        )
+      })
+      .finally(() => jobs.delete(handled))
+    jobs.add(handled)
+  }
+  const pump = () => {
+    while (!disposed && active < 2 && queue.length > 0) {
+      const item = queue.shift()!
+      queuedBytes -= item.bytes
+      active++
+      track(
+        item.run().finally(() => {
+          active--
+          pump()
+        })
+      )
+    }
+  }
+  const enqueue = (run: () => Promise<void>, bytes = 0): boolean => {
+    if (disposed || queue.length + active >= 32 || queuedBytes + bytes > 8 * 1024 ** 2) {
+      metrics.overloaded++
+      return false
+    }
+    queue.push({ run, bytes })
+    queuedBytes += bytes
+    pump()
+    return true
+  }
+  const stateFor = (id: string): SessionState | null => {
+    let state = sessions.get(id)
+    if (state) return state
+    if (sessions.size >= 64) {
+      const idle = [...sessions].find(([, s]) => !s.busy)
+      if (!idle) {
+        metrics.overloaded++
+        return null
+      }
+      sessions.delete(idle[0])
+    }
+    state = { paused: false, hydrated: false, busy: false, systemTokens: 0, generation: 0 }
+    sessions.set(id, state)
+    return state
+  }
+  const clearView = (id: string, state: SessionState) => {
+    delete state.view
+    delete state.attempted
+    state.generation++
+    metrics.invalidated++
+    if (input.headroom && mode("headroom") === "on")
+      enqueue(() => input.headroom!.clearView(namespace(id)))
+  }
+  const hydrate = (id: string, state: SessionState) => {
+    if (state.hydrated || !input.headroom || mode("headroom") === "off") return
+    state.hydrated = true
+    const generation = state.generation
+    const accepted = enqueue(async () => {
+      try {
+        const plan = await input.headroom!.getView(namespace(id))
+        if (
+          !disposed &&
+          !state.view &&
+          generation === state.generation &&
+          plan?.sourceDigests &&
+          plan.epoch === (state.epoch ?? "")
+        )
+          state.view = plan
+      } catch (error) {
+        state.hydrated = false
+        throw error
+      }
+    })
+    if (!accepted) state.hydrated = false
+  }
+  const usableBudget = (state: SessionState): number | null => {
+    const limit = state.model?.limit
+    const context = limit?.context
+    if (!limit || typeof context !== "number" || !Number.isFinite(context) || context <= 0)
+      return null
+    const output = state.maxOutput ?? limit.output ?? 0
+    const usable =
+      Math.min(limit.input && limit.input > 0 ? limit.input : context, context - output) -
+      state.systemTokens -
+      512
+    return usable > 0 ? usable : null
+  }
+  async function resolveModel(state: SessionState) {
+    if (state.model?.limit || !input.sdk?.config) return
+    const providerID = state.model?.providerID,
+      modelID = state.model?.id ?? state.model?.modelID
+    if (!providerID || !modelID) return
+    const key = JSON.stringify([providerID, modelID])
+    const cached = models.get(key)
+    if (cached && cached.expires > Date.now()) {
+      state.model = cached.model
+      return
+    }
+    const result = await input.sdk.config.providers()
+    const found = result.data?.providers?.find((provider: any) => provider.id === providerID)
+      ?.models?.[modelID]
+    if (found?.limit?.context > 0) {
+      const model = { providerID, id: modelID, limit: found.limit }
+      models.set(key, { model, expires: Date.now() + 60_000 })
+      if (models.size > 64) models.delete(models.keys().next().value!)
+      if (
+        state.model?.providerID === providerID &&
+        (state.model.id ?? state.model.modelID) === modelID
+      )
+        state.model = model
+    }
+    // Missing limits are intentionally never cached as a fabricated model.
+  }
+  const schedule = (id: string, state: SessionState) => {
+    if (
+      mode("headroom") === "off" ||
+      !input.headroom ||
+      state.paused ||
+      state.busy ||
+      !state.snapshot
+    )
+      return
+    const raw = state.snapshot
+    state.busy = true
+    const generation = state.generation
+    const accepted = enqueue(
+      async () => {
+        try {
+          await resolveModel(state)
+          if (disposed || state.paused || state.generation !== generation) return
+          const usable = usableBudget(state)
+          const projection = projectMessages(raw)
+          if (!usable || !projection) return
+          const effective = structuredClone(raw)
+          if (state.view) applyHostView(effective, state.view)
+          const projectedEffective = projectMessages(effective)
+          if (!projectedEffective) return
+          const tokens = projectedEffective.reduce(
+            (sum, m) => sum + estimateTokens(JSON.stringify(m.parts)),
+            0
+          )
+          if (tokens < usable * options.headroom.triggerRatio) return
+          const fingerprint = createHash("sha256")
+            .update(JSON.stringify([projection, state.epoch, usable, options.headroom]))
+            .digest("hex")
+          if (state.attempted === fingerprint) return
+          state.attempted = fingerprint
+          const result = await input.headroom!.compress({
+            projectId,
+            sessionId: id,
+            messages: projection,
+            contextWindowTokens: usable,
+            targetTokens: Math.floor(usable * options.headroom.targetRatio),
+            triggerRatio: options.headroom.triggerRatio,
+            retainRecentTurns: options.headroom.retainRecentTurns,
+            epoch: state.epoch ?? "",
+          })
+          if (
+            disposed ||
+            state.paused ||
+            generation !== state.generation ||
+            !result.compacted ||
+            !result.sourceDigests
+          )
+            return
+          // Validate against the freshest raw host snapshot before publishing a durable active view.
+          const candidate = structuredClone(state.snapshot ?? raw)
+          if (applyHostView(candidate, result) !== "applied") return
+          metrics.plans++
+          if (mode("headroom") === "shadow") {
+            metrics.shadowPlans++
+            return
+          }
+          await input.headroom!.setView(namespace(id), result)
+          if (!disposed && !state.paused && generation === state.generation) state.view = result
+        } catch (error) {
+          delete state.attempted
+          throw error
+        } finally {
+          state.busy = false
+        }
+      },
+      Buffer.byteLength(JSON.stringify(raw))
+    )
+    if (!accepted) state.busy = false
+  }
+
+  const runtime = {
+    rtk: () => input.rtk,
+    headroom: () => input.headroom,
+    namespace,
+    stats: () => ({
+      ...metrics,
+      sessions: sessions.size,
+      active,
+      queued: queue.length,
+      queuedBytes,
+    }),
+    observeModel(id: string, model: Model, maxOutput?: number) {
+      const state = stateFor(id)
+      if (!state || disposed) return
+      const oldKey = JSON.stringify(state.model)
+      const newKey = JSON.stringify(model)
+      state.model = model
+      if (maxOutput !== undefined && Number.isFinite(maxOutput) && maxOutput >= 0)
+        state.maxOutput = maxOutput
+      else delete state.maxOutput
+      if (oldKey !== newKey) {
+        delete state.attempted
+        state.generation++
+      }
+    },
+    observeSystem(id: string, model: Model, system: string[]) {
+      const state = stateFor(id)
+      if (!state) return
+      if (
+        !state.model?.limit ||
+        state.model.id !== model.id ||
+        state.model.providerID !== model.providerID
+      )
+        runtime.observeModel(id, model)
+      state.systemTokens = estimateTokens(system.join("\n"))
+    },
+    async transform(output: { messages: HostMessage[] }) {
+      if (disposed || mode("headroom") === "off") return
+      const id = sessionOf(output.messages)
+      if (!id) return
+      const state = stateFor(id)
+      if (!state) return
+      const epoch = upstreamEpoch(output.messages)
+      if (state.epoch !== undefined && state.epoch !== epoch) clearView(id, state)
+      state.epoch = epoch
+      // Keep a private immutable snapshot; the host continues mutating its own array.
+      state.snapshot = structuredClone(output.messages)
+      if (!state.model) {
+        const info = [...output.messages].reverse().find((m) => m.info.modelID || m.info.model)
+          ?.info
+        if (info?.modelID)
+          state.model = { providerID: String(info.providerID), id: String(info.modelID) }
+        else if (info?.model) state.model = info.model as Model
+      }
+      hydrate(id, state)
+      if (state.paused) return
+      if (state.view && mode("headroom") === "on") {
+        const status = applyHostView(output.messages, state.view)
+        if (status === "applied") metrics.applied++
+        else if (status !== "already-compacted") clearView(id, state)
+      }
+      schedule(id, state)
+    },
+    async toolAfter(
+      event: { tool: string; sessionID: string; callID: string; args: unknown },
+      output: { output?: unknown; content?: any[]; title?: string; metadata?: any }
+    ) {
+      if (disposed || mode("rtk") === "off") return
+      if (event.tool === "headroom_retrieve" || output.metadata?.bluecode?.retrieved === true) {
+        metrics.retrievalBypasses++
+        return
+      }
+      if (!input.rtk) return
+      const toolArgs =
+        typeof event.args === "object" && event.args !== null
+          ? (Object.fromEntries(
+              Object.entries(event.args).filter(
+                ([, value]) =>
+                  value === null || ["string", "number", "boolean"].includes(typeof value)
+              )
+            ) as CompressInput["toolArgs"])
+          : undefined
+      const run = async (text: string, suffix: string): Promise<string> => {
+        metrics.rtkCalls++
+        const result = await input.rtk!.compress({
+          tool: event.tool,
+          output: text,
+          title: output.title ?? event.tool,
+          metadata: output.metadata ?? {},
+          sessionId: JSON.stringify([projectId, event.sessionID]),
+          callId: `${event.callID}${suffix}`,
+          ...(toolArgs ? { toolArgs } : {}),
+        })
+        if (mode("rtk") === "shadow") return text
+        if (result.kind === "compressed") {
+          output.metadata = {
+            ...output.metadata,
+            bluecode: { ...result.result, output: undefined },
+          }
+          return result.result.output
+        }
+        if (result.degraded)
+          output.metadata = {
+            ...output.metadata,
+            bluecode: { degraded: result.degraded, status: result.status },
+          }
+        return text
+      }
+      try {
+        if (typeof output.output === "string") output.output = await run(output.output, "")
+        if (Array.isArray(output.content)) {
+          const textParts = output.content
+            .map((part, index) => ({ part, index }))
+            .filter(({ part }) => part?.type === "text" && typeof part.text === "string")
+          // Start together: each request's queue time consumes the same per-call deadline.
+          const values = await Promise.all(
+            textParts.map(({ part, index }) => run(part.text, `:${index}`))
+          )
+          textParts.forEach(({ part }, index) => {
+            part.text = values[index]!
+          })
+        }
+      } catch (error) {
+        metrics.errors++
+        console.warn(`[bluecode] tool compression: ${redactLocalPaths(String(error))}`)
+      }
+    },
+    async idle(id: string) {
+      if (disposed || mode("headroom") === "off") return
+      const state = stateFor(id)
+      if (!state) return
+      // SDK session.messages includes history upstream has already hidden.
+      // Wait for the next authoritative messages.transform snapshot instead.
+      schedule(id, state)
+    },
+    async event(event: { type: string; properties?: Record<string, any> }) {
+      const id =
+        event.type === "session.deleted"
+          ? event.properties?.info?.id ?? event.properties?.sessionID
+          : event.properties?.sessionID ??
+            event.properties?.info?.sessionID ??
+            event.properties?.part?.sessionID
+      if (typeof id !== "string") return
+      const state = stateFor(id)
+      if (!state) return
+      if (
+        [
+          "message.part.updated",
+          "message.part.removed",
+          "message.removed",
+          "message.updated",
+        ].includes(event.type)
+      ) {
+        const messageID =
+          event.properties?.part?.messageID ??
+          event.properties?.messageID ??
+          event.properties?.info?.id
+        const affects = (sources: string[] | undefined) =>
+          sources && (typeof messageID !== "string" || sources.includes(messageID))
+        if (affects(state.view?.replacedMessageIds)) {
+          // Events can precede the next authoritative transform. A view and
+          // an old snapshot agreeing with each other does not prove freshness.
+          delete state.snapshot
+          clearView(id, state)
+          return
+        }
+        if (affects(state.snapshot?.map((message) => message.info.id))) {
+          // An expanding in-flight plan may cover more than the ready view.
+          // Cancel its generation even when the ready prefix remains valid.
+          delete state.snapshot
+          delete state.attempted
+          state.generation++
+          return
+        }
+      }
+      if (event.type === "session.compacted") {
+        state.paused = false
+        delete state.snapshot
+        clearView(id, state)
+        return
+      }
+      if (event.type === "session.deleted") {
+        clearView(id, state)
+        sessions.delete(id)
+        return
+      }
+      if (
+        event.type === "session.idle" ||
+        (event.type === "session.status" && event.properties?.status?.type === "idle")
+      ) {
+        state.paused = false
+        await runtime.idle(id)
+      } else if (event.type === "message.updated" && event.properties?.info?.time?.completed)
+        schedule(id, state)
+    },
+    async compacting(id: string, output: { context: string[] }) {
+      const state = stateFor(id)
+      if (!state || mode("headroom") === "off") return
+      state.paused = true
+      state.generation++
+      if (
+        mode("headroom") === "on" &&
+        options.headroom.fallback === "upstream" &&
+        state.view &&
+        state.snapshot &&
+        state.view.epoch === state.epoch &&
+        applyHostView(structuredClone(state.snapshot), state.view) === "applied"
+      ) {
+        output.context.push(
+          `[bluecode headroom] Archived memory:\n${state.view.summary}\nRetrieve original evidence with headroom_retrieve(historyHash="${state.view.historyHash}"); follow nextCursor.`
+        )
+      }
+    },
+    async drain() {
+      while (jobs.size > 0 || queue.length > 0) await Promise.all([...jobs])
+    },
+    async dispose() {
+      if (disposed) return
+      disposed = true
+      queue.length = 0
+      queuedBytes = 0
+      for (const state of sessions.values()) state.generation++
+      await Promise.all([...jobs])
+      await Promise.allSettled([input.rtk?.shutdown(), input.headroom?.close()])
+      sessions.clear()
+      models.clear()
+    },
+  }
+  return runtime
+}
+export type PluginRuntime = ReturnType<typeof createPluginRuntime>

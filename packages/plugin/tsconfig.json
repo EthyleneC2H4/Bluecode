@@ -3,12 +3,31 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@bluecode/contracts": ["../contracts/src/index.ts"],
-      "@bluecode/shared": ["../shared/src/index.ts"],
-      "@bluecode/rtk": ["../rtk/src/index.ts"],
-      "@bluecode/rtk-core": ["../rtk-core/src/index.ts"],
-      "@bluecode/headroomd": ["../headroomd/src/index.ts"]
+      "@bluecode/contracts": [
+        "../contracts/src/index.ts"
+      ],
+      "@bluecode/shared": [
+        "../shared/src/index.ts"
+      ],
+      "@bluecode/rtk": [
+        "../rtk/src/index.ts"
+      ],
+      "@bluecode/rtk-core": [
+        "../rtk-core/src/index.ts"
+      ],
+      "@bluecode/headroomd": [
+        "../headroomd/src/index.ts"
+      ],
+      "@bluecode/headroomd/*": [
+        "../headroomd/src/*.ts"
+      ],
+      "@bluecode/rtk/client": [
+        "../rtk/src/client.ts"
+      ]
     }
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts"
+  ]
 }

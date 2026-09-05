@@ -5,14 +5,14 @@
  * connect() polls the user's explicit one, failing every reconnect attempt
  * (audit round 2: both options were parsed-but-unwired).
  */
-import { describe, expect, test, afterEach } from "bun:test";
-import bluecodePlugin from "../src/index";
-import { parseOptions } from "../src/config";
-import { resetHeadroomState, setSharedHeadroomClient } from "../src/headroom";
-import { resetRtkState } from "../src/rtk-hook";
-import * as headroomModule from "@bluecode/headroomd";
+import { describe, expect, test, afterEach } from "bun:test"
+import bluecodePlugin from "../src/index"
+import { parseOptions } from "../src/config"
+import { resetHeadroomState, setSharedHeadroomClient } from "../src/headroom"
+import { resetRtkState } from "../src/rtk-hook"
+import * as headroomModule from "@bluecode/headroomd"
 
-const originalHeadroomConnect = headroomModule.HeadroomClient.connect;
+const originalHeadroomConnect = headroomModule.HeadroomClient.connect
 
 function createMockInput() {
   return {
@@ -25,55 +25,80 @@ function createMockInput() {
     experimental_workspace: { register: () => {} },
     serverUrl: new URL("http://localhost"),
     $: { run: async () => ({ text: "", exitCode: 0 }) },
-  };
+  }
 }
 
 afterEach(async () => {
-  (headroomModule.HeadroomClient as any).connect = originalHeadroomConnect;
-  resetHeadroomState();
-  resetRtkState();
-});
+  ;(headroomModule.HeadroomClient as any).connect = originalHeadroomConnect
+  resetHeadroomState()
+  resetRtkState()
+})
 
 describe("plugin factory: daemon spawn args", () => {
   test("configured socketPath + idleExitMs ride spawn.args; socketPath also stays on connect", async () => {
-    let captured: any = null;
-    (headroomModule.HeadroomClient as any).connect = async (opts: any) => {
-      captured = opts;
+    let captured: any = null
+    ;(headroomModule.HeadroomClient as any).connect = async (opts: any) => {
+      captured = opts
       return {
         compress: async () => ({ compacted: false }),
         retrieve: async () => ({ found: false }),
         health: async () => ({ ok: true, pid: 1, uptimeMs: 0, sessions: 0 }),
         close: async () => {},
-      };
-    };
+      }
+    }
 
     const hooks = await bluecodePlugin(
       createMockInput() as unknown as any,
-      parseOptions({ headroom: { socketPath: "/tmp/custom.sock", idleExitMs: 45000 } }),
-    );
-    await hooks.dispose?.();
+      parseOptions({
+        rtk: { mode: "off" },
+        headroom: { socketPath: "/tmp/custom.sock", idleExitMs: 45000 },
+      })
+    )
+    await hooks.dispose?.()
 
-    expect(captured).not.toBeNull();
-    expect(captured.spawn.args).toEqual(["--socketPath", "/tmp/custom.sock", "--idleExitMs", "45000"]);
+    expect(captured).not.toBeNull()
+    expect(captured.spawn.args).toEqual([
+      "--dataDir",
+      captured.dataDir,
+      "--socketPath",
+      "/tmp/custom.sock",
+      "--maxStorageBytes",
+      "536870912",
+      "--idleExitMs",
+      "45000",
+    ])
     // Explicit path must ALSO drive which socket connect() polls first.
-    expect(captured.socketPath).toBe("/tmp/custom.sock");
-  });
+    expect(captured.socketPath).toBe("/tmp/custom.sock")
+  })
 
-  test("default config forwards no args", async () => {
-    let captured: any = null;
-    (headroomModule.HeadroomClient as any).connect = async (opts: any) => {
-      captured = opts;
+  test("default config forwards a runtime socket and bounded durable quota", async () => {
+    let captured: any = null
+    ;(headroomModule.HeadroomClient as any).connect = async (opts: any) => {
+      captured = opts
       return {
         compress: async () => ({ compacted: false }),
         retrieve: async () => ({ found: false }),
         health: async () => ({ ok: true, pid: 1, uptimeMs: 0, sessions: 0 }),
         close: async () => {},
-      };
-    };
+      }
+    }
 
-    const hooks = await bluecodePlugin(createMockInput() as any, parseOptions({}));
-    await hooks.dispose?.();
+    const before = process.env.BLUECODE_DATA_DIR
+    const hooks = await bluecodePlugin(
+      createMockInput() as any,
+      parseOptions({ rtk: { mode: "off" } })
+    )
+    await hooks.dispose?.()
 
-    expect(captured?.spawn.args).toBeUndefined();
-  });
-});
+    expect(captured?.spawn.args).toEqual([
+      "--dataDir",
+      captured.dataDir,
+      "--socketPath",
+      captured.socketPath,
+      "--maxStorageBytes",
+      "536870912",
+    ])
+    expect(captured.socketPath.startsWith(captured.dataDir)).toBe(false)
+    expect(process.env.BLUECODE_DATA_DIR).toBe(before)
+  })
+})

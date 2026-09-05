@@ -1,16 +1,12 @@
 import type { ChatMessage, HeadroomCompressResult } from "@bluecode/contracts"
-import { COMPACTION_MARKER, isCompactionReplacement } from "./turns"
+import { COMPACTION_MARKER, isCompactionReplacement, contentDigest } from "./turns"
 
 export type CompactionPlan = Pick<
   HeadroomCompressResult,
-  "historyHash" | "summary" | "refs" | "replacedMessageIds"
+  "historyHash" | "summary" | "refs" | "replacedMessageIds" | "sourceDigests" | "epoch" | "memory"
 >
 
-export type CompactionApplyStatus =
-  | "applied"
-  | "no-match"
-  | "invalid"
-  | "already-compacted"
+export type CompactionApplyStatus = "applied" | "no-match" | "invalid" | "already-compacted"
 
 export interface MaterializedCompaction {
   status: CompactionApplyStatus
@@ -34,6 +30,9 @@ export function buildReplacementMessage(plan: CompactionPlan): ChatMessage {
       role: "user",
     },
     parts: [{ type: "text", text: buildReplacementText(plan) }],
+    ...(plan.historyHash
+      ? { archive: { historyHash: plan.historyHash, memory: plan.memory ?? [] } }
+      : {}),
   }
 }
 
@@ -43,7 +42,7 @@ export function buildReplacementMessage(plan: CompactionPlan): ChatMessage {
  */
 export function materializeCompaction(
   messages: readonly ChatMessage[],
-  plan: CompactionPlan,
+  plan: CompactionPlan
 ): MaterializedCompaction {
   const ids = plan.replacedMessageIds
   if (ids.length === 0 || new Set(ids).size !== ids.length) {
@@ -66,7 +65,7 @@ export function materializeCompaction(
   const missing = indices.filter((index) => index < 0).length
   if (missing === ids.length) {
     const replayed = messages.some(
-      (message) => message.info.id === replacementId && isCompactionReplacement(message),
+      (message) => message.info.id === replacementId && isCompactionReplacement(message)
     )
     return { status: replayed ? "already-compacted" : "no-match", messages: [...messages] }
   }
@@ -78,6 +77,13 @@ export function materializeCompaction(
   }
 
   const targets = messages.slice(start, start + ids.length)
+  if (
+    plan.sourceDigests &&
+    (plan.sourceDigests.length !== targets.length ||
+      targets.some((message, index) => contentDigest(message) !== plan.sourceDigests![index]))
+  ) {
+    return { status: "invalid", messages: [...messages] }
+  }
   if (targets.every(isCompactionReplacement)) {
     return { status: "already-compacted", messages: [...messages] }
   }
