@@ -17,7 +17,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Pinned (not `latest`): the eval baseline is latency-sensitive enough
       # that a Bun runtime bump could shift numbers; bump deliberately.
