@@ -10,7 +10,7 @@ import { readCandidates } from "./live-candidates"
 
 export interface LiveOptions {
   model: string; apiKeyEnv: string; maxRequests: number; maxInputTokens: number; maxOutputTokens: number
-  output: string; tasks?: string[]; repeats?: number; arms?: Array<"legacy"|"layered"|"enhanced">; concurrency?: number
+  output: string; tasks?: string[]; repeats?: number; arms?: Array<"legacy"|"layered"|"enhanced">; concurrency?: number; taskTimeoutMs?: number
 }
 const FREE_MODEL = "opencode/mimo-v2.5-free"
 const safe = (text: string, key: string) => text.replaceAll(key,"[redacted]").replace(/sk-[A-Za-z0-9_-]{16,}/g,"[redacted]")
@@ -18,6 +18,7 @@ const safe = (text: string, key: string) => text.replaceAll(key,"[redacted]").re
 export async function runLiveEvaluation(options: LiveOptions) {
   if (options.model !== FREE_MODEL) throw Error(`This zero-cost runner permits only ${FREE_MODEL}; no paid fallback`)
   for(const value of [options.maxRequests,options.maxInputTokens,options.maxOutputTokens]) if(!Number.isSafeInteger(value)||value<=0) throw Error("Explicit positive request/input/output budgets required")
+  if (options.taskTimeoutMs !== undefined && (!Number.isSafeInteger(options.taskTimeoutMs) || options.taskTimeoutMs < 1000 || options.taskTimeoutMs > 3600000)) throw Error("Task timeout must be an integer from 1000 through 3600000 milliseconds")
   if (options.repeats !== undefined && (!Number.isSafeInteger(options.repeats) || options.repeats < 1 || options.repeats > 10)) throw Error("Repeat count must be 1 through 10")
   if (options.concurrency !== undefined && ![1,2,3,4].includes(options.concurrency)) throw Error("Concurrency must be 1 through 4")
   if (options.arms && (!options.arms.length || new Set(options.arms).size !== options.arms.length || options.arms.some(arm=>!["legacy","layered","enhanced"].includes(arm)))) throw Error("Unknown or duplicate evaluation arms")
@@ -81,7 +82,7 @@ export async function runLiveEvaluation(options: LiveOptions) {
   let hostVersion = "unknown"
   const todo = liveTasks().filter(task => !options.tasks || options.tasks.includes(task.id)).flatMap(task =>
     Array.from({ length: options.repeats ?? 2 }, (_, repeat) => (options.arms ?? ["legacy", "layered", "enhanced"]).map(arm => ({ task, repeat, arm }))).flat())
-  const report = () => ({ version: 2, baseline: "62589ac", model: options.model, concurrency: options.concurrency ?? 2, hostVersion, monetaryBudget: 0,
+  const report = () => ({ version: 2, baseline: "62589ac", model: options.model, concurrency: options.concurrency ?? 2, hostVersion, taskTimeoutMs: options.taskTimeoutMs ?? 600000, monetaryBudget: 0,
     usageMode: "Main OpenCode input excludes cache. Summary usage is separately observed from provider responses. Missing fields remain null/incomplete; reservations are not usage.",
     seedKind: "14 deterministic imported fixture turns; only subsequent OpenCode calls are real LLM usage", requestedRuns: todo.length, completedRuns: records.length,
     budgets: budget.snapshot(), incomplete: commands.signal.aborted || budget.snapshot().violation || !budget.snapshot().usageComplete || records.length !== todo.length || records.some(r => r.incomplete), records, requests })
@@ -151,7 +152,7 @@ async function runTask(root:string,id:string,task:LiveTask,arm:string,repeat:num
   const imported=await command(["opencode","import","--pure",seedPath],workdir,{...env,OPENCODE_CONFIG_CONTENT:JSON.stringify({...config,plugin:[]})},30000)
   if(imported.code!==0||!imported.stdout.includes("Imported session:")) return {id,task:task.id,arm,repeat,passed:false,incomplete:true,reason:"fixture-import-failed",detail:safe(imported.stderr,key).slice(-1600),usage:{input:null,output:null,cacheRead:null,cacheWrite:null,cost:null},usageComplete:false,durationMs:performance.now()-started}
   const prompt=`Continue the pending task: ${task.request} Inspect the current source, make the change, and run bun test.mjs. The earlier task contract remains binding. Write handoff.json with four short strings: fact (copy the earlier contract sentence verbatim), file (src/main.js or test.mjs changed), next (verification status or remaining action), reason (copy the earlier rationale verbatim). No dependencies or network access are needed.`
-  const run=await command(["opencode","run","--format","json","--model",options.model,"--session",sessionId,"--title",`Headroom ${id}`,"--dir",workdir,prompt],workdir,env,180000)
+  const run=await command(["opencode","run","--format","json","--model",options.model,"--session",sessionId,"--title",`Headroom ${id}`,"--dir",workdir,prompt],workdir,env,options.taskTimeoutMs ?? 600000)
   const events=run.stdout.split("\n").flatMap(line=>{try{return [JSON.parse(line)]}catch{return []}})
   const measured = mainUsage(events)
   const { complete, ...usage } = measured

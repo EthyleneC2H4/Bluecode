@@ -4,7 +4,7 @@ import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { runLiveEvaluation } from "../src/live-runner"
 
-test("offline runner fixture saves separate main/summary actual usage and verified outcome", async () => {
+for (const taskTimeoutMs of [undefined, 1000]) test(`offline runner passes task deadline and accounting (timeout=${taskTimeoutMs ?? "default"})`, async () => {
   const dir = await mkdtemp(join(tmpdir(), "live-runner-fixture-")), originalFetch = globalThis.fetch, originalPath = process.env.PATH
   const keyEnv = "BLUECODE_LOCAL_RUNNER_FIXTURE_KEY"
   let forwarded = 0
@@ -15,6 +15,7 @@ const args=process.argv.slice(2);
 if(args[0]==='--version') console.log('offline fixture (not OpenCode or LLM)');
 else if(args[0]==='import') console.log('Imported session: fixture');
 else {
+  ${taskTimeoutMs === undefined ? "" : "await Bun.sleep(2000);"}
   const config=JSON.parse(process.env.OPENCODE_CONFIG_CONTENT);
   const base=config.provider.opencode.options.baseURL;
   for(const url of [base.replace('/main','/summary'),base]) await fetch(url+'/chat/completions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:'mimo-v2.5-free',max_tokens:20,messages:[{role:'user',content:'fixture'}]})});
@@ -33,7 +34,13 @@ else {
       return originalFetch(input, init)
     }) as typeof fetch
     const output = join(dir, "report.json")
-    const result = await runLiveEvaluation({ model: "opencode/mimo-v2.5-free", apiKeyEnv: keyEnv, maxRequests: 4, maxInputTokens: 50000, maxOutputTokens: 1000, output, tasks: ["clamp"], arms: ["enhanced"], repeats: 1, concurrency: 1 })
+    const result = await runLiveEvaluation({ model: "opencode/mimo-v2.5-free", apiKeyEnv: keyEnv, maxRequests: 4, maxInputTokens: 50000, maxOutputTokens: 1000, output, tasks: ["clamp"], arms: ["enhanced"], repeats: 1, concurrency: 1, ...(taskTimeoutMs !== undefined ? {taskTimeoutMs} : {}) })
+    expect(result.taskTimeoutMs).toBe(taskTimeoutMs ?? 600000)
+    if (taskTimeoutMs !== undefined) {
+      expect(result.records[0]!.timedOut).toBe(true)
+      expect(forwarded).toBe(0)
+      return
+    }
     expect(forwarded).toBe(2)
     expect(result.version).toBe(2)
     const record = result.records[0]!
