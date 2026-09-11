@@ -484,14 +484,22 @@ export function createPluginRuntime(input: RuntimeInput) {
           event.properties?.info?.id
         const affects = (sources: string[] | undefined) =>
           sources && (typeof messageID !== "string" || sources.includes(messageID))
-        if (affects(state.view?.replacedMessageIds)) {
+        if (affects(state.view?.sourceSnapshot?.messageIds ?? state.view?.replacedMessageIds)) {
           // Events can precede the next authoritative transform. A view and
           // an old snapshot agreeing with each other does not prove freshness.
           delete state.snapshot
           clearView(id, state)
           return
         }
-        if (affects(state.snapshot?.map((message) => message.info.id))) {
+        // Layered plans bind every historical message and the current user,
+        // but never modify the streaming assistant tail. Keep legacy event
+        // invalidation unchanged, including snapshots with no user boundary.
+        let lastUser = (state.snapshot?.length ?? 0) - 1
+        while (lastUser >= 0 && state.snapshot![lastUser]!.info.role !== "user") lastUser--
+        const sources = options.headroom.strategy === "layered" && lastUser >= 0
+          ? state.snapshot?.slice(0, lastUser + 1)
+          : state.snapshot
+        if (affects(sources?.map((message) => message.info.id))) {
           // An expanding in-flight plan may cover more than the ready view.
           // Cancel its generation even when the ready prefix remains valid.
           delete state.snapshot

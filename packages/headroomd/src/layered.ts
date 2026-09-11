@@ -377,7 +377,13 @@ export function buildLayeredPlan(messages: readonly ChatMessage[], options: Laye
       frontier = next
     }
   }
-  const snapshot = { messageIds: messages.map((message) => message.info.id), sourceDigests: analyses.map((analysis) => analysis.digest) }
+  // The current assistant may stream while this plan is archived. It is never
+  // an operation source: recentStart protects the entire current turn. Bind all
+  // history and the current user, while replay preserves the latest raw tail.
+  let lastUser = messages.length - 1
+  while (lastUser >= 0 && messages[lastUser]!.info.role !== "user") lastUser--
+  const sourceEnd = lastUser < 0 ? messages.length : lastUser + 1
+  const snapshot = { messageIds: messages.slice(0, sourceEnd).map((message) => message.info.id), sourceDigests: analyses.slice(0, sourceEnd).map((analysis) => analysis.digest) }
   const initialOperations = candidates.map((candidate) => operation(candidate))
   const baseline = initialOperations.length ? materializeOperations(messages, initialOperations, snapshot) : { status: "applied", messages: [...messages] }
   const baselineTokens = baseline.messages.reduce((sum, message) => sum + layeredMessageTokens(message, counter), 0)
