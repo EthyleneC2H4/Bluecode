@@ -148,7 +148,7 @@ export class EnhancementManager {
   private trim(): void {
     for (const [id, job] of this.jobs) {
       if (this.jobs.size <= 512) break
-      if (job.status !== "queued" && job.status !== "running") {
+      if (!this.pending.has(id) && job.status !== "queued" && job.status !== "running") {
         this.jobs.delete(id)
         for (const [key, cached] of this.cache) if (cached === id) this.cache.delete(key)
       }
@@ -173,13 +173,15 @@ export class EnhancementManager {
     let usage = unknownUsage()
     let timer: ReturnType<typeof setTimeout> | undefined
     let onAbort: (() => void) | undefined
+    let providerPromise: Promise<SummaryResult> | undefined
     try {
       const stopped = new Promise<never>((_, reject) => {
         onAbort = () => reject(new SummaryProviderError("cancelled"))
         work.controller.signal.addEventListener("abort", onAbort, { once: true })
         timer = setTimeout(() => { reject(new SummaryProviderError("timeout")); work.controller.abort() }, this.config.timeoutMs)
       })
-      const result = await Promise.race([this.provider.summarize(work.request), stopped])
+      providerPromise = this.provider.summarize(work.request)
+      const result = await Promise.race([providerPromise, stopped])
       usage = { inputTokens: usageValue(result.usage?.inputTokens), outputTokens: usageValue(result.usage?.outputTokens) }
       if (work.controller.signal.aborted) return
       let reason: string | undefined
@@ -203,6 +205,17 @@ export class EnhancementManager {
     } finally {
       if (timer !== undefined) clearTimeout(timer)
       if (onAbort) work.controller.signal.removeEventListener("abort", onAbort)
+      job.usage = usage
+      // A terminal job is not necessarily a released provider resource. Abort is a
+      // request, not proof of settlement: retain both permits and honest awaitIdle
+      // until delayed cleanup finishes. dispose itself remains synchronous.
+      if (providerPromise) {
+        await providerPromise.then(result => {
+          usage = { inputTokens: usageValue(result.usage?.inputTokens), outputTokens: usageValue(result.usage?.outputTokens) }
+        }, error => {
+          if (error instanceof SummaryProviderError) usage = { inputTokens: usageValue(error.usage.inputTokens), outputTokens: usageValue(error.usage.outputTokens) }
+        }).catch(() => { /* Invalid custom-provider results keep conservative reservations. */ })
+      }
       job.usage = usage
       // Unknown and failed-call usage consumes reservations; known actual usage reconciles them.
       work.session.input += (usage.inputTokens ?? this.config.maxInputTokens) - this.config.maxInputTokens

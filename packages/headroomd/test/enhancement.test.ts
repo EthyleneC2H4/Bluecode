@@ -164,3 +164,74 @@ test("completed job and cache memory stay bounded without resetting session spen
   expect(manager.sessionUsage(input().namespace)).toEqual({ inputTokens: 530, outputTokens: 530 })
   manager.dispose()
 })
+
+function deferredProvider() {
+  let active = 0, peak = 0
+  const calls: Array<{ signal: AbortSignal; finish: () => void }> = []
+  const summary: SummaryProvider = { model: "test", summarize({ signal }) {
+    active++; peak = Math.max(peak, active)
+    return new Promise(resolve => calls.push({ signal, finish() { active--; resolve({ entries, usage: { inputTokens: 100, outputTokens: 20 } }) } }))
+  } }
+  return { summary, calls, get active() { return active }, get peak() { return peak } }
+}
+const tick = () => new Promise<void>(resolve => setImmediate(resolve))
+
+test("timeout reports failure but retains permits until delayed provider cleanup really settles", async () => {
+  const deferred = deferredProvider()
+  const manager = new EnhancementManager(deferred.summary, cfg({ timeoutMs: 5 }))
+  const jobs = Array.from({ length: 6 }, (_, i) => manager.submit(input(String(i))))
+  await tick()
+  const aborted = deferred.calls.slice(0, 2).map(call => call.signal.aborted ? Promise.resolve() : new Promise<void>(resolve => call.signal.addEventListener("abort", () => resolve(), { once: true })))
+  await Promise.all(aborted)
+  await tick()
+  let idle = false
+  void manager.awaitIdle().then(() => { idle = true })
+  try {
+    expect(jobs.slice(0, 2).map(job => manager.get(job.jobId)?.status)).toEqual(["failed", "failed"])
+    expect(manager.stats().running).toBe(2)
+    expect(manager.stats().queued).toBe(4)
+    expect(deferred.peak).toBe(2)
+    expect(idle).toBe(false)
+    expect(manager.submit(input("0", "replacement")).reason).toBe("session-busy")
+    deferred.calls[0]!.finish()
+    await tick()
+    expect(deferred.calls.length).toBe(3)
+    expect(deferred.active).toBe(2)
+    expect(deferred.peak).toBe(2)
+    expect(manager.get(jobs[0]!.jobId)?.entries).toBeUndefined()
+    expect(manager.get(jobs[0]!.jobId)?.status).toBe("failed")
+    expect(manager.submit(input("0", "replacement")).status).toBe("queued")
+  } finally {
+    manager.dispose()
+    for (const call of deferred.calls.slice(1)) call.finish()
+    await manager.awaitIdle()
+  }
+})
+
+test("cancel and dispose return immediately but awaitIdle and same-session admission await actual cleanup", async () => {
+  const deferred = deferredProvider()
+  const manager = new EnhancementManager(deferred.summary, cfg())
+  const job = manager.submit(input())
+  await tick()
+  manager.cancel(job.jobId)
+  await tick()
+  let idle = false
+  void manager.awaitIdle().then(() => { idle = true })
+  try {
+    expect(manager.get(job.jobId)?.status).toBe("cancelled")
+    expect(manager.submit(input("s", "replacement")).reason).toBe("session-busy")
+    expect(manager.dispose()).toBeUndefined()
+    await tick()
+    expect(deferred.calls[0]!.signal.aborted).toBe(true)
+    expect(manager.stats().running).toBe(1)
+    expect(idle).toBe(false)
+  } finally {
+    manager.dispose()
+    deferred.calls[0]!.finish()
+    await manager.awaitIdle()
+  }
+  expect(idle).toBe(true)
+  expect(manager.stats().running).toBe(0)
+  expect(manager.get(job.jobId)?.entries).toBeUndefined()
+  expect(manager.get(job.jobId)?.status).toBe("cancelled")
+})
