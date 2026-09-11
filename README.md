@@ -2,7 +2,7 @@
 
 Context engineering for [OpenCode](https://github.com/anomalyco/opencode): one plugin connects an RTK subprocess for tool-output compression and a headroomd daemon for budgeted, layered conversation memory and on-demand evidence recovery.
 
-[简体中文](README.zh-CN.md) · [Architecture](docs/architecture.md) · [Headroom guide](docs/headroom-layered.md) · [Headroom results](docs/headroom-layered-acceptance.md) · [Operations](docs/operations.md)
+[简体中文](README.zh-CN.md) · [Architecture](docs/architecture.md) · [Headroom guide](docs/headroom-layered.md) · [Headroom ablation](docs/headroom-ablation.md) · [Operations](docs/operations.md)
 
 This is an independent learning implementation, not vivo's private BlueCode source. Evaluation includes deterministic synthetic replays and small coding tasks executed by a real LLM through OpenCode; their metrics are reported separately.
 
@@ -218,6 +218,23 @@ The adapter was originally inspected against OpenCode **1.18.21** and the new li
 
 The three protocols below use different histories, counting methods and retrieval policies. Their percentages are not interchangeable. The [headroom acceptance report](docs/headroom-layered-acceptance.md) records configurations, raw data and remaining rollout gates.
 
+### RTK + current layered headroom: four-way ablation
+
+The formal A/B/C/D replay now uses **`layered` headroom with LLM summaries off** in C/D. All 11 original fixtures were rerun on the same code revision with o200k_base counting, four history stages, two fresh host calls per stage and the fixed query-only policy. Headroom uses its standard 4,096-token memory budget; the plugin configuration default remains `legacy` independently of this experiment.
+
+| Configuration | Total input tokens | Reduction vs A |
+|---|---:|---:|
+| A: no optimization | 582,501 | — |
+| B: RTK only | 464,781 | 20.21% |
+| C: layered headroom only | 434,209 | 25.46% |
+| D: RTK + layered headroom | 369,220 | **36.61%** |
+
+The combined configuration saves another **20.56%** input relative to RTK alone. C/D both retain 3/3 critical constraints and pass 10/10 deterministic answer checks, with natural-question Recall@5 of 10/10. Exact archive recovery is 30/30 in C and 62/62 in D; cross-namespace access, stale-plan application and retrieval recompression violations are all zero. Ordinary context facts remain 102/104 in B/D, reported separately from critical constraints. The query-only run passes all absolute gates.
+
+The separately rerun **eager-recovery** stress policy increases combined input to **467,608** tokens: **19.72%** lower than A, still below the 20% savings gate. Its quality and recovery checks pass. This is offline replay, not new LLM task accuracy or provider billing.
+
+A fresh legacy control exactly reproduces the frozen totals, including D at 435,436 tokens. The current combination therefore uses **15.21% less input than the legacy combination**. [Frozen baseline](packages/eval/baseline.json) remains unchanged for regression checks. See the [experiment settings and results](docs/headroom-ablation.md), [query-only data](packages/eval/ablation-layered-query.json), [eager data](packages/eval/ablation-layered-eager.json) and [run manifest](packages/eval/ablation-summary.json).
+
 ### Real OpenCode coding tasks: legacy vs layered rules
 
 Twelve small tasks, each repeated twice per strategy, used OpenCode **1.18.23** and Zen **`opencode/mimo-v2.5-free`**. Each task began with 14 synthetic history turns before the model performed real coding work. RTK was off throughout. This pressure configuration used a 40,000-token input window, 2,048 output limit and **128-token memory budget**, not the default 4,096.
@@ -249,19 +266,6 @@ Eight scenarios at 50, 200 and 1,000 turns produce 24 histories, replayed throug
 | Engineering replay with query plus first-hit expansion | 197,686 → 181,048 (**−8.42%**); both strategies retain 10/10 facts and 3/3 constraints |
 
 Timeouts are excluded from savings, not counted as zero input. These observations and the pressure-only live configuration leave rollout gates open: **`legacy` remains the default and LLM enhancement stays disabled**. Raw records: [dedicated replay](packages/eval/headroom-layered-results.json).
-
-### Frozen RTK + legacy headroom baseline
-
-The original 11-fixture replay remains available for regression checks. It uses o200k_base over fixed input representations, repeated context and retrieved evidence, with `legacy` headroom and the original query-only policy.
-
-| Configuration | Total input tokens |
-|---|---:|
-| A: passthrough | 582,501 |
-| B: RTK | 464,781 |
-| C: legacy headroomd | 529,923 |
-| D: combined | 435,436 |
-
-Combined input is **25.25%** lower than passthrough; eager full-document retrieval saves only **6.95%**. These are deterministic replay results, separate from the new headroom experiments and actual LLM task accuracy. See the [frozen evidence](docs/reliability-implementation.md), [baseline](packages/eval/baseline.json) and [evaluation CLI](packages/eval/README.md).
 
 ## Development
 

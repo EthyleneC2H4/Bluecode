@@ -1,28 +1,35 @@
-# 评测：冻结基线、分层回放与真实模型
+# 评测：当前方案消融、分层回放与真实模型
 
 本包提供三个独立入口，下面的命令均从仓库根目录运行。离线输入计数、真实 provider usage 和任务通过率采用不同口径，不合并为同一个收益数字。
 
 | 入口 | 验证内容 | 是否调用外部 LLM | 已提交记录 |
 |---|---|---|---|
-| `bun run eval` | RTK＋`legacy` headroom 的冻结 A/B/C/D 回放 | 否；o200k_base 计数 | [baseline.json](baseline.json) |
+| `bun run eval --headroom-strategy layered` | RTK＋当前分层 headroom 的正式 A/B/C/D 消融 | 否；o200k_base 计数 | [ablation-layered-query.json](ablation-layered-query.json) |
 | `bun run eval:headroom` | 24 份历史的新旧 headroom 对照与工程回放 | 否；字符数 / 4 估算 | [headroom-layered-results.json](headroom-layered-results.json) |
 | `bun run eval:live` | 真实 OpenCode 编码任务、缓存 usage 和可选摘要尝试 | 是；须显式提供模型、密钥环境变量和预算 | [headroom-live-results.json](headroom-live-results.json) |
 
-完整结果与默认策略决定见 [headroom 验收报告](../../docs/headroom-layered-acceptance.md)。普通开发与默认 CI 使用离线入口，实机实验单独运行。
+本轮正式消融见[配置与结果](../../docs/headroom-ablation.md)，早期分层专用回放、实机结果与默认策略决定见 [headroom 验收报告](../../docs/headroom-layered-acceptance.md)。普通开发与默认 CI 使用离线入口，实机实验单独运行。
 
-## 冻结基线：生产插件回放
+## 当前方案：生产插件四组消融
 
 A（关闭两项）、B（RTK）、C（headroom）、D（组合）均调用生产使用的 `createPluginRuntime`。每份 fixture 分四个阶段送入，阶段内两次独立宿主调用均从原始宿主数组重新克隆：首次触发后台任务，`drain()` 后再次调用以应用持久视图。工具输出通过 `toolAfter`，检索通过 `createRetrieveTool`，不在评测中重新实现视图替换算法。
 
 ```sh
-bun run eval --invariants --benchmarks --report-path /tmp/default-report.json
-bun run eval --invariants --retrieval-strategy eager-recovery --report-path /tmp/eager-report.json
-bun run eval --check --skip-latency --report-path /tmp/regression-report.json
+bun run eval --invariants --headroom-strategy layered \
+  --retrieval-strategy query-only --report-path /tmp/layered-query.json
+bun run eval --invariants --headroom-strategy layered \
+  --retrieval-strategy eager-recovery --report-path /tmp/layered-eager.json
+bun run eval --check --headroom-strategy legacy --skip-latency \
+  --report-path /tmp/legacy-regression.json
 ```
+
+`--headroom-strategy legacy|layered` 将策略传入真实插件；默认保留 `legacy`，使原基线的 CI 回归继续可用。本轮正式实验显式选择 `layered`，历史记忆上限 4096、比例 15%，摘要关闭；`--benchmarks` 也使用所选策略。报告的 `meta.headroomStrategy` 与每行 `replay.headroom` 记录实际配置和持久活动视图策略，区分“配置为分层”与“实际应用了分层视图”。
+
+本轮 query-only 四组输入为 **582,501 / 464,781 / 434,209 / 369,220**，组合降低 **36.61%**，全部绝对门禁通过。eager-recovery 的组合输入为 **467,608**，降低 **19.72%**，仅收益门槛未达标，因此 `--invariants` 返回 1；不能把该压力组报告为全部通过。原 `baseline.json` 未覆盖，另有[本轮旧版对照](ablation-legacy-query.json)和[运行清单](ablation-summary.json)。
 
 `--report-path` / `EVAL_REPORT_PATH` 和 `--baseline-path` / `EVAL_BASELINE_PATH` 可分别注入目的路径；API `writeReport(report, path)`、`readReport(path)`、`checkBaseline(update, {reportPath, baselinePath})` 同样支持隔离。测试在临时目录建立自己的报告和基线，不替换或恢复仓库跟踪文件。`--update-baseline` 必须完整运行且所有绝对门禁通过；比较旧基线的相对回归门禁是另一项检查。
 
-## 冻结基线的计量口径
+## 四组消融的计量口径
 
 这是本地、确定性的回放代理指标，不代表外部模型真实 usage 或实际软件任务解决能力。精确 token 计数采用 o200k_base，对明确的角色标记与可见消息文本表示计数；不估计提供商隐藏的聊天模板。所有固定宿主调用、十个问题的调用、实际返回的检索工具输出和此后重复输入这些证据的成本都累计。`outTokens` 和 `compressionRatio` 单独表示最终上下文；不得把最终比例称为总成本节省。
 
@@ -35,7 +42,7 @@ bun run eval --check --skip-latency --report-path /tmp/regression-report.json
 
 旧十份 fixture 的 `mustHit` / `niceToHave` 指标保留为普通上下文保留率；其中包含工具清单与终端瞬态状态，不冒充关键约束。新增工程回放含三个明确关键约束、十八个完整轮次和活动请求、十个独立自然问句/期望标识符。`critical`、`naturalRecallAt5`、`tasks` 与 `archiveRecovery` 分开计数；无 query 的 A/B 使用 null，不报告虚构的 100% 检索率。
 
-## 冻结基线的绝对门禁与边界
+## 四组消融的绝对门禁与边界
 
 关键约束 100%、档案逐字恢复 100%、确定性答案标识符比较 100%，跨命名空间、旧计划替换新编辑、检索结果被再次 RTK 压缩各 0 次违规；要求非空实际探针。C/D 自然 Recall@5 ≥90%，D 总输入相对 A 至少降低 20%。基线再弱也不会降低这些目标。先检查每条 fixture 的质量与安全结果，再从各行重算所有 replay 聚合字段（包含调用数、检索 token、探针及 RSS）和档案计数/率；组级摘要必须与重算结果完全一致，不能用成功摘要掩盖失败行。相对基线仍比较压缩比例、上下文回忆、档案数量和延迟回归。
 

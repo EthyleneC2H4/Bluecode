@@ -1,0 +1,6141 @@
+{
+  "meta": {
+    "headroomStrategy": "legacy",
+    "semanticsVersion": 2,
+    "measurement": "Deterministic offline plugin replay proxy, not provider usage or task-solving ability. o200k_base of role-tagged visible text; all fixed host calls and model-visible retrieval outputs counted. Integrity-only archive probes excluded. Queue/service split unavailable from current public clients; RPC/hook/drain elapsed measured. RSS is the harness process only.",
+    "timestamp": "2026-09-11T13:23:30.042Z",
+    "tokenCounter": "o200k_base",
+    "versions": {
+      "node": "v26.3.0",
+      "bun": "1.4.0"
+    }
+  },
+  "groups": {
+    "A": {
+      "replay": {
+        "totalInputTokens": 582501,
+        "retrievalOutputTokens": 0,
+        "modelCalls": 98,
+        "critical": {
+          "found": 3,
+          "total": 3,
+          "rate": 1
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "rate": null
+        },
+        "tasks": {
+          "passed": 10,
+          "total": 10,
+          "rate": 1
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "peakObservedRssBytes": 392052736
+      },
+      "compressionRatio": 1,
+      "longOutputRatio": 1,
+      "latencyP50Ms": 0.038041999999904874,
+      "latencyP95Ms": 0.3927929999999833,
+      "contextRecall": {
+        "mustHit": {
+          "found": 104,
+          "total": 104,
+          "rate": 1
+        },
+        "niceToHave": {
+          "found": 21,
+          "total": 23,
+          "rate": 0.9130434782608695
+        }
+      },
+      "queryRecall": {
+        "mustHit": {
+          "found": 0,
+          "total": 0,
+          "rate": 1
+        },
+        "niceToHave": {
+          "found": 0,
+          "total": 0,
+          "rate": 1
+        }
+      },
+      "archiveRecovery": {
+        "found": 0,
+        "total": 0,
+        "rate": 1
+      },
+      "degradedRate": {
+        "spawn_failed": 0,
+        "timeout": 0,
+        "crash": 0,
+        "protocol": 0,
+        "no_gain": 0,
+        "total": 0,
+        "rate": 0
+      }
+    },
+    "B": {
+      "replay": {
+        "totalInputTokens": 464781,
+        "retrievalOutputTokens": 0,
+        "modelCalls": 98,
+        "critical": {
+          "found": 3,
+          "total": 3,
+          "rate": 1
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "rate": null
+        },
+        "tasks": {
+          "passed": 10,
+          "total": 10,
+          "rate": 1
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 64,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "peakObservedRssBytes": 403243008
+      },
+      "compressionRatio": 0.7632860964753437,
+      "longOutputRatio": 0.7597703464947623,
+      "latencyP50Ms": 8.258542000000489,
+      "latencyP95Ms": 45.163665000000265,
+      "contextRecall": {
+        "mustHit": {
+          "found": 102,
+          "total": 104,
+          "rate": 0.9807692307692307
+        },
+        "niceToHave": {
+          "found": 21,
+          "total": 23,
+          "rate": 0.9130434782608695
+        }
+      },
+      "queryRecall": {
+        "mustHit": {
+          "found": 0,
+          "total": 0,
+          "rate": 1
+        },
+        "niceToHave": {
+          "found": 0,
+          "total": 0,
+          "rate": 1
+        }
+      },
+      "archiveRecovery": {
+        "found": 32,
+        "total": 32,
+        "rate": 1
+      },
+      "degradedRate": {
+        "spawn_failed": 0,
+        "timeout": 0,
+        "crash": 0,
+        "protocol": 0,
+        "no_gain": 0,
+        "total": 0,
+        "rate": 0
+      }
+    },
+    "C": {
+      "replay": {
+        "totalInputTokens": 529923,
+        "retrievalOutputTokens": 4835,
+        "modelCalls": 108,
+        "critical": {
+          "found": 3,
+          "total": 3,
+          "rate": 1
+        },
+        "naturalRecallAt5": {
+          "found": 10,
+          "total": 10,
+          "rate": 1
+        },
+        "tasks": {
+          "passed": 10,
+          "total": 10,
+          "rate": 1
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 4,
+          "stalePlan": 2,
+          "retrievalRecompression": 10
+        },
+        "peakObservedRssBytes": 396181504
+      },
+      "compressionRatio": 0.6172412584553197,
+      "longOutputRatio": 0.5874924456083803,
+      "latencyP50Ms": 0.5278749999993124,
+      "latencyP95Ms": 289.64329099999986,
+      "contextRecall": {
+        "mustHit": {
+          "found": 104,
+          "total": 104,
+          "rate": 1
+        },
+        "niceToHave": {
+          "found": 21,
+          "total": 23,
+          "rate": 0.9130434782608695
+        }
+      },
+      "queryRecall": {
+        "mustHit": {
+          "found": 10,
+          "total": 10,
+          "rate": 1
+        },
+        "niceToHave": {
+          "found": 0,
+          "total": 0,
+          "rate": 1
+        }
+      },
+      "archiveRecovery": {
+        "found": 76,
+        "total": 76,
+        "rate": 1
+      },
+      "degradedRate": {
+        "spawn_failed": 0,
+        "timeout": 0,
+        "crash": 0,
+        "protocol": 0,
+        "no_gain": 0,
+        "total": 0,
+        "rate": 0
+      }
+    },
+    "D": {
+      "replay": {
+        "totalInputTokens": 435436,
+        "retrievalOutputTokens": 4869,
+        "modelCalls": 108,
+        "critical": {
+          "found": 3,
+          "total": 3,
+          "rate": 1
+        },
+        "naturalRecallAt5": {
+          "found": 10,
+          "total": 10,
+          "rate": 1
+        },
+        "tasks": {
+          "passed": 10,
+          "total": 10,
+          "rate": 1
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 68,
+          "stalePlan": 2,
+          "retrievalRecompression": 10
+        },
+        "peakObservedRssBytes": 399261696
+      },
+      "compressionRatio": 0.4800518709767866,
+      "longOutputRatio": 0.4545225624496374,
+      "latencyP50Ms": 7.13262400000167,
+      "latencyP95Ms": 258.92004499999985,
+      "contextRecall": {
+        "mustHit": {
+          "found": 102,
+          "total": 104,
+          "rate": 0.9807692307692307
+        },
+        "niceToHave": {
+          "found": 21,
+          "total": 23,
+          "rate": 0.9130434782608695
+        }
+      },
+      "queryRecall": {
+        "mustHit": {
+          "found": 10,
+          "total": 10,
+          "rate": 1
+        },
+        "niceToHave": {
+          "found": 0,
+          "total": 0,
+          "rate": 1
+        }
+      },
+      "archiveRecovery": {
+        "found": 108,
+        "total": 108,
+        "rate": 1
+      },
+      "degradedRate": {
+        "spawn_failed": 0,
+        "timeout": 0,
+        "crash": 0,
+        "protocol": 0,
+        "no_gain": 0,
+        "total": 0,
+        "rate": 0
+      }
+    }
+  },
+  "perFixture": [
+    {
+      "fixture": "long-session",
+      "group": "A",
+      "rawTokens": 51083,
+      "outTokens": 51083,
+      "latencyMs": 0.3927929999999833,
+      "contextRecallHits": [
+        "user-query-0-authentication",
+        "user-query-1-database",
+        "assistant-response-2",
+        "must-hit-50",
+        "must-hit-100",
+        "must-hit-150",
+        "must-hit-200",
+        "must-hit-250",
+        "must-hit-300",
+        "user-query-3-frontend",
+        "user-query-4-testing",
+        "assistant-response-5",
+        "user-query-6-monitoring",
+        "user-query-7-security",
+        "assistant-response-8",
+        "budget increased for large outputs",
+        "new timeout handling",
+        "new protocol version handling",
+        "user-query-9-refactoring",
+        "user-query-10-authentication",
+        "assistant-response-11",
+        "user-query-12-api",
+        "user-query-13-frontend",
+        "assistant-response-14",
+        "degraded reason \"timeout\" at test line 15",
+        "compression ratio threshold 0.85",
+        "user-query-15-deployment",
+        "user-query-16-monitoring",
+        "assistant-response-17",
+        "user-query-18-performance",
+        "user-query-19-refactoring",
+        "assistant-response-20",
+        "user-query-21-database",
+        "user-query-22-api",
+        "assistant-response-23",
+        "user-query-24-testing",
+        "user-query-25-deployment",
+        "assistant-response-26",
+        "user-query-27-security",
+        "user-query-28-performance",
+        "assistant-response-29",
+        "user-query-30-authentication",
+        "user-query-31-database",
+        "assistant-response-32",
+        "user-query-33-frontend",
+        "user-query-34-testing",
+        "assistant-response-35",
+        "user-query-36-monitoring",
+        "user-query-37-security",
+        "assistant-response-38",
+        "user-query-39-refactoring",
+        "user-query-40-authentication",
+        "assistant-response-41",
+        "user-query-42-api",
+        "user-query-43-frontend",
+        "assistant-response-44",
+        "user-query-45-deployment",
+        "user-query-46-monitoring",
+        "assistant-response-47",
+        "user-query-48-performance",
+        "user-query-49-refactoring",
+        "assistant-response-50",
+        "user-query-51-database",
+        "user-query-52-api",
+        "assistant-response-53",
+        "user-query-54-testing"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 13207,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 13207,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 26506,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 26506,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 39808,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 39808,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 51334,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 51334,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 261710,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.15400199999993447,
+          "transformMs": 0.08112500000007117,
+          "planningDrainMs": 0.15766599999997766,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 248053760
+      }
+    },
+    {
+      "fixture": "tool-ls-large",
+      "group": "A",
+      "rawTokens": 6579,
+      "outTokens": 6579,
+      "latencyMs": 0.04545699999982844,
+      "contextRecallHits": [
+        "file_0000.ts",
+        "file_0100.json",
+        "file_0219.ts"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 6589,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 6589,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 6589,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 6589,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 6589,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 6589,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 6589,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 6589,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 52712,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.007749999999987267,
+          "transformMs": 0.01945699999981798,
+          "planningDrainMs": 0.018250000000023192,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 351404032
+      }
+    },
+    {
+      "fixture": "tool-grep-hits",
+      "group": "A",
+      "rawTokens": 1748,
+      "outTokens": 1748,
+      "latencyMs": 0.038041999999904874,
+      "contextRecallHits": [
+        "compressHandler",
+        "fetchHandler",
+        "spawnHandler",
+        "timeoutHandler"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 1758,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1758,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1758,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1758,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1758,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1758,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1758,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1758,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 14064,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.00874999999996362,
+          "transformMs": 0.01062499999989086,
+          "planningDrainMs": 0.018667000000050393,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 356712448
+      }
+    },
+    {
+      "fixture": "tool-read-with-lines",
+      "group": "A",
+      "rawTokens": 4081,
+      "outTokens": 4081,
+      "latencyMs": 0.019999999999754436,
+      "contextRecallHits": [
+        "must-hit-50",
+        "must-hit-100",
+        "must-hit-150",
+        "must-hit-200",
+        "must-hit-250",
+        "must-hit-300"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 32728,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.0049999999999954525,
+          "transformMs": 0.005457999999975982,
+          "planningDrainMs": 0.009541999999783002,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 365740032
+      }
+    },
+    {
+      "fixture": "tool-git-diff",
+      "group": "A",
+      "rawTokens": 389,
+      "outTokens": 389,
+      "latencyMs": 0.02420899999970061,
+      "contextRecallHits": [
+        "budget increased for large outputs",
+        "new timeout handling",
+        "new protocol version handling"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 3192,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.0037499999999681677,
+          "transformMs": 0.00854099999992286,
+          "planningDrainMs": 0.011917999999809581,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 368492544
+      }
+    },
+    {
+      "fixture": "tool-test-output",
+      "group": "A",
+      "rawTokens": 187,
+      "outTokens": 187,
+      "latencyMs": 0.010794999999802712,
+      "contextRecallHits": [
+        "degraded reason \"timeout\" at test line 15",
+        "compression ratio threshold 0.85"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 1568,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.0029579999999214124,
+          "transformMs": 0.0021269999999731226,
+          "planningDrainMs": 0.005709999999908177,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 369655808
+      }
+    },
+    {
+      "fixture": "tool-noise",
+      "group": "A",
+      "rawTokens": 12118,
+      "outTokens": 12118,
+      "latencyMs": 0.06424899999956324,
+      "contextRecallHits": [
+        "noise-marker-0",
+        "noise-marker-250",
+        "noise-marker-450"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 97024,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.004500000000007276,
+          "transformMs": 0.0215419999998403,
+          "planningDrainMs": 0.03820699999971566,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 383811584
+      }
+    },
+    {
+      "fixture": "tool-ansi-colors",
+      "group": "A",
+      "rawTokens": 2499,
+      "outTokens": 2499,
+      "latencyMs": 0.06446099999993748,
+      "contextRecallHits": [
+        "ansi-marker-0",
+        "ansi-marker-99"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 20072,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.0095410000000129,
+          "transformMs": 0.01995899999985795,
+          "planningDrainMs": 0.03496100000006663,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 384483328
+      }
+    },
+    {
+      "fixture": "tool-carriage-return",
+      "group": "A",
+      "rawTokens": 200,
+      "outTokens": 200,
+      "latencyMs": 0.027418999999895277,
+      "contextRecallHits": [
+        "progress-0",
+        "progress-100",
+        "progress-complete"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 1680,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.006250000000022737,
+          "transformMs": 0.013292999999862332,
+          "planningDrainMs": 0.007876000000010208,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 384581632
+      }
+    },
+    {
+      "fixture": "tool-backspace-corruption",
+      "group": "A",
+      "rawTokens": 1150,
+      "outTokens": 1150,
+      "latencyMs": 0.032583999999474145,
+      "contextRecallHits": [
+        "backspace-marker-0",
+        "backspace-marker-49"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 9280,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.004250000000070031,
+          "transformMs": 0.010624999999663487,
+          "planningDrainMs": 0.017708999999740627,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 384843776
+      }
+    },
+    {
+      "fixture": "engineering-replay",
+      "group": "A",
+      "rawTokens": 5563,
+      "outTokens": 5563,
+      "latencyMs": 0.3679580000001579,
+      "contextRecallHits": [
+        "PostgreSQL-17",
+        "PKCE-S256",
+        "LRU-4096",
+        "ap-southeast-3",
+        "OTLP-gRPC",
+        "migration_20260905",
+        "bluecode:v2.3.1",
+        "suite-84-passed",
+        "INC-2741",
+        "team-platform-ops"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 1626,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1626,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2933,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2933,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4527,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4527,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5817,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5817,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5826,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5835,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5844,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5853,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5862,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5871,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5880,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5889,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5898,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5907,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 88471,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 3,
+          "found": 3
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 10,
+          "total": 10,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.3216240000002699,
+          "transformMs": 0.022708000000079664,
+          "planningDrainMs": 0.0236259999998083,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 392052736
+      }
+    },
+    {
+      "fixture": "long-session",
+      "group": "B",
+      "rawTokens": 51083,
+      "outTokens": 35109,
+      "latencyMs": 45.163665000000265,
+      "contextRecallHits": [
+        "user-query-0-authentication",
+        "user-query-1-database",
+        "assistant-response-2",
+        "must-hit-50",
+        "must-hit-100",
+        "must-hit-150",
+        "must-hit-200",
+        "must-hit-250",
+        "must-hit-300",
+        "user-query-3-frontend",
+        "user-query-4-testing",
+        "assistant-response-5",
+        "user-query-6-monitoring",
+        "user-query-7-security",
+        "assistant-response-8",
+        "budget increased for large outputs",
+        "new timeout handling",
+        "new protocol version handling",
+        "user-query-9-refactoring",
+        "user-query-10-authentication",
+        "assistant-response-11",
+        "user-query-12-api",
+        "user-query-13-frontend",
+        "assistant-response-14",
+        "degraded reason \"timeout\" at test line 15",
+        "compression ratio threshold 0.85",
+        "user-query-15-deployment",
+        "user-query-16-monitoring",
+        "assistant-response-17",
+        "user-query-18-performance",
+        "user-query-19-refactoring",
+        "assistant-response-20",
+        "user-query-21-database",
+        "user-query-22-api",
+        "assistant-response-23",
+        "user-query-24-testing",
+        "user-query-25-deployment",
+        "assistant-response-26",
+        "user-query-27-security",
+        "user-query-28-performance",
+        "assistant-response-29",
+        "user-query-30-authentication",
+        "user-query-31-database",
+        "assistant-response-32",
+        "user-query-33-frontend",
+        "user-query-34-testing",
+        "assistant-response-35",
+        "user-query-36-monitoring",
+        "user-query-37-security",
+        "assistant-response-38",
+        "user-query-39-refactoring",
+        "user-query-40-authentication",
+        "assistant-response-41",
+        "user-query-42-api",
+        "user-query-43-frontend",
+        "assistant-response-44",
+        "user-query-45-deployment",
+        "user-query-46-monitoring",
+        "assistant-response-47",
+        "user-query-48-performance",
+        "user-query-49-refactoring",
+        "assistant-response-50",
+        "user-query-51-database",
+        "user-query-52-api",
+        "assistant-response-53",
+        "user-query-54-testing"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 5,
+      "archiveRecoveryTotal": 5,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 8918,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 8918,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 17928,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 17928,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 26941,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 26941,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 35360,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 35360,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 178294,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 10,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 18,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 45.09104000000025,
+          "transformMs": 0.034250000000042746,
+          "planningDrainMs": 0.038374999999973625,
+          "retrievalMs": 0,
+          "archiveProbeMs": 8.363542000000166,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 403243008
+      }
+    },
+    {
+      "fixture": "tool-ls-large",
+      "group": "B",
+      "rawTokens": 6579,
+      "outTokens": 3473,
+      "latencyMs": 9.824707999999873,
+      "contextRecallHits": [
+        "file_0000.ts",
+        "file_0100.json"
+      ],
+      "contextRecallMisses": [
+        "file_0219.ts"
+      ],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 1,
+      "archiveRecoveryTotal": 1,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 3483,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3483,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3483,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3483,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3483,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3483,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3483,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3483,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 27864,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 1,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 9.785417000000052,
+          "transformMs": 0.013624999999933607,
+          "planningDrainMs": 0.02566599999988739,
+          "retrievalMs": 0,
+          "archiveProbeMs": 4.728749999999991,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 397934592
+      }
+    },
+    {
+      "fixture": "tool-grep-hits",
+      "group": "B",
+      "rawTokens": 1748,
+      "outTokens": 566,
+      "latencyMs": 8.679708000000346,
+      "contextRecallHits": [
+        "compressHandler",
+        "fetchHandler",
+        "timeoutHandler"
+      ],
+      "contextRecallMisses": [
+        "spawnHandler"
+      ],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 1,
+      "archiveRecoveryTotal": 1,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 576,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 576,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 576,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 576,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 576,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 576,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 576,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 576,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 4608,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 1,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 8.664874999999938,
+          "transformMs": 0.006334000000379092,
+          "planningDrainMs": 0.0084990000000289,
+          "retrievalMs": 0,
+          "archiveProbeMs": 2.1988750000000437,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 398065664
+      }
+    },
+    {
+      "fixture": "tool-read-with-lines",
+      "group": "B",
+      "rawTokens": 4081,
+      "outTokens": 4081,
+      "latencyMs": 7.155748999999787,
+      "contextRecallHits": [
+        "must-hit-50",
+        "must-hit-100",
+        "must-hit-150",
+        "must-hit-200",
+        "must-hit-250",
+        "must-hit-300"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 1,
+      "archiveRecoveryTotal": 1,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 32728,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 1,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 7.126332999999931,
+          "transformMs": 0.011541999999735708,
+          "planningDrainMs": 0.01787400000011985,
+          "retrievalMs": 0,
+          "archiveProbeMs": 6.571665999999823,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 392200192
+      }
+    },
+    {
+      "fixture": "tool-git-diff",
+      "group": "B",
+      "rawTokens": 389,
+      "outTokens": 389,
+      "latencyMs": 5.5387490000000525,
+      "contextRecallHits": [
+        "budget increased for large outputs",
+        "new timeout handling",
+        "new protocol version handling"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 1,
+      "archiveRecoveryTotal": 1,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 3192,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 1,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 5.5195830000000115,
+          "transformMs": 0.009583000000020547,
+          "planningDrainMs": 0.009583000000020547,
+          "retrievalMs": 0,
+          "archiveProbeMs": 3.3789170000000013,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 392396800
+      }
+    },
+    {
+      "fixture": "tool-test-output",
+      "group": "B",
+      "rawTokens": 187,
+      "outTokens": 187,
+      "latencyMs": 6.2385790000003,
+      "contextRecallHits": [
+        "degraded reason \"timeout\" at test line 15",
+        "compression ratio threshold 0.85"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 1,
+      "archiveRecoveryTotal": 1,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 1568,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 1,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 6.210666000000174,
+          "transformMs": 0.01058100000000195,
+          "planningDrainMs": 0.017332000000124026,
+          "retrievalMs": 0,
+          "archiveProbeMs": 2.6076670000002196,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 391331840
+      }
+    },
+    {
+      "fixture": "tool-noise",
+      "group": "B",
+      "rawTokens": 12118,
+      "outTokens": 12118,
+      "latencyMs": 9.83037300000069,
+      "contextRecallHits": [
+        "noise-marker-0",
+        "noise-marker-250",
+        "noise-marker-450"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 1,
+      "archiveRecoveryTotal": 1,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 97024,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 1,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 9.773542000000134,
+          "transformMs": 0.011998000000403408,
+          "planningDrainMs": 0.044833000000153334,
+          "retrievalMs": 0,
+          "archiveProbeMs": 7.2040419999996175,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 392118272
+      }
+    },
+    {
+      "fixture": "tool-ansi-colors",
+      "group": "B",
+      "rawTokens": 2499,
+      "outTokens": 2499,
+      "latencyMs": 8.258542000000489,
+      "contextRecallHits": [
+        "ansi-marker-0",
+        "ansi-marker-99"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 1,
+      "archiveRecoveryTotal": 1,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 20072,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 1,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 8.235333000000082,
+          "transformMs": 0.010168000000248867,
+          "planningDrainMs": 0.01304100000015751,
+          "retrievalMs": 0,
+          "archiveProbeMs": 2.2926249999998163,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 392183808
+      }
+    },
+    {
+      "fixture": "tool-carriage-return",
+      "group": "B",
+      "rawTokens": 200,
+      "outTokens": 200,
+      "latencyMs": 6.685248000000001,
+      "contextRecallHits": [
+        "progress-0",
+        "progress-100",
+        "progress-complete"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 1,
+      "archiveRecoveryTotal": 1,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 1680,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 1,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 6.673750000000155,
+          "transformMs": 0.00595700000008037,
+          "planningDrainMs": 0.005540999999766427,
+          "retrievalMs": 0,
+          "archiveProbeMs": 2.0187089999999444,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 392216576
+      }
+    },
+    {
+      "fixture": "tool-backspace-corruption",
+      "group": "B",
+      "rawTokens": 1150,
+      "outTokens": 1150,
+      "latencyMs": 7.840041999999585,
+      "contextRecallHits": [
+        "backspace-marker-0",
+        "backspace-marker-49"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 1,
+      "archiveRecoveryTotal": 1,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 9280,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 1,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 7.821124999999938,
+          "transformMs": 0.009041999999908512,
+          "planningDrainMs": 0.009874999999738066,
+          "retrievalMs": 0,
+          "archiveProbeMs": 3.5070409999998446,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 392232960
+      }
+    },
+    {
+      "fixture": "engineering-replay",
+      "group": "B",
+      "rawTokens": 5563,
+      "outTokens": 5563,
+      "latencyMs": 35.64941799999974,
+      "contextRecallHits": [
+        "PostgreSQL-17",
+        "PKCE-S256",
+        "LRU-4096",
+        "ap-southeast-3",
+        "OTLP-gRPC",
+        "migration_20260905",
+        "bluecode:v2.3.1",
+        "suite-84-passed",
+        "INC-2741",
+        "team-platform-ops"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 18,
+      "archiveRecoveryTotal": 18,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 1626,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1626,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2933,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2933,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4527,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4527,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5817,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5817,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5826,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5835,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5844,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5853,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5862,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5871,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5880,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5889,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5898,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5907,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 88471,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 3,
+          "found": 3
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 10,
+          "total": 10,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 36,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 18,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 35.6122519999999,
+          "transformMs": 0.016707999999880485,
+          "planningDrainMs": 0.02045799999996234,
+          "retrievalMs": 0,
+          "archiveProbeMs": 10.652085000000852,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 393216000
+      }
+    },
+    {
+      "fixture": "long-session",
+      "group": "C",
+      "rawTokens": 51083,
+      "outTokens": 21373,
+      "latencyMs": 289.64329099999986,
+      "contextRecallHits": [
+        "user-query-0-authentication",
+        "user-query-1-database",
+        "assistant-response-2",
+        "must-hit-50",
+        "must-hit-100",
+        "must-hit-150",
+        "must-hit-200",
+        "must-hit-250",
+        "must-hit-300",
+        "user-query-3-frontend",
+        "user-query-4-testing",
+        "assistant-response-5",
+        "user-query-6-monitoring",
+        "user-query-7-security",
+        "assistant-response-8",
+        "budget increased for large outputs",
+        "new timeout handling",
+        "new protocol version handling",
+        "user-query-9-refactoring",
+        "user-query-10-authentication",
+        "assistant-response-11",
+        "user-query-12-api",
+        "user-query-13-frontend",
+        "assistant-response-14",
+        "degraded reason \"timeout\" at test line 15",
+        "compression ratio threshold 0.85",
+        "user-query-15-deployment",
+        "user-query-16-monitoring",
+        "assistant-response-17",
+        "user-query-18-performance",
+        "user-query-19-refactoring",
+        "assistant-response-20",
+        "user-query-21-database",
+        "user-query-22-api",
+        "assistant-response-23",
+        "user-query-24-testing",
+        "user-query-25-deployment",
+        "assistant-response-26",
+        "user-query-27-security",
+        "user-query-28-performance",
+        "assistant-response-29",
+        "user-query-30-authentication",
+        "user-query-31-database",
+        "assistant-response-32",
+        "user-query-33-frontend",
+        "user-query-34-testing",
+        "assistant-response-35",
+        "user-query-36-monitoring",
+        "user-query-37-security",
+        "assistant-response-38",
+        "user-query-39-refactoring",
+        "user-query-40-authentication",
+        "assistant-response-41",
+        "user-query-42-api",
+        "user-query-43-frontend",
+        "assistant-response-44",
+        "user-query-45-deployment",
+        "user-query-46-monitoring",
+        "assistant-response-47",
+        "user-query-48-performance",
+        "user-query-49-refactoring",
+        "assistant-response-50",
+        "user-query-51-database",
+        "user-query-52-api",
+        "assistant-response-53",
+        "user-query-54-testing"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 48,
+      "archiveRecoveryTotal": 48,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 13207,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12928,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 26227,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 15729,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 29031,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 22736,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 34262,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 21405,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 175525,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 1,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 5,
+          "applied": 7,
+          "invalidated": 1,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.02720899999962967,
+          "transformMs": 10.475541000000021,
+          "planningDrainMs": 279.1405410000002,
+          "retrievalMs": 0,
+          "archiveProbeMs": 25.58604200000059,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 394625024,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": "legacy",
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "tool-ls-large",
+      "group": "C",
+      "rawTokens": 6579,
+      "outTokens": 6579,
+      "latencyMs": 0.5837890000007064,
+      "contextRecallHits": [
+        "file_0000.ts",
+        "file_0100.json",
+        "file_0219.ts"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 6589,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 6589,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 6589,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 6589,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 6589,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 6589,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 6589,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 6589,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 52712,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.00474999999960346,
+          "transformMs": 0.42479100000082326,
+          "planningDrainMs": 0.15424800000027972,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 391200768,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": null,
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "tool-grep-hits",
+      "group": "C",
+      "rawTokens": 1748,
+      "outTokens": 1748,
+      "latencyMs": 0.3945430000003398,
+      "contextRecallHits": [
+        "compressHandler",
+        "fetchHandler",
+        "spawnHandler",
+        "timeoutHandler"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 1758,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1758,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1758,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1758,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1758,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1758,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1758,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1758,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 14064,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.0035000000002582965,
+          "transformMs": 0.2644170000003214,
+          "planningDrainMs": 0.1266259999997601,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 391217152,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": null,
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "tool-read-with-lines",
+      "group": "C",
+      "rawTokens": 4081,
+      "outTokens": 4081,
+      "latencyMs": 0.5278749999993124,
+      "contextRecallHits": [
+        "must-hit-50",
+        "must-hit-100",
+        "must-hit-150",
+        "must-hit-200",
+        "must-hit-250",
+        "must-hit-300"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 32728,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.004791999999724794,
+          "transformMs": 0.3609579999993002,
+          "planningDrainMs": 0.1621250000002874,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 391217152,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": null,
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "tool-git-diff",
+      "group": "C",
+      "rawTokens": 389,
+      "outTokens": 389,
+      "latencyMs": 1.0835439999996197,
+      "contextRecallHits": [
+        "budget increased for large outputs",
+        "new timeout handling",
+        "new protocol version handling"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 3192,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.0029589999999188876,
+          "transformMs": 0.1647939999998016,
+          "planningDrainMs": 0.9157909999998992,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 391282688,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": null,
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "tool-test-output",
+      "group": "C",
+      "rawTokens": 187,
+      "outTokens": 187,
+      "latencyMs": 0.17195900000024267,
+      "contextRecallHits": [
+        "degraded reason \"timeout\" at test line 15",
+        "compression ratio threshold 0.85"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 1568,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.002375000000029104,
+          "transformMs": 0.10450000000037107,
+          "planningDrainMs": 0.06508399999984249,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 391315456,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": null,
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "tool-noise",
+      "group": "C",
+      "rawTokens": 12118,
+      "outTokens": 12118,
+      "latencyMs": 2.781873999999789,
+      "contextRecallHits": [
+        "noise-marker-0",
+        "noise-marker-250",
+        "noise-marker-450"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 97024,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.00233299999990777,
+          "transformMs": 1.9587080000001151,
+          "planningDrainMs": 0.8208329999997659,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 392691712,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": null,
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "tool-ansi-colors",
+      "group": "C",
+      "rawTokens": 2499,
+      "outTokens": 2499,
+      "latencyMs": 0.43195999999943524,
+      "contextRecallHits": [
+        "ansi-marker-0",
+        "ansi-marker-99"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 20072,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.003790999999637279,
+          "transformMs": 0.28400299999975687,
+          "planningDrainMs": 0.1441660000000411,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 392871936,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": null,
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "tool-carriage-return",
+      "group": "C",
+      "rawTokens": 200,
+      "outTokens": 200,
+      "latencyMs": 0.18150100000048042,
+      "contextRecallHits": [
+        "progress-0",
+        "progress-100",
+        "progress-complete"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 1680,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.003083000000060565,
+          "transformMs": 0.10233300000027157,
+          "planningDrainMs": 0.07608500000014828,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 392888320,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": null,
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "tool-backspace-corruption",
+      "group": "C",
+      "rawTokens": 1150,
+      "outTokens": 1150,
+      "latencyMs": 0.36999699999933,
+      "contextRecallHits": [
+        "backspace-marker-0",
+        "backspace-marker-49"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 0,
+      "archiveRecoveryTotal": 0,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 9280,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.0023330000003625173,
+          "transformMs": 0.25308199999972203,
+          "planningDrainMs": 0.11458199999924545,
+          "retrievalMs": 0,
+          "archiveProbeMs": 0,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 395100160,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": null,
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "engineering-replay",
+      "group": "C",
+      "rawTokens": 5563,
+      "outTokens": 2510,
+      "latencyMs": 76.62033300000121,
+      "contextRecallHits": [
+        "PostgreSQL-17",
+        "PKCE-S256",
+        "LRU-4096",
+        "ap-southeast-3",
+        "OTLP-gRPC",
+        "migration_20260905",
+        "bluecode:v2.3.1",
+        "suite-84-passed",
+        "INC-2741",
+        "team-platform-ops"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [
+        "PostgreSQL-17",
+        "PKCE-S256",
+        "LRU-4096",
+        "ap-southeast-3",
+        "OTLP-gRPC",
+        "migration_20260905",
+        "bluecode:v2.3.1",
+        "suite-84-passed",
+        "INC-2741",
+        "team-platform-ops"
+      ],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 28,
+      "archiveRecoveryTotal": 28,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 1626,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1626,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2933,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2302,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3896,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2473,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3763,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2570,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2579,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 3064,
+            "retrievalTokens": 485
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3073,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 3560,
+            "retrievalTokens": 487
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3569,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 4051,
+            "retrievalTokens": 482
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4060,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 4549,
+            "retrievalTokens": 489
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4558,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 5049,
+            "retrievalTokens": 491
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5058,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 5531,
+            "retrievalTokens": 473
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5540,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 6029,
+            "retrievalTokens": 489
+          },
+          {
+            "phase": "host",
+            "inputTokens": 6038,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 6519,
+            "retrievalTokens": 481
+          },
+          {
+            "phase": "host",
+            "inputTokens": 6528,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 7015,
+            "retrievalTokens": 487
+          },
+          {
+            "phase": "host",
+            "inputTokens": 7024,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 7495,
+            "retrievalTokens": 471
+          }
+        ],
+        "totalInputTokens": 122078,
+        "retrievalOutputTokens": 4835,
+        "critical": {
+          "total": 3,
+          "found": 3
+        },
+        "naturalRecallAt5": {
+          "found": 10,
+          "total": 10,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 10,
+          "total": 10,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 1,
+          "retrievalRecompression": 10
+        },
+        "runtime": {
+          "plans": 4,
+          "applied": 5,
+          "invalidated": 1,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 0,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 0.015377000001535635,
+          "transformMs": 2.8071649999992587,
+          "planningDrainMs": 73.79779100000042,
+          "retrievalMs": 7.786918999998761,
+          "archiveProbeMs": 9.503581999999824,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 396181504,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": "legacy",
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "long-session",
+      "group": "D",
+      "rawTokens": 51083,
+      "outTokens": 13920,
+      "latencyMs": 258.92004499999985,
+      "contextRecallHits": [
+        "user-query-0-authentication",
+        "user-query-1-database",
+        "assistant-response-2",
+        "must-hit-50",
+        "must-hit-100",
+        "must-hit-150",
+        "must-hit-200",
+        "must-hit-250",
+        "must-hit-300",
+        "user-query-3-frontend",
+        "user-query-4-testing",
+        "assistant-response-5",
+        "user-query-6-monitoring",
+        "user-query-7-security",
+        "assistant-response-8",
+        "budget increased for large outputs",
+        "new timeout handling",
+        "new protocol version handling",
+        "user-query-9-refactoring",
+        "user-query-10-authentication",
+        "assistant-response-11",
+        "user-query-12-api",
+        "user-query-13-frontend",
+        "assistant-response-14",
+        "degraded reason \"timeout\" at test line 15",
+        "compression ratio threshold 0.85",
+        "user-query-15-deployment",
+        "user-query-16-monitoring",
+        "assistant-response-17",
+        "user-query-18-performance",
+        "user-query-19-refactoring",
+        "assistant-response-20",
+        "user-query-21-database",
+        "user-query-22-api",
+        "assistant-response-23",
+        "user-query-24-testing",
+        "user-query-25-deployment",
+        "assistant-response-26",
+        "user-query-27-security",
+        "user-query-28-performance",
+        "assistant-response-29",
+        "user-query-30-authentication",
+        "user-query-31-database",
+        "assistant-response-32",
+        "user-query-33-frontend",
+        "user-query-34-testing",
+        "assistant-response-35",
+        "user-query-36-monitoring",
+        "user-query-37-security",
+        "assistant-response-38",
+        "user-query-39-refactoring",
+        "user-query-40-authentication",
+        "assistant-response-41",
+        "user-query-42-api",
+        "user-query-43-frontend",
+        "assistant-response-44",
+        "user-query-45-deployment",
+        "user-query-46-monitoring",
+        "assistant-response-47",
+        "user-query-48-performance",
+        "user-query-49-refactoring",
+        "assistant-response-50",
+        "user-query-51-database",
+        "user-query-52-api",
+        "assistant-response-53",
+        "user-query-54-testing"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 53,
+      "archiveRecoveryTotal": 53,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 8918,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 8616,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 17626,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 10205,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 19218,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 14105,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 22524,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 13952,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 115164,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 12,
+          "stalePlan": 1,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 5,
+          "applied": 7,
+          "invalidated": 1,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 18,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 25.495960000000196,
+          "transformMs": 6.952666999999565,
+          "planningDrainMs": 226.47141800000009,
+          "retrievalMs": 0,
+          "archiveProbeMs": 20.25921099999823,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 384499712,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": "legacy",
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "tool-ls-large",
+      "group": "D",
+      "rawTokens": 6579,
+      "outTokens": 3473,
+      "latencyMs": 9.114705000000413,
+      "contextRecallHits": [
+        "file_0000.ts",
+        "file_0100.json"
+      ],
+      "contextRecallMisses": [
+        "file_0219.ts"
+      ],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 1,
+      "archiveRecoveryTotal": 1,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 3483,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3483,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3483,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3483,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3483,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3483,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3483,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3483,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 27864,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 1,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 7.730291000000307,
+          "transformMs": 0.2913320000002386,
+          "planningDrainMs": 1.0930819999998675,
+          "retrievalMs": 0,
+          "archiveProbeMs": 3.2632089999997334,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 387432448,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": null,
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "tool-grep-hits",
+      "group": "D",
+      "rawTokens": 1748,
+      "outTokens": 566,
+      "latencyMs": 7.218417999999929,
+      "contextRecallHits": [
+        "compressHandler",
+        "fetchHandler",
+        "timeoutHandler"
+      ],
+      "contextRecallMisses": [
+        "spawnHandler"
+      ],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 1,
+      "archiveRecoveryTotal": 1,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 576,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 576,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 576,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 576,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 576,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 576,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 576,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 576,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 4608,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 1,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 6.849040999999943,
+          "transformMs": 0.23250000000007276,
+          "planningDrainMs": 0.1368769999999131,
+          "retrievalMs": 0,
+          "archiveProbeMs": 1.95258400000057,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 387481600,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": null,
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "tool-read-with-lines",
+      "group": "D",
+      "rawTokens": 4081,
+      "outTokens": 4081,
+      "latencyMs": 7.13262400000167,
+      "contextRecallHits": [
+        "must-hit-50",
+        "must-hit-100",
+        "must-hit-150",
+        "must-hit-200",
+        "must-hit-250",
+        "must-hit-300"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 1,
+      "archiveRecoveryTotal": 1,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4091,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 32728,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 1,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 6.531999999999698,
+          "transformMs": 0.38812400000097114,
+          "planningDrainMs": 0.21250000000100044,
+          "retrievalMs": 0,
+          "archiveProbeMs": 2.318959000000632,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 387596288,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": null,
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "tool-git-diff",
+      "group": "D",
+      "rawTokens": 389,
+      "outTokens": 389,
+      "latencyMs": 6.752210000000105,
+      "contextRecallHits": [
+        "budget increased for large outputs",
+        "new timeout handling",
+        "new protocol version handling"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 1,
+      "archiveRecoveryTotal": 1,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 399,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 3192,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 1,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 6.4848329999999805,
+          "transformMs": 0.15258399999993344,
+          "planningDrainMs": 0.11479300000019066,
+          "retrievalMs": 0,
+          "archiveProbeMs": 1.3592919999996411,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 387645440,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": null,
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "tool-test-output",
+      "group": "D",
+      "rawTokens": 187,
+      "outTokens": 187,
+      "latencyMs": 5.452083999999104,
+      "contextRecallHits": [
+        "degraded reason \"timeout\" at test line 15",
+        "compression ratio threshold 0.85"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 1,
+      "archiveRecoveryTotal": 1,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 196,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 1568,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 1,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 5.002875000000131,
+          "transformMs": 0.3082510000003822,
+          "planningDrainMs": 0.14095799999859082,
+          "retrievalMs": 0,
+          "archiveProbeMs": 2.346415999999408,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 387743744,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": null,
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "tool-noise",
+      "group": "D",
+      "rawTokens": 12118,
+      "outTokens": 12118,
+      "latencyMs": 10.4345419999986,
+      "contextRecallHits": [
+        "noise-marker-0",
+        "noise-marker-250",
+        "noise-marker-450"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 1,
+      "archiveRecoveryTotal": 1,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 12128,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 97024,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 1,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 7.716707999999926,
+          "transformMs": 1.80724999999984,
+          "planningDrainMs": 0.9105839999988348,
+          "retrievalMs": 0,
+          "archiveProbeMs": 7.396540000001096,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 398376960,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": null,
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "tool-ansi-colors",
+      "group": "D",
+      "rawTokens": 2499,
+      "outTokens": 2499,
+      "latencyMs": 6.4314580000000205,
+      "contextRecallHits": [
+        "ansi-marker-0",
+        "ansi-marker-99"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 1,
+      "archiveRecoveryTotal": 1,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2509,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 20072,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 1,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 5.934917000000041,
+          "transformMs": 0.2870829999997113,
+          "planningDrainMs": 0.20945800000026793,
+          "retrievalMs": 0,
+          "archiveProbeMs": 2.3219170000002123,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 398557184,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": null,
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "tool-carriage-return",
+      "group": "D",
+      "rawTokens": 200,
+      "outTokens": 200,
+      "latencyMs": 5.5694990000010876,
+      "contextRecallHits": [
+        "progress-0",
+        "progress-100",
+        "progress-complete"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 1,
+      "archiveRecoveryTotal": 1,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 210,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 1680,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 1,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 5.328333999999813,
+          "transformMs": 0.12933300000076997,
+          "planningDrainMs": 0.1118320000005042,
+          "retrievalMs": 0,
+          "archiveProbeMs": 1.8981659999999465,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 398606336,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": null,
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "tool-backspace-corruption",
+      "group": "D",
+      "rawTokens": 1150,
+      "outTokens": 1150,
+      "latencyMs": 6.5921260000000075,
+      "contextRecallHits": [
+        "backspace-marker-0",
+        "backspace-marker-49"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 1,
+      "archiveRecoveryTotal": 1,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1160,
+            "retrievalTokens": 0
+          }
+        ],
+        "totalInputTokens": 9280,
+        "retrievalOutputTokens": 0,
+        "critical": {
+          "total": 0,
+          "found": 0
+        },
+        "naturalRecallAt5": {
+          "found": 0,
+          "total": 0,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 0,
+          "total": 0,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 2,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "runtime": {
+          "plans": 0,
+          "applied": 0,
+          "invalidated": 0,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 1,
+          "retrievalBypasses": 0,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 6.248333000000002,
+          "transformMs": 0.21770899999955873,
+          "planningDrainMs": 0.1260840000004464,
+          "retrievalMs": 0,
+          "archiveProbeMs": 3.420165999999881,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 398639104,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": null,
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    },
+    {
+      "fixture": "engineering-replay",
+      "group": "D",
+      "rawTokens": 5563,
+      "outTokens": 2508,
+      "latencyMs": 235.6945009999995,
+      "contextRecallHits": [
+        "PostgreSQL-17",
+        "PKCE-S256",
+        "LRU-4096",
+        "ap-southeast-3",
+        "OTLP-gRPC",
+        "migration_20260905",
+        "bluecode:v2.3.1",
+        "suite-84-passed",
+        "INC-2741",
+        "team-platform-ops"
+      ],
+      "contextRecallMisses": [],
+      "queryRecallHits": [
+        "PostgreSQL-17",
+        "PKCE-S256",
+        "LRU-4096",
+        "ap-southeast-3",
+        "OTLP-gRPC",
+        "migration_20260905",
+        "bluecode:v2.3.1",
+        "suite-84-passed",
+        "INC-2741",
+        "team-platform-ops"
+      ],
+      "queryRecallMisses": [],
+      "archiveRecoveryFound": 46,
+      "archiveRecoveryTotal": 46,
+      "degradedReason": null,
+      "replay": {
+        "adapter": "@bluecode/plugin/runtime",
+        "retrievalStrategy": "query-only",
+        "modelCalls": [
+          {
+            "phase": "host",
+            "inputTokens": 1626,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 1626,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2933,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2306,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3900,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2470,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3760,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2568,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "host",
+            "inputTokens": 2577,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 3064,
+            "retrievalTokens": 487
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3073,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 3554,
+            "retrievalTokens": 481
+          },
+          {
+            "phase": "host",
+            "inputTokens": 3563,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 4051,
+            "retrievalTokens": 488
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4060,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 4555,
+            "retrievalTokens": 495
+          },
+          {
+            "phase": "host",
+            "inputTokens": 4564,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 5057,
+            "retrievalTokens": 493
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5066,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 5553,
+            "retrievalTokens": 487
+          },
+          {
+            "phase": "host",
+            "inputTokens": 5562,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 6043,
+            "retrievalTokens": 481
+          },
+          {
+            "phase": "host",
+            "inputTokens": 6052,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 6533,
+            "retrievalTokens": 481
+          },
+          {
+            "phase": "host",
+            "inputTokens": 6542,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 7031,
+            "retrievalTokens": 489
+          },
+          {
+            "phase": "host",
+            "inputTokens": 7040,
+            "retrievalTokens": 0
+          },
+          {
+            "phase": "retrieval",
+            "inputTokens": 7527,
+            "retrievalTokens": 487
+          }
+        ],
+        "totalInputTokens": 122256,
+        "retrievalOutputTokens": 4869,
+        "critical": {
+          "total": 3,
+          "found": 3
+        },
+        "naturalRecallAt5": {
+          "found": 10,
+          "total": 10,
+          "misses": []
+        },
+        "tasks": {
+          "passed": 10,
+          "total": 10,
+          "failures": []
+        },
+        "violations": {
+          "crossNamespace": 0,
+          "stalePlan": 0,
+          "retrievalRecompression": 0
+        },
+        "probes": {
+          "crossNamespace": 38,
+          "stalePlan": 1,
+          "retrievalRecompression": 10
+        },
+        "runtime": {
+          "plans": 4,
+          "applied": 5,
+          "invalidated": 1,
+          "overloaded": 0,
+          "errors": 0,
+          "rtkCalls": 18,
+          "retrievalBypasses": 10,
+          "shadowPlans": 0,
+          "sessions": 1,
+          "active": 0,
+          "queued": 0,
+          "queuedBytes": 0
+        },
+        "latency": {
+          "toolHookMs": 17.307460000000447,
+          "transformMs": 2.99041699999907,
+          "planningDrainMs": 215.39662399999997,
+          "retrievalMs": 6.990082999999686,
+          "archiveProbeMs": 109.3913760000014,
+          "queueMs": null,
+          "serviceMs": null,
+          "deadlineMs": 40
+        },
+        "rssBytes": 399261696,
+        "headroom": {
+          "strategy": "legacy",
+          "activeViewStrategy": "legacy",
+          "memoryMaxTokens": 4096,
+          "memoryRatio": 0.15,
+          "summarizerEnabled": false
+        }
+      }
+    }
+  ]
+}

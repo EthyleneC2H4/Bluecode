@@ -1,0 +1,77 @@
+{
+  "codeRevision": "e1c1781289090550cb024d77befc445ae8427c93",
+  "fixtureSha256": "0f057f979461dc8f87789102f39e718131c5fba93858ecff05c63e1089f0c9b5",
+  "fixtureNames": [
+    "long-session",
+    "tool-ls-large",
+    "tool-grep-hits",
+    "tool-read-with-lines",
+    "tool-git-diff",
+    "tool-test-output",
+    "tool-noise",
+    "tool-ansi-colors",
+    "tool-carriage-return",
+    "tool-backspace-corruption",
+    "engineering-replay"
+  ],
+  "externalModelCalls": 0,
+  "configuration": {
+    "replaySteps": 4,
+    "hostCallsPerStep": 2,
+    "contextWindowTokens": 8192,
+    "outputReserve": 1024,
+    "memoryMaxTokens": 4096,
+    "memoryRatio": 0.15,
+    "triggerRatio": 0.7,
+    "targetRatio": 0.55,
+    "retainRecentTurns": 4,
+    "summarizerEnabled": false,
+    "rtkBudgetTokens": 512,
+    "rtkTimeoutMs": 40,
+    "rtkMinBytes": 512,
+    "retrievalMaxTokens": 8192,
+    "retrievalMaxBytes": 32768
+  },
+  "reports": [
+    {
+      "report": "packages/eval/ablation-legacy-query.json",
+      "sha256": "7ea672b763dc2ebb325236b2709a872f5ecf3cc15689f80244d31df6b9afda79",
+      "headroomStrategy": "legacy",
+      "retrievalStrategy": "query-only",
+      "fixtureCount": 11,
+      "rowCount": 44,
+      "tokenCounter": "o200k_base",
+      "invariantExitCode": 0,
+      "violations": []
+    },
+    {
+      "report": "packages/eval/ablation-layered-query.json",
+      "sha256": "4ef28fbdb296b415aefab9e6cab9a974cc59a5ad786035268b77a2f1200b0d01",
+      "headroomStrategy": "layered",
+      "retrievalStrategy": "query-only",
+      "fixtureCount": 11,
+      "rowCount": 44,
+      "tokenCounter": "o200k_base",
+      "invariantExitCode": 0,
+      "violations": []
+    },
+    {
+      "report": "packages/eval/ablation-layered-eager.json",
+      "sha256": "bdf818255d3922eb92ca9fc6b17256956cb75e86bb8fb686d0681b7f86493380",
+      "headroomStrategy": "layered",
+      "retrievalStrategy": "eager-recovery",
+      "fixtureCount": 11,
+      "rowCount": 44,
+      "tokenCounter": "o200k_base",
+      "invariantExitCode": 1,
+      "violations": [
+        {
+          "metric": "combinedNetInput",
+          "group": "D",
+          "target": ">=20% reduction against A at the same deterministic task quality",
+          "current": 0.19724086310581446
+        }
+      ]
+    }
+  ]
+}
