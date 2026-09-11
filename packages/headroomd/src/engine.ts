@@ -46,6 +46,7 @@ import {
   indexLooksLost,
   insertCasMeta,
   listHistoryMeta,
+  nextHistoryMeta,
   openStore,
   ownsCasMeta,
   rebuildFromObjects,
@@ -217,7 +218,10 @@ async function compressLayered(
   const messages = params.messages.filter((message) => wanted.has(message.info.id))
   const hashes = await Promise.all(messages.map(hashMessage))
   const archive: ArchivePlan = {
-    turns: splitTurns(messages), messages, hashes, historyHashValue: result.historyHash,
+    turns: splitTurns(params.messages).map((turn) => ({ ...turn,
+      messages: turn.messages.filter((message) => wanted.has(message.info.id)),
+      messageIds: turn.messageIds.filter((id) => wanted.has(id)),
+    })).filter((turn) => turn.messages.length), messages, hashes, historyHashValue: result.historyHash,
     summary: result.summary ?? "", summaryTokens: result.summaryTokens,
   }
   if (!hasHistoryMeta(store.meta, namespace, result.historyHash)) {
@@ -633,8 +637,8 @@ async function retrieve(
         : { stack: [{ hash: params.historyHash, offset: 0 }], ordinal: 0, intra: 0 }
       const page = await readHistoryPage({
         row: async (hash, offset) => {
-          const row = listHistoryMeta(store.meta, params.namespace, hash, offset, 1)[0]
-          return row ? { hash: row.hash, role: row.role, turnIndex: row.turnIndex } : null
+          const row = nextHistoryMeta(store.meta, params.namespace, hash, offset)
+          return row ? { hash: row.hash, role: row.role, turnIndex: row.turnIndex, nextOffset: row.msgSeq + 1 } : null
         },
         content: async ({ hash }) => {
           const projection = await readValidProjection(dataDir, hash)

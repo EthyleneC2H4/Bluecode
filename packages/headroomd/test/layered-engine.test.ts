@@ -21,6 +21,7 @@ test("layered engine confirms raw evidence and replays local edits on fresh host
   const ns = { projectId: "p", sessionId: "s" }
   const host = history()
   host[3]!.parts.push({ type: "file", url: "attachment://opaque", mime: "image/png" })
+  host.at(-2)!.parts.unshift({ type: "text", unknown: "opaque" })
   try {
     const messages = projectMessages(host)!
     const params = { ...ns, messages, strategy: "layered" as const, contextWindowTokens: 16000, targetTokens: 8800, triggerRatio: .7, retainRecentTurns: 4 }
@@ -39,6 +40,7 @@ test("layered engine confirms raw evidence and replays local edits on fresh host
     const visible = structuredClone(host)
     expect(applyHostView(visible, stored)).toBe("applied")
     expect(visible[3]).toEqual(host[3])
+    expect(visible.at(-2)).toEqual(host.at(-2))
     expect(visible[5]!.parts[0]).toEqual(host[5]!.parts[0])
     expect(visible[5]!.parts[1]!.state.metadata).toEqual({ original: true })
     expect(visible[5]!.parts[1]!.state.output).toContain("[headroom node:")

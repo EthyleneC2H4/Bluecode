@@ -99,10 +99,12 @@ export function applyHostView(
       const original = originals.get(message.info.id)
       const before = projected.get(message.info.id)
       if (original && before) {
+        if (JSON.stringify(message) === JSON.stringify(before)) return structuredClone(original)
         const host = structuredClone(original)
         let index = 0
         for (const part of host.parts) {
-          if (part.type !== "text" && part.type !== "tool") continue
+          if (!((part.type === "text" && typeof part.text === "string") ||
+                (part.type === "tool" && typeof part.tool === "string"))) continue
           const updated = message.parts[index++]
           if (part.type === "text" && updated?.type === "text") part.text = updated.text
           else if (part.type === "tool" && updated?.type === "tool") {

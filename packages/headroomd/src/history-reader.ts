@@ -1,6 +1,6 @@
 import { encodeCursor, decodeCursor, paginateText } from "@bluecode/shared"
 
-export interface HistoryRow { hash: string; role: "user" | "assistant"; turnIndex: number }
+export interface HistoryRow { hash: string; role: "user" | "assistant"; turnIndex: number; nextOffset?: number }
 export interface HistoryReader {
   row(hash: string, offset: number): Promise<HistoryRow | null>
   content(row: HistoryRow): Promise<{ text: string } | { child: string } | null>
@@ -34,7 +34,7 @@ export async function readHistoryPage(
     if (value && "child" in value) {
       if (state.stack.length >= 128 || state.stack.some((item) => item.hash === value.child))
         throw new Error("Invalid archive lineage")
-      frame.offset++
+      frame.offset = row.nextOffset ?? frame.offset + 1
       state.stack.push({ hash: value.child, offset: 0 })
       continue
     }
@@ -42,7 +42,7 @@ export async function readHistoryPage(
     if (remaining <= 0 || count >= limit) break
     if (!value) {
       missingHashes.push(row.hash)
-      frame.offset++
+      frame.offset = row.nextOffset ?? frame.offset + 1
       state.ordinal++
       state.intra = 0
       count++
@@ -67,7 +67,7 @@ export async function readHistoryPage(
       state.intra = decodeCursor(page.nextCursor, row.hash)
       break
     }
-    frame.offset++
+    frame.offset = row.nextOffset ?? frame.offset + 1
     state.ordinal++
     state.intra = 0
   }

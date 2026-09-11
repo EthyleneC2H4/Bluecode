@@ -1,12 +1,40 @@
 import type { LayeredNode, LayeredSourceRef, RetrieveByNodeParams, RetrieveByNodeResult } from "@bluecode/contracts"
-import { decodeCursor, encodeCursor, paginateText } from "@bluecode/shared"
+import { paginateText } from "@bluecode/shared"
 import { readNode } from "./store/nodes"
 import { loadHistoryCursor, saveHistoryCursor } from "./store/history-cursors"
 import { readMessageObject, renderProjection } from "./store/objects"
 import { ownsCasMeta, type HeadroomDb } from "./store/db"
-import { readHistoryPage } from "./history-reader"
+import { readHistoryPage, type HistoryFrontier } from "./history-reader"
 
 const descriptor = (node: LayeredNode) => ({ nodeId: node.nodeId, level: node.level, policyVersion: node.policyVersion, tokens: node.tokens, sourceTokens: node.sourceTokens })
+
+type ChildDescriptor = { nodeId: string; level: number; tokens: number }
+/** Traverse only as far as the next bounded page; the stack survives daemon restart. */
+export function readNodeChildren(
+  read: (id: string) => (ChildDescriptor & { children: string[] }) | null,
+  depth: number, original: HistoryFrontier, accepts: (items: ChildDescriptor[]) => boolean,
+) {
+  const state = structuredClone(original), children: ChildDescriptor[] = []
+  while (state.stack.length) {
+    const frame = state.stack.at(-1)!
+    const node = read(frame.hash)
+    if (!node) throw new Error("Node child is missing")
+    if (state.stack.length - 1 >= depth || !node.children.length) {
+      const entry = { nodeId: node.nodeId, level: node.level, tokens: node.tokens }
+      if (!accepts([...children, entry])) break
+      children.push(entry)
+      state.stack.pop()
+      state.ordinal++
+      continue
+    }
+    const child = node.children[frame.offset]
+    if (!child) { state.stack.pop(); continue }
+    if (state.stack.some((part) => part.hash === child)) throw new Error("Invalid node lineage")
+    frame.offset++
+    state.stack.push({ hash: child, offset: 0 })
+  }
+  return { children, state, more: state.stack.length > 0 }
+}
 
 export async function retrieveNode(meta: HeadroomDb, dataDir: string, params: RetrieveByNodeParams): Promise<RetrieveByNodeResult> {
   const root = readNode(meta, params.namespace, params.nodeId)
@@ -22,31 +50,13 @@ export async function retrieveNode(meta: HeadroomDb, dataDir: string, params: Re
   }
   const base = { found: true as const, node: descriptor(root), content: "" }
   if (detail === "children") {
-    const ids: string[] = []
-    const visit = (node: LayeredNode, depth: number, ancestors: Set<string>) => {
-      if (ancestors.has(node.nodeId)) throw new Error("Invalid node lineage")
-      if (depth <= 0 || !node.children.length) { ids.push(node.nodeId); return }
-      const next = new Set(ancestors).add(node.nodeId)
-      for (const id of node.children) {
-        const child = readNode(meta, params.namespace, id)
-        if (!child) throw new Error("Node child is missing")
-        visit(child, depth - 1, next)
-      }
-    }
-    visit(root, params.depth ?? 1, new Set())
-    let index = decodeCursor(params.cursor, ref)
-    if (index > ids.length) throw new Error("Cursor outside node children")
-    const children: Array<{ nodeId: string; level: number; tokens: number }> = []
-    while (index < ids.length) {
-      const node = readNode(meta, params.namespace, ids[index]!)!
-      const next = [...children, { nodeId: node.nodeId, level: node.level, tokens: node.tokens }]
-      const result = { ...base, children: next, nextCursor: index + 1 < ids.length ? encodeCursor(ref, index + 1) : null, truncated: index + 1 < ids.length }
-      if (!fits(result)) break
-      children.push(next.at(-1)!)
-      index++
-    }
-    if (!children.length && index < ids.length) throw new Error("Node retrieval budget cannot fit a reference")
-    return { ...base, children, nextCursor: index < ids.length ? encodeCursor(ref, index) : null, truncated: index < ids.length }
+    const state = params.cursor ? loadHistoryCursor(meta, params.namespace, ref, params.cursor) : { stack: [{ hash: root.nodeId, offset: 0 }], ordinal: 0, intra: 0 }
+    const page = readNodeChildren((id) => readNode(meta, params.namespace, id), params.depth ?? 1, state,
+      (children) => fits({ ...base, children, nextCursor: `h3-${"0".repeat(36)}`, truncated: true }))
+    if (!page.children.length && page.more) throw new Error("Node retrieval budget cannot fit a reference")
+    const result = { ...base, children: page.children, nextCursor: page.more ? saveHistoryCursor(meta, params.namespace, ref, page.state) : null, truncated: page.more }
+    if (!fits(result)) throw new Error("Node retrieval budget cannot fit the JSON envelope")
+    return result
   }
   let allowance = Math.max(1, Math.min(maxBytes, maxTokens * 4) - 512)
   for (let attempt = 0; attempt < 8; attempt++) {

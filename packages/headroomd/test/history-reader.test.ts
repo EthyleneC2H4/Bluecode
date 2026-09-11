@@ -45,3 +45,18 @@ test("history frontier resumes within a child and advances past missing objects"
   expect(text).toBe("a".repeat(8) + "b".repeat(8) + "c".repeat(8) + "z".repeat(8))
   expect(missing).toEqual(["missing"])
 })
+
+test("history frontier advances using indexed sequence keys across gaps", async () => {
+  const visited: number[] = []
+  const reader: HistoryReader = {
+    row: async (_hash, sequence) => {
+      visited.push(sequence)
+      const key = [100, 900].find((key) => key >= sequence)
+      return key === undefined ? null : { hash: String(key), role: "user", turnIndex: 0, nextOffset: key + 1 }
+    },
+    content: async (row) => ({ text: row.hash }),
+  }
+  const page = await readHistoryPage(reader, { stack: [{ hash: "root", offset: 0 }], ordinal: 0, intra: 0 }, { maxBytes: 100, maxTokens: 100, limit: 3 })
+  expect(page.items.map((item) => item.content)).toEqual(["100", "900"])
+  expect(visited).toEqual([0, 101, 901])
+})

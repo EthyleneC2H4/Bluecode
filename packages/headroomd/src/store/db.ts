@@ -406,6 +406,19 @@ export function listHistoryMeta(
     .all(namespace.projectId, namespace.sessionId, historyHash, limit, offset) as CasMetaPageRow[]
 }
 
+/** Indexed seek: traversal cost does not grow with the number of previous pages. */
+export function nextHistoryMeta(
+  handle: HeadroomDb,
+  namespace: { projectId: string; sessionId: string },
+  historyHash: string,
+  nextSequence: number,
+): CasMetaPageRow | null {
+  return handle.db.prepare(`SELECT hash, role, turn_index AS turnIndex, msg_seq AS msgSeq
+    FROM archive_refs WHERE project_id=? AND session_id=? AND history_hash=? AND msg_seq>=?
+    ORDER BY msg_seq ASC LIMIT 1`)
+    .get(namespace.projectId, namespace.sessionId, historyHash, nextSequence) as CasMetaPageRow | null
+}
+
 // ---------------------------------------------------------------------------
 // derived rows live in index.db
 // ---------------------------------------------------------------------------

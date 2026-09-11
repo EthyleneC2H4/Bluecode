@@ -61,8 +61,17 @@ export function nodesForSource(meta: HeadroomDb, ns: Namespace, hash: string): s
 
 /** Read only the active graph's roots when preparing another generation. */
 export function nodesForView(meta: HeadroomDb, ns: Namespace, ids: readonly string[]): LayeredNode[] {
-  return [...new Set(ids)].flatMap((id) => {
+  const visited = new Set<string>(), result: LayeredNode[] = []
+  const queue = [...new Set(ids)]
+  for (let index = 0; index < queue.length; index++) {
+    const id = queue[index]!
+    if (visited.has(id)) continue
+    if (visited.size >= 16384) throw new Error("Active node graph exceeds planning capacity")
+    visited.add(id)
     const node = readNode(meta, ns, id)
-    return node ? [node] : []
-  })
+    if (!node) continue
+    result.push(node)
+    queue.push(...node.children)
+  }
+  return result
 }
