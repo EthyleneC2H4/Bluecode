@@ -419,6 +419,15 @@ export function nextHistoryMeta(
     .get(namespace.projectId, namespace.sessionId, historyHash, nextSequence) as CasMetaPageRow | null
 }
 
+/** Confirm a candidate's immutable source ledger without rewriting existing CAS objects. */
+export function linkHistoryMeta(handle: HeadroomDb, namespace: { projectId: string; sessionId: string }, source: string, target: string): void {
+  if (!hasHistoryMeta(handle, namespace, source)) throw new Error("Candidate source archive is missing")
+  handle.db.prepare(`INSERT OR IGNORE INTO archive_refs(project_id,session_id,history_hash,msg_seq,hash,role,turn_index,created_at)
+    SELECT project_id,session_id,?,msg_seq,hash,role,turn_index,created_at FROM archive_refs
+    WHERE project_id=? AND session_id=? AND history_hash=?`)
+    .run(target, namespace.projectId, namespace.sessionId, source)
+}
+
 // ---------------------------------------------------------------------------
 // derived rows live in index.db
 // ---------------------------------------------------------------------------

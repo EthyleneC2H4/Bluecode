@@ -184,15 +184,17 @@ export const layeredTaskStateSchema = z.object({
 export type LayeredTaskState = z.infer<typeof layeredTaskStateSchema>
 
 export const summaryProviderSchema = z.object({
-  enabled: z.boolean().optional(),
-  provider: z.string().optional(),
-  model: z.string().optional(),
-  endpoint: z.string().optional(),
-  timeoutMs: z.number().int().positive().optional(),
-  maxInputTokens: z.number().int().positive().max(8192).optional(),
-  maxOutputTokens: z.number().int().positive().max(1024).optional(),
-  sessionInputTokens: z.number().int().positive().max(32768).optional(),
-  sessionOutputTokens: z.number().int().positive().max(4096).optional(),
+  enabled: z.boolean().default(false),
+  baseURL: z.url().optional(),
+  model: z.string().min(1).optional(),
+  apiKeyEnv: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/).optional(),
+  timeoutMs: z.number().int().positive().max(10000).default(10000),
+  maxInputTokens: z.number().int().positive().max(8192).default(8192),
+  maxOutputTokens: z.number().int().positive().max(1024).default(1024),
+  sessionInputTokens: z.number().int().positive().max(32768).default(32768),
+  sessionOutputTokens: z.number().int().positive().max(4096).default(4096),
+}).strict().refine((value) => !value.enabled || Boolean(value.baseURL && value.model && value.apiKeyEnv), {
+  message: "Enabled summarizer requires baseURL, model and apiKeyEnv (never a literal API key)",
 })
 export type SummaryProviderConfig = z.infer<typeof summaryProviderSchema>
 
@@ -211,6 +213,7 @@ export const headroomCompressParamsSchema = z.object({
   strategy: z.enum(["legacy", "layered"]).optional(),
   memoryMaxTokens: z.number().int().nonnegative().optional(),
   memoryRatio: z.number().min(0).max(1).optional(),
+  enhance: z.boolean().optional(),
   summaryProvider: summaryProviderSchema.optional(),
   protectedMessageIds: z.array(z.string()).optional(),
   /** Compaction trigger watermark; applied by headroomd as 0.7 when omitted. */
@@ -349,6 +352,9 @@ export const getCandidateResultSchema = z.object({
   status: z.enum(["queued", "running", "ready", "rejected", "missing"]),
   candidate: headroomCompressResultSchema.nullable(),
   reason: z.string().optional(),
+  model: z.string().optional(),
+  usage: z.object({ inputTokens: z.number().nonnegative().nullable(), outputTokens: z.number().nonnegative().nullable() }).optional(),
+  reservedUsage: z.object({ inputTokens: z.number().nonnegative(), outputTokens: z.number().nonnegative() }).optional(),
 })
 export type GetCandidateResult = z.infer<typeof getCandidateResultSchema>
 

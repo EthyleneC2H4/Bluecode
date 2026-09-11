@@ -6,6 +6,7 @@
  */
 import { z } from "zod"
 import { defaultDataDir } from "@bluecode/shared"
+import { summaryProviderSchema } from "@bluecode/contracts"
 
 export const RtkOptionsSchema = z.object({
   mode: z.enum(["off", "shadow", "on"]).optional(),
@@ -17,19 +18,7 @@ export const RtkOptionsSchema = z.object({
 
 export type RtkOptions = z.infer<typeof RtkOptionsSchema>
 
-export const SummarizerOptionsSchema = z.object({
-  enabled: z.boolean().default(false),
-  baseURL: z.url().optional(),
-  model: z.string().min(1).optional(),
-  apiKeyEnv: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/).optional(),
-  timeoutMs: z.number().int().positive().max(10000).default(10000),
-  maxInputTokens: z.number().int().positive().max(8192).default(8192),
-  maxOutputTokens: z.number().int().positive().max(1024).default(1024),
-  sessionInputTokens: z.number().int().positive().max(32768).default(32768),
-  sessionOutputTokens: z.number().int().positive().max(4096).default(4096),
-}).strict().refine((value) => !value.enabled || Boolean(value.baseURL && value.model && value.apiKeyEnv), {
-  message: "Enabled summarizer requires baseURL, model and apiKeyEnv (never a literal API key)",
-})
+export const SummarizerOptionsSchema = summaryProviderSchema
 
 export const HeadroomOptionsSchema = z.object({
   mode: z.enum(["off", "shadow", "on"]).optional(),

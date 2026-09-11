@@ -1,4 +1,5 @@
 /** Instance-scoped orchestration. Hooks apply ready work; sidecar work is coalesced. */
+import { contentDigest } from "@bluecode/headroomd/pure"
 import { createHash } from "node:crypto"
 import type {
   HeadroomCompressParams,
@@ -53,6 +54,7 @@ interface SessionState {
   systemTokens: number
   attempted?: string
   generation: number
+  enhancementJob?: string
 }
 export interface RuntimeInput {
   projectId: string
@@ -209,6 +211,36 @@ export function createPluginRuntime(input: RuntimeInput) {
     }
     // Missing limits are intentionally never cached as a fabricated model.
   }
+  const pollEnhancement = (id: string, state: SessionState, base: HeadroomCompressResult, generation: number) => {
+    const jobId = base.enhancementJobId
+    if (!jobId || !input.headroom?.getCandidate || !options.headroom.summarizer.enabled || state.enhancementJob === jobId) return
+    state.enhancementJob = jobId
+    // This promise is tracked for shutdown, but never consumes the rule queue's two permits.
+    track((async () => {
+      try {
+        const until = Date.now() + options.headroom.summarizer.timeoutMs + 1000
+        while (Date.now() < until && !disposed && !state.paused && state.generation === generation &&
+            sessions.get(id) === state && state.view?.historyHash === base.historyHash) {
+          const raw = state.snapshot, projection = raw ? projectMessages(raw) : null
+          if (!projection || applyHostView(structuredClone(raw!), base) !== "applied") return
+          const result = await input.headroom!.getCandidate!({ namespace: namespace(id), jobId,
+            epoch: state.epoch ?? "", sourceDigests: projection.map(contentDigest) })
+          if (result.status === "ready" && result.candidate) {
+            if (disposed || state.paused || state.generation !== generation || state.view?.historyHash !== base.historyHash ||
+                !state.snapshot || applyHostView(structuredClone(state.snapshot), result.candidate) !== "applied") return
+            await input.headroom!.setView(namespace(id), result.candidate)
+            if (!disposed && !state.paused && state.generation === generation && state.view?.historyHash === base.historyHash) {
+              state.view = result.candidate
+              metrics.plans++
+            }
+            return
+          }
+          if (result.status !== "queued" && result.status !== "running") return
+          await new Promise<void>(resolve => setTimeout(resolve, 100))
+        }
+      } finally { if (state.enhancementJob === jobId) delete state.enhancementJob }
+    })())
+  }
   const schedule = (id: string, state: SessionState) => {
     if (
       mode("headroom") === "off" ||
@@ -254,6 +286,7 @@ export function createPluginRuntime(input: RuntimeInput) {
             strategy: options.headroom.strategy,
             memoryMaxTokens: options.headroom.memoryMaxTokens,
             memoryRatio: options.headroom.memoryRatio,
+            enhance: options.headroom.summarizer.enabled && mode("headroom") === "on",
             epoch: state.epoch ?? "",
           })
           if (
@@ -273,7 +306,10 @@ export function createPluginRuntime(input: RuntimeInput) {
             return
           }
           await input.headroom!.setView(namespace(id), result)
-          if (!disposed && !state.paused && generation === state.generation) state.view = result
+          if (!disposed && !state.paused && generation === state.generation) {
+            state.view = result
+            pollEnhancement(id, state, result, generation)
+          }
         } catch (error) {
           delete state.attempted
           throw error

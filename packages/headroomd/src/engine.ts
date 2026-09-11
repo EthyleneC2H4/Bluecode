@@ -1,3 +1,4 @@
+import { createEnhancementCoordinator } from "./enhancement-integration"
 import { storageBytes, collectAbandonedTemps } from "./store/quota"
 import { readHistoryPage } from "./history-reader"
 import { initializeHistoryCursors, loadHistoryCursor, saveHistoryCursor } from "./store/history-cursors"
@@ -77,6 +78,7 @@ export interface EngineOptions {
   dataDir: string
   maxStorageBytes?: number
   tokenCounter?: TokenCounter
+  summarizer?: import("@bluecode/contracts").SummaryProviderConfig
 }
 
 /** Mirrors retrieveByQueryParamsSchema's max(limit); see retrieve's clamp. */
@@ -138,13 +140,19 @@ export async function createEngine(options: EngineOptions): Promise<Engine> {
     let tail: Promise<unknown> = Promise.resolve()
     const analysisCache = createLayeredCache()
     const tokenCounter = createCachedTokenCounter(options.tokenCounter)
+    const enhancements = createEnhancementCoordinator(openedStore.meta, dataDir, options.summarizer, tokenCounter)
     let closed = false
     return {
       dataDir,
       getView: (ns) => getView(openedStore.meta, ns),
-      getCandidate: async () => ({ status: "missing", candidate: null }),
+      getCandidate: (params) => {
+        if (closed) return Promise.reject(new Error("Engine closed"))
+        const next = tail.then(() => enhancements.candidate(params))
+        tail = next.catch(() => {})
+        return next
+      },
       setView: (ns, plan) => setView(openedStore.meta, ns, plan),
-      clearView: (ns) => clearView(openedStore.meta, ns),
+      clearView: (ns) => { enhancements.invalidate(ns); clearView(openedStore.meta, ns) },
       compress: (params) => {
         if (closed) return Promise.reject(new Error("Engine closed"))
         const queuedAt = performance.now()
@@ -153,6 +161,10 @@ export async function createEngine(options: EngineOptions): Promise<Engine> {
           const result = params.strategy === "layered"
             ? await compressLayered(openedStore, dataDir, params, maxStorageBytes, analysisCache, tokenCounter)
             : await compress(openedStore, dataDir, params, maxStorageBytes)
+          if (params.strategy === "layered" && params.enhance !== false) {
+            const jobId = enhancements.prepare({ projectId: params.projectId, sessionId: params.sessionId }, params.messages, result)
+            if (jobId) result.enhancementJobId = jobId
+          }
           if (result.metrics) {
             const elapsedCpu = process.cpuUsage(cpu)
             result.metrics = { ...result.metrics, queueMs: started - queuedAt, durationMs: performance.now() - started,
@@ -168,6 +180,7 @@ export async function createEngine(options: EngineOptions): Promise<Engine> {
       close: () => {
         if (!closed) {
           closed = true
+          enhancements.close()
           openedStore.close()
           lease.close()
         }

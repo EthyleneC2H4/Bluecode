@@ -59,7 +59,7 @@ export function nodesForSource(meta: HeadroomDb, ns: Namespace, hash: string): s
     .all(ns.projectId, ns.sessionId, hash) as Array<{ node_id: string }>).map((row) => row.node_id)
 }
 
-/** Read only the active graph's roots when preparing another generation. */
+/** Read the active graph and reachable children to rehydrate immutable state. */
 export function nodesForView(meta: HeadroomDb, ns: Namespace, ids: readonly string[]): LayeredNode[] {
   const visited = new Set<string>(), result: LayeredNode[] = []
   const queue = [...new Set(ids)]

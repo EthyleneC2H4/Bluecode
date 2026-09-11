@@ -66,6 +66,8 @@ export default async function bluecodePlugin(
           "--maxStorageBytes",
           String(options.maxStorageBytes - quota),
         ]
+        if (options.headroom.summarizer.enabled)
+          args.push("--summarizer", JSON.stringify(options.headroom.summarizer))
         if (options.headroom.idleExitMs !== undefined)
           args.push("--idleExitMs", String(options.headroom.idleExitMs))
         const client = await HeadroomClient.connect({

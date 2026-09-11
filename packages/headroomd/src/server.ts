@@ -48,6 +48,7 @@ import { HeadroomWriterBusyError } from "./store/lease"
 export interface HeadroomServerOptions {
   dataDir: string
   maxStorageBytes?: number
+  summarizer?: import("@bluecode/contracts").SummaryProviderConfig
   /** Defaults to `<dataDir>/headroomd.sock`. */
   socketPath?: string
   /** Idle exit after this many ms with zero clients and zero in-flight requests. 0 disables. Default 900_000. */
@@ -179,6 +180,7 @@ export async function startHeadroomServer(
   try {
     engine = await createEngine({
       dataDir: path.join(options.dataDir, "storage-v2", "headroom"),
+      ...(options.summarizer ? { summarizer: options.summarizer } : {}),
       ...(options.maxStorageBytes !== undefined
         ? { maxStorageBytes: options.maxStorageBytes }
         : {}),
