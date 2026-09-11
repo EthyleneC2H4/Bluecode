@@ -1,0 +1,38 @@
+/** Small executable continuation tasks. Seed history is deterministic fixture data, not model-generated evidence. */
+export interface LiveTask { id: string; category: string; files: Record<string, string>; request: string; checks: string; fact: string; reason: string }
+export function liveTasks(): LiveTask[] {
+  const tasks: LiveTask[] = []
+  const add = (task: LiveTask) => tasks.push(task)
+  add({ id: "clamp", category: "defect", files: { "src/main.js": "export const clamp = (n, min, max) => Math.max(max, Math.min(min, n))\n" }, request: "Fix clamp's range behavior, including values already inside the interval.", checks: "assert.equal(m.clamp(5,0,10),5); assert.equal(m.clamp(-1,0,10),0); assert.equal(m.clamp(20,0,10),10)", fact: "Range endpoints are inclusive", reason: "Preserve valid in-range values" })
+  add({ id: "chunks", category: "defect", files: { "src/main.js": "export function chunks(xs, n) { const out=[]; for(let i=0;i<xs.length;i+=n) out.push(xs.slice(i,i+n-1)); return out }\n" }, request: "Fix chunks so no element is dropped, the final short chunk is retained, and invalid nonpositive sizes throw.", checks: "const xs=[1,2,3,4,5]; assert.deepEqual(m.chunks(xs,2),[[1,2],[3,4],[5]]); assert.deepEqual(xs,[1,2,3,4,5]); assert.throws(()=>m.chunks([],0))", fact: "The input array must remain unchanged", reason: "Do not drop the remainder" })
+  add({ id: "unique", category: "defect", files: { "src/main.js": "export const unique = xs => [...new Set(xs)].sort()\n" }, request: "Fix unique to preserve first occurrence order and leave the input untouched.", checks: "const xs=[3,1,3,2]; assert.deepEqual(m.unique(xs),[3,1,2]); assert.deepEqual(xs,[3,1,3,2]); assert.deepEqual(m.unique([]),[])", fact: "First occurrence defines output order", reason: "Sorting changes caller intent" })
+  add({ id: "pagination", category: "cross-file", files: { "src/config.js": "export const DEFAULT_SIZE=10\n", "src/main.js": "import { DEFAULT_SIZE } from './config.js'; export const page=(xs,p=1,size=DEFAULT_SIZE)=>xs.slice(p*size,(p+1)*size)\n" }, request: "Make pagination one-based; change the shared default page size to 3 and use it in page.", checks: "assert.deepEqual(m.page([0,1,2,3,4],1),[0,1,2]); assert.deepEqual(m.page([0,1,2,3,4],2),[3,4]); assert.equal((await import('./src/config.js')).DEFAULT_SIZE,3)", fact: "Pages are numbered from one", reason: "The first page must start at offset zero" })
+  add({ id: "retry", category: "cross-file", files: { "src/config.js": "export const MAX_RETRIES=1\n", "src/main.js": "import { MAX_RETRIES } from './config.js'; export const shouldRetry=(status,attempt)=>status>=400 && attempt<=MAX_RETRIES\n" }, request: "Set the retry cap to 3. Retry only HTTP 429 or 5xx while attempt is strictly below the cap.", checks: "assert.equal(m.shouldRetry(429,2),true); assert.equal(m.shouldRetry(503,3),false); assert.equal(m.shouldRetry(404,0),false); assert.equal((await import('./src/config.js')).MAX_RETRIES,3)", fact: "Attempt indices start at zero", reason: "Avoid retrying permanent client errors" })
+  add({ id: "units", category: "cross-file", files: { "src/config.js": "export const MS_PER_SECOND=100\n", "src/main.js": "import { MS_PER_SECOND } from './config.js'; export const timeoutMs=seconds=>seconds+MS_PER_SECOND\n" }, request: "Correct seconds-to-milliseconds conversion in both the shared constant and timeoutMs.", checks: "assert.equal(m.timeoutMs(1.5),1500); assert.equal(m.timeoutMs(0),0); assert.equal((await import('./src/config.js')).MS_PER_SECOND,1000)", fact: "One second is 1000 milliseconds", reason: "Preserve fractional seconds" })
+  for (const [id, code, wrong, correct, fact] of [
+    ["median-test", "export const median=xs=>{const a=[...xs].sort((a,b)=>a-b); const i=Math.floor(a.length/2); return a.length%2?a[i]:(a[i-1]+a[i])/2}", "assert.equal(m.median([1,5]),5)", "assert.equal(m.median([1,5]),3)", "Even medians average the middle values"],
+    ["slug-test", "export const slug=s=>s.trim().toLowerCase().replace(/\\s+/g,'-')", "assert.equal(m.slug(' Hello World '),'Hello-World')", "assert.equal(m.slug(' Hello World '),'hello-world')", "Slugs use lowercase"],
+    ["empty-test", "export const sum=xs=>xs.reduce((a,b)=>a+b,0)", "assert.equal(m.sum([]),undefined)", "assert.equal(m.sum([]),0)", "The sum of an empty list is zero"],
+  ]) add({ id: id!, category: "test-repair", files: { "src/main.js": code!+"\n", "test.mjs": "import assert from 'node:assert/strict'; import * as m from './src/main.js';\n"+wrong+"\n" }, request: "Repair the incorrect expectation in test.mjs to match the documented contract. Do not change src/main.js.", checks: correct!, fact: fact!, reason: "The implementation already matches the contract" })
+  for (const [id, marker, key, expected] of [["log-timeout","ETIMEDOUT","retryable",true],["log-auth","EACCES","retryable",false],["log-input","EINVAL","retryable",false]] as const) add({
+    id, category: "long-log", files: { "src/main.js": "export const classify=log=>({code:'UNKNOWN',retryable:true})\n", "diagnostic.log": Array.from({length:320},(_,i)=> i===217?`ERROR code=${marker} operation=worker`: `TRACE worker step=${i} heartbeat=healthy`).join("\n") },
+    request: "Read diagnostic.log and fix classify(log) to extract its ERROR code. Retry ETIMEDOUT only; EACCES and EINVAL are permanent. Ignore harmless TRACE lines.",
+    checks: `const log=await readFile('diagnostic.log','utf8'); assert.deepEqual(m.classify(log),{code:${JSON.stringify(marker)},${key}:${expected}}); assert.deepEqual(m.classify('ERROR code=EACCES operation=x'),{code:'EACCES',retryable:false})`,
+    fact: `The recorded error code is ${marker}`, reason: "Retry policy follows the error class, not log length",
+  })
+  return tasks
+}
+
+export function seedSession(task: LiveTask, directory: string, sessionId: string, model: string) {
+  const messages: any[] = []
+  const now = Date.now()-100_000
+  for (let turn=0; turn<14; turn++) {
+    const u=`msg_000${String(turn*2).padStart(8,"0")}`, a=`msg_000${String(turn*2+1).padStart(8,"0")}`
+    const text = turn===0 ? `Task contract: ${task.fact}. Rationale: ${task.reason}. Preserve public export names, add no dependencies, and do not modify package.json. ${task.category === "test-repair" ? "Keep src/main.js byte-for-byte unchanged." : "Do not alter the verifier."}` : `Inspection phase ${turn}: retain findings needed for the pending implementation.`
+    messages.push({ info: {id:u,sessionID:sessionId,role:"user",time:{created:now+turn*100},agent:"build",model:{providerID:"opencode",modelID:model}},parts:[{id:`prt_${u}`,sessionID:sessionId,messageID:u,type:"text",text}] })
+    const file = Object.keys(task.files)[turn%Object.keys(task.files).length]!
+    const evidence = turn===0 ? `${task.files[file]}\nContract: ${task.fact}\nRationale: ${task.reason}` : Array.from({length:85},(_,line)=>`// archived inspection ${turn} line ${line}: implementation context for ${task.id}; no additional requirements`).join("\n")
+    messages.push({info:{id:a,sessionID:sessionId,role:"assistant",time:{created:now+turn*100+1,completed:now+turn*100+2},parentID:u,modelID:model,providerID:"opencode",mode:"build",agent:"build",path:{cwd:directory,root:directory},cost:0,tokens:{input:0,output:0,reasoning:0,cache:{read:0,write:0}},finish:"stop"},parts:[{id:`prt_${a}`,messageID:a,sessionID:sessionId,type:"tool",tool:"read",callID:`call_${turn}`,state:{status:"completed",input:{filePath:file},output:evidence,title:file,metadata:{fixture:true},time:{start:now+turn*100+1,end:now+turn*100+2}}}]})
+  }
+  return {info:{id:sessionId,slug:task.id,projectID:"global",directory,title:`Headroom ${task.id}`,version:"1.18.23",time:{created:now,updated:now+2000}},messages}
+}

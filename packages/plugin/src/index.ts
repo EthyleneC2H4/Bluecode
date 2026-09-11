@@ -13,7 +13,8 @@ import { createRetrieveTool } from "./retrieval"
 
 export default async function bluecodePlugin(
   input: PluginInput,
-  rawOptions?: PluginOptions
+  rawOptions?: PluginOptions,
+  diagnostics?: Pick<RuntimeInput, "trace">
 ): Promise<Hooks> {
   const options = parseOptions(rawOptions ?? {})
   if (!options.enabled || options.mode === "off") return { dispose: async () => {}, tool: {} }
@@ -30,6 +31,7 @@ export default async function bluecodePlugin(
     sdk: input.client,
     rtk: null,
     headroom: null,
+    ...diagnostics,
   }
   let closed = false,
     lastConnect = 0

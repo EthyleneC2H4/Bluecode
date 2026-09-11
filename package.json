@@ -1,7 +1,7 @@
 {
   "name": "bluecode",
   "version": "0.0.1",
-  "description": "BlueCode \u2014 context engineering for opencode: hot-path tool-output compression (rtk) plus a long-session history-compaction daemon (headroomd), mounted as one plugin",
+  "description": "BlueCode — context engineering for opencode: hot-path tool-output compression (rtk) plus a long-session history-compaction daemon (headroomd), mounted as one plugin",
   "keywords": [
     "coding-agent",
     "context-engineering",
@@ -22,7 +22,9 @@
     "verify": "bun run typecheck && bun test && bun run check:deps && bun run check:host",
     "migrate": "bun scripts/migrate-storage.ts",
     "check:host": "bun scripts/check-host-imports.ts",
-    "gc": "bun scripts/gc-storage.ts"
+    "gc": "bun scripts/gc-storage.ts",
+    "eval:headroom": "bun packages/eval/src/headroom-cli.ts",
+    "eval:live": "bun packages/eval/src/live-cli.ts"
   },
   "devDependencies": {
     "@types/bun": "1.4.0",

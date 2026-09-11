@@ -15,7 +15,7 @@ This is an independent learning implementation, not vivo's private BlueCode sour
 | Plugin | Owns clients and state per instance; binds retrieval to actual project/session IDs; coordinates model limits and upstream compaction. |
 | Retrieval | Searches full-content chunks with FTS5/BM25 and restores verified archives through bounded cursors. Retrieval output bypasses RTK. |
 
-RTK uses protocol v3 over stdio; headroomd uses protocol v2 over a Unix socket. Durable data lives outside temporary runtime sockets. Errors preserve host-visible content or pause planning; retrieval reports missing or corrupt archives explicitly. RTK stores the sanitized text it receives, which may already have been truncated by the host.
+RTK uses protocol v3 over stdio; headroomd uses protocol v3 over a Unix socket. Durable data lives outside temporary runtime sockets. Errors preserve host-visible content or pause planning; retrieval reports missing or corrupt archives explicitly. RTK stores the sanitized text it receives, which may already have been truncated by the host.
 
 ## Implementation architecture
 
@@ -126,6 +126,8 @@ CAS stores text after sanitize / redactor processing. The default redactor is id
 Source: [client](packages/rtk/src/client.ts), [classifier](packages/rtk-core/src/classify.ts), [strategy pipeline](packages/rtk-core/src/pipeline.ts), [budget selection](packages/rtk-core/src/budget.ts), [storage and fallback](packages/rtk/src/engine.ts).
 
 ### Inside headroomd: background planning and active view replay
+
+The diagram below describes the retained `legacy` strategy. The new `layered` strategy archives old tool observations, applies digest-bound local operations, keeps bounded hierarchical memory, and supports optional background summaries. See the [layered guide and evaluation procedure](docs/headroom-layered.md). The default remains `legacy` until the comparative acceptance gate passes.
 
 ```mermaid
 flowchart TB
