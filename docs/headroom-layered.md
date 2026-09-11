@@ -22,6 +22,8 @@
 
 `off/shadow/on` 保持兼容。验收结果未满足默认切换条件前，默认策略仍为 `legacy`；显式设置 `layered` 即使用新算法。回退只需改回 `legacy` 并重启宿主；原始归档继续可读取。
 
+恢复持久活动视图时按当前策略检查兼容性，旧的无策略标记计划视为 `legacy`。策略不兼容时清除活动视图指针后重建，原文与节点继续保留。已增强视图缺少完整的发布服务配置证明，因此重启时也重新按当前配置准备规则视图；可能增加一次准备工作，避免关闭或更换摘要服务后继续无条件复用旧增强。
+
 wire 协议升级到 v3，旧 daemon 和新插件不能混接。遇到协议或摘要服务配置不一致，先结束相应 daemon 后重启；客户端不会擅自终止未知进程。首次验证应使用单独 `dataDir`，正常数据路径仍是 `storage-v2/headroom`，增量表升级不改变原文哈希。
 
 ## 历史怎样缩小
@@ -94,11 +96,14 @@ bun run eval:headroom --output packages/eval/headroom-layered-results.json
 bun run eval:live --model opencode/mimo-v2.5-free \
   --api-key-env OPENCODE_ZEN_API_KEY --max-requests 720 \
   --max-input-tokens 80000000 --max-output-tokens 1474560 --concurrency 4 \
+  --task-timeout-ms 600000 \
   --output packages/eval/headroom-live-results.json
 ```
 
 专用离线矩阵覆盖8类×50/200/1000轮，调用生产runtime和daemon；逐组报告超时、累计输入、恢复、缓存前缀、CPU/RSS和队列。实机入口导入14轮确定性材料，执行12个可验证的小任务×3策略×2重复。导入材料是测试fixture，后续任务才由实际模型完成。短会话、无法压缩、旧版超时、检索版本选择失败分别列出，不合并为平均收益承诺。
 
 实机输入额度按完整 UTF-8 请求字节加包装余量保守预约，输出按请求上限预约；预约量与 provider 实际输入／输出／缓存 usage 分列，未知值为 `null`。测试修复要求修复后的测试在正确实现上通过、对应错误实现上失败；其他任务还检查原验证器未被修改。实测结论与适用范围见 [验收记录](headroom-layered-acceptance.md)。
+
+默认单任务时限为 600 秒，可通过 `--task-timeout-ms` 显式设置；每任务仍最多 8 次主模型请求。实机宿主使用独立 XDG 目录和实验专用 npm 缓存，避免读取或修改用户缓存的权限状态。
 
 本文件及实现由AI辅助编写；实验数字以提交的机器可读结果和验收报告为准。
