@@ -125,7 +125,9 @@ export class EnhancementManager {
   stats() { return { running: this.running, queued: this.queue.length, sessions: this.sessions.size, jobs: this.jobs.size, cached: this.cache.size } }
   cancel(jobId: string): void {
     const work = this.pending.get(jobId), job = this.jobs.get(jobId)
-    if (!work || !job) return
+    // Successful publication is terminal even while usage/resource cleanup yields.
+    // Source invalidation remains explicit in get(jobId, currentSourceKey).
+    if (!work || !job || job.status === "completed") return
     job.status = "cancelled"; job.reason = "cancelled"
     work.controller.abort()
     const index = this.queue.indexOf(work)

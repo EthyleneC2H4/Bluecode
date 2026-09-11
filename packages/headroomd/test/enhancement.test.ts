@@ -235,3 +235,26 @@ test("cancel and dispose return immediately but awaitIdle and same-session admis
   expect(manager.get(job.jobId)?.entries).toBeUndefined()
   expect(manager.get(job.jobId)?.status).toBe("cancelled")
 })
+
+test("cancelling a published completion during final cleanup cannot poison its cached status", async () => {
+  const deferred = deferredProvider()
+  const manager = new EnhancementManager(deferred.summary, cfg())
+  const job = manager.submit(input())
+  await tick()
+  deferred.calls[0]!.finish()
+  // Advance individual microtasks, observing publication before final resource cleanup.
+  for (let i = 0; i < 10 && manager.get(job.jobId)?.status !== "completed"; i++) await Promise.resolve()
+  try {
+    expect(manager.get(job.jobId)?.status).toBe("completed")
+    expect(manager.stats().running).toBe(1)
+    manager.cancel(job.jobId)
+    expect(manager.get(job.jobId)?.status).toBe("completed")
+    expect(manager.get(job.jobId)?.entries).toEqual(entries)
+    expect(manager.submit(input()).status).toBe("completed")
+    await manager.awaitIdle()
+    expect(manager.submit(input()).jobId).toBe(job.jobId)
+    expect(manager.submit(input()).status).toBe("completed")
+    expect(deferred.calls.length).toBe(1)
+    expect(manager.stats().running).toBe(0)
+  } finally { manager.dispose(); await manager.awaitIdle() }
+})
