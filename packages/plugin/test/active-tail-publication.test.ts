@@ -19,16 +19,20 @@ function source(): HostMessage[] {
   ]).flat()
 }
 
-for (const change of ["tail-event", "tail-transform", "same-model", "model-limit", "model-shape", "user-metadata", "summary-epoch", "assistant-error", "partial-info", "current-user", "protected-island"] as const) {
+for (const change of ["tail-event", "tail-transform", "same-model", "async-trace", "model-limit", "model-shape", "user-metadata", "summary-epoch", "assistant-error", "partial-info", "current-user", "protected-island"] as const) {
   test(`delayed real engine publication handles ${change}`, async () => {
     const dir = await mkdtemp(join(tmpdir(), "blue-active-tail-"))
     const engine = await createEngine({ dataDir: dir })
     const called = Promise.withResolvers<void>(), release = Promise.withResolvers<void>()
     let plan: HeadroomCompressResult | undefined, published = 0
     const traces: Array<{ stage: string; reason: string }> = []
+    const unhandled: unknown[] = []
+    const onUnhandled = (error: unknown) => unhandled.push(error)
+    if (change === "async-trace") process.on("unhandledRejection", onUnhandled)
     const runtime = createPluginRuntime({ projectId: "p", directory: dir, rtk: null, trace: event => {
       traces.push(event)
       if (change === "same-model") throw new Error("diagnostic sink failure")
+      if (change === "async-trace") return Promise.reject(new Error("async diagnostic sink failure"))
     },
       options: parseOptions({ rtk: { mode: "off" }, headroom: { strategy: "layered", triggerRatio: .1, retainRecentTurns: 0 } }),
       headroom: {
@@ -45,7 +49,7 @@ for (const change of ["tail-event", "tail-transform", "same-model", "model-limit
       await runtime.transform({ messages: structuredClone(messages) })
       await called.promise
       expect(plan?.compacted).toBe(true)
-      if (change === "same-model") runtime.observeModel("s", structuredClone(model))
+      if (change === "same-model" || change === "async-trace") runtime.observeModel("s", structuredClone(model))
       else if (["user-metadata", "summary-epoch", "assistant-error", "partial-info"].includes(change)) {
         const index = change === "assistant-error" ? 3 : 8
         const info = { ...messages[index]!.info, time: { created: 1 },
@@ -67,6 +71,10 @@ for (const change of ["tail-event", "tail-transform", "same-model", "model-limit
         await runtime.transform({ messages: structuredClone(messages) })
       }
       release.resolve(); await runtime.drain()
+      if (change === "async-trace") {
+        await new Promise<void>(resolve => setImmediate(resolve))
+        expect(unhandled).toEqual([])
+      }
       const invalid = ["model-limit", "model-shape", "summary-epoch", "assistant-error", "partial-info", "current-user", "protected-island"].includes(change)
       expect(published).toBe(invalid ? 0 : 1)
       expect(traces.some(event => event.stage === "compress" && event.reason === "returned")).toBe(true)
@@ -104,6 +112,7 @@ for (const change of ["tail-event", "tail-transform", "same-model", "model-limit
       }
     } finally {
       release.resolve(); await runtime.dispose(); engine.close(); await rm(dir, { recursive: true, force: true })
+      if (change === "async-trace") process.off("unhandledRejection", onUnhandled)
     }
   })
 }

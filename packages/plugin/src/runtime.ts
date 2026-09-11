@@ -67,7 +67,7 @@ export interface RuntimeTraceEvent {
   details: Record<string, string | number | boolean | null>
 }
 export interface RuntimeInput {
-  trace?: (event: RuntimeTraceEvent) => void
+  trace?: (event: RuntimeTraceEvent) => void | Promise<void>
   projectId: string
   directory: string
   options: PluginOptions
@@ -156,7 +156,10 @@ export function createPluginRuntime(input: RuntimeInput) {
   }
   const trace = (id: string, state: SessionState, stage: string, reason: string,
     details: RuntimeTraceEvent["details"] = {}) => {
-    try { input.trace?.({ stage, reason, sessionId: id, generation: state.generation, strategy: options.headroom.strategy, details }) } catch { /* Diagnostics must not affect host execution. */ }
+    try {
+      const pending = input.trace?.({ stage, reason, sessionId: id, generation: state.generation, strategy: options.headroom.strategy, details })
+      if (pending) void Promise.resolve(pending).catch(() => {})
+    } catch { /* Diagnostics must not affect host execution. */ }
   }
   const clearView = (id: string, state: SessionState) => {
     trace(id, state, "view", "clear")
