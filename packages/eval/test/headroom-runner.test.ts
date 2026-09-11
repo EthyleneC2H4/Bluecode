@@ -1,4 +1,5 @@
-import { expect, test } from "bun:test"
+import { expect, spyOn, test } from "bun:test"
+import { HeadroomClient } from "@bluecode/headroomd"
 import { existsSync } from "node:fs"
 import { makeHeadroomFixture } from "../src/headroom-fixtures"
 import { runHeadroomEvaluation } from "../src/headroom-runner"
@@ -36,15 +37,24 @@ test("Original evidence remains recoverable after planning generations 2, 5 and 
   expect(row.operations.analysisCacheHits).toBeGreaterThan(400)
 }, 120_000)
 
-test("A timed-out group stops at the first failed stage and cannot claim savings", async () => {
-  const result = await runHeadroomEvaluation({ fixtures: [makeHeadroomFixture("unique-code", 1000)], strategies: ["layered"], replaySteps: 4, headroomTimeoutMs: 5 })
-  const comparison = result.comparisons[0]!
-  expect(comparison.layered.status).toBe("incomplete")
-  expect(comparison.layered.operations.compressCalls).toBe(1)
-  expect(comparison.layered.calls).toHaveLength(1)
-  expect(comparison.savingsRatio).toBeNull()
-  expect(comparison.target25PercentMet).toBeNull()
-  expect(existsSync(result.temporaryDataDir)).toBe(false)
+test("A compression timeout stops the group at the first failed stage and cannot claim savings", async () => {
+  // A 5ms deadline for every RPC can fail hydration before compression.
+  // Inject only the compression failure; retain the real runtime and cleanup.
+  const message = "headroomd: compress timed out (injected)"
+  const compress = spyOn(HeadroomClient.prototype, "compress").mockRejectedValue(new Error(message))
+  try {
+    const result = await runHeadroomEvaluation({ fixtures: [makeHeadroomFixture("unique-code", 1000)], strategies: ["layered"], replaySteps: 4 })
+    const comparison = result.comparisons[0]!
+    expect(comparison.layered.status).toBe("incomplete")
+    expect(comparison.layered.errors).toEqual([message])
+    expect(comparison.layered.operations.compressCalls).toBe(1)
+    expect(comparison.layered.calls).toHaveLength(1)
+    expect(comparison.savingsRatio).toBeNull()
+    expect(comparison.target25PercentMet).toBeNull()
+    expect(existsSync(result.temporaryDataDir)).toBe(false)
+  } finally {
+    compress.mockRestore()
+  }
 }, 30_000)
 
 test("Existing engineering replay accounts for every original question and preserves its active user request", async () => {
