@@ -45,9 +45,9 @@ JSONL 一行一帧，限制单帧 UTF-8 字节数为 8MiB。多帧粘包不会�
 
 `compacted:true` 必须提供 `historyHash/summary/memory/sourceDigests/refs/replacedMessageIds`。源 digest、ref、ID 长度一致，逐项 digest=ref.contentHash，ID 唯一且 token 会计自洽；`freedTokens>0`。`compacted:false` 必须完全惰性，无替换引用、无释放量。`epoch` 由生产插件显式提供。
 
-三种 retrieve 都有界；history 保留旧 `nextOffset`，新调用应使用可表示消息内部位置的 `nextCursor`。完整历史中的坏/缺失对象报告 `partial/missingHashes`；hash 读取发生完整性错误时抛出。query 返回 BM25 命中、namespace、chunkId、UTF-16 offsets、snippet 与 cursor；cursor 绑定查询、limit 与有序证据快照，失效后需重新查询。[引擎](../packages/headroomd/src/engine.ts)。
+四种 retrieve 都有界；history 保留旧 `nextOffset`，新调用应使用可表示消息内部位置的 `nextCursor`。完整历史中的坏/缺失对象报告 `partial/missingHashes`；hash 读取发生完整性错误时抛出。query 返回 BM25 命中、namespace、chunkId、UTF-16 offsets、snippet 与 cursor；cursor 绑定查询、limit 与有序证据快照，失效后需重新查询。[引擎](../packages/headroomd/src/engine.ts)。
 
-直接 daemon 响应预算约束原文内容；插件工具进一步约束最终 JSON。默认2048/32KiB、硬限8192/128KiB均采用UTF-8保守token上界。改变 cursor 所绑定的引用或 namespace 会被拒绝；分页不能截断返回后却越过剩余尾部。
+直接 daemon 响应预算约束原文内容；插件工具进一步约束最终 JSON。默认2048/32KiB、硬限8192/128KiB；legacy 使用 UTF-8 保守 token 上界，layered 的明确估算口径见下文。改变 cursor 所绑定的引用或 namespace 会被拒绝；分页不能截断返回后却越过剩余尾部。
 
 ## 分层计划与后台候选
 

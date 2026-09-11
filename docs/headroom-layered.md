@@ -92,11 +92,13 @@ bun run verify
 bun run eval:headroom --output packages/eval/headroom-layered-results.json
 # 实机默认不进入CI；所有调用由明确的免费模型白名单和总预算约束。
 bun run eval:live --model opencode/mimo-v2.5-free \
-  --api-key-env OPENCODE_ZEN_API_KEY --max-requests 600 \
-  --max-input-tokens 30000000 --max-output-tokens 1228800 \
+  --api-key-env OPENCODE_ZEN_API_KEY --max-requests 720 \
+  --max-input-tokens 80000000 --max-output-tokens 1474560 --concurrency 4 \
   --output packages/eval/headroom-live-results.json
 ```
 
 专用离线矩阵覆盖8类×50/200/1000轮，调用生产runtime和daemon；逐组报告超时、累计输入、恢复、缓存前缀、CPU/RSS和队列。实机入口导入14轮确定性材料，执行12个可验证的小任务×3策略×2重复。导入材料是测试fixture，后续任务才由实际模型完成。短会话、无法压缩、旧版超时、检索版本选择失败分别列出，不合并为平均收益承诺。
+
+实机输入额度按完整 UTF-8 请求字节加包装余量保守预约，输出按请求上限预约；预约量与 provider 实际输入／输出／缓存 usage 分列，未知值为 `null`。测试修复要求修复后的测试在正确实现上通过、对应错误实现上失败；其他任务还检查原验证器未被修改。实测结论与适用范围见 [验收记录](headroom-layered-acceptance.md)。
 
 本文件及实现由AI辅助编写；实验数字以提交的机器可读结果和验收报告为准。
