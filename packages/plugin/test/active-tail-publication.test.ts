@@ -19,13 +19,17 @@ function source(): HostMessage[] {
   ]).flat()
 }
 
-for (const change of ["tail-event", "tail-transform", "same-model", "model-limit", "current-user", "protected-island"] as const) {
+for (const change of ["tail-event", "tail-transform", "same-model", "model-limit", "model-shape", "current-user", "protected-island"] as const) {
   test(`delayed real engine publication handles ${change}`, async () => {
     const dir = await mkdtemp(join(tmpdir(), "blue-active-tail-"))
     const engine = await createEngine({ dataDir: dir })
     const called = Promise.withResolvers<void>(), release = Promise.withResolvers<void>()
     let plan: HeadroomCompressResult | undefined, published = 0
-    const runtime = createPluginRuntime({ projectId: "p", directory: dir, rtk: null,
+    const traces: Array<{ stage: string; reason: string }> = []
+    const runtime = createPluginRuntime({ projectId: "p", directory: dir, rtk: null, trace: event => {
+      traces.push(event)
+      if (change === "same-model") throw new Error("diagnostic sink failure")
+    },
       options: parseOptions({ rtk: { mode: "off" }, headroom: { strategy: "layered", triggerRatio: .1, retainRecentTurns: 0 } }),
       headroom: {
         compress: async params => { plan = await engine.compress(headroomCompressParamsSchema.parse(params)); called.resolve(); await release.promise; return plan },
@@ -42,6 +46,12 @@ for (const change of ["tail-event", "tail-transform", "same-model", "model-limit
       await called.promise
       expect(plan?.compacted).toBe(true)
       if (change === "same-model") runtime.observeModel("s", structuredClone(model))
+      else if (change === "model-shape") {
+        // Actual SDK models carry metadata in addition to the runtime Model
+        // surface. Observe the existing full-object generation comparison.
+        const fullModel = { ...model, name: "Fixture display name", family: "fixture" }
+        runtime.observeModel("s", fullModel)
+      }
       else if (change === "model-limit") runtime.observeModel("s", { ...model, limit: { context: 18000, output: 1000 } })
       else {
         const index = change === "current-user" ? 8 : change === "protected-island" ? 3 : 9
@@ -51,8 +61,12 @@ for (const change of ["tail-event", "tail-transform", "same-model", "model-limit
         await runtime.transform({ messages: structuredClone(messages) })
       }
       release.resolve(); await runtime.drain()
-      const invalid = ["model-limit", "current-user", "protected-island"].includes(change)
+      const invalid = ["model-limit", "model-shape", "current-user", "protected-island"].includes(change)
       expect(published).toBe(invalid ? 0 : 1)
+      expect(traces.some(event => event.stage === "compress" && event.reason === "returned")).toBe(true)
+      expect(traces.some(event => event.stage === "publish" && event.reason === (invalid ? "generation-changed" : "ready"))).toBe(true)
+      expect(JSON.stringify(traces)).not.toContain("original evidence line")
+      expect(JSON.stringify(traces)).not.toContain("Keep requirement")
       if (!invalid) {
         expect(engine.getView({ projectId: "p", sessionId: "s" })).not.toBeNull()
         for (let i = 0; i < 3; i++) {

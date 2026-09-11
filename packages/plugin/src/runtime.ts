@@ -56,7 +56,17 @@ interface SessionState {
   generation: number
   enhancementJob?: string
 }
+/** Explicit metadata only; never includes host content, options, or provider secrets. */
+export interface RuntimeTraceEvent {
+  stage: string
+  reason: string
+  sessionId: string
+  generation: number
+  strategy: string
+  details: Record<string, string | number | boolean | null>
+}
 export interface RuntimeInput {
+  trace?: (event: RuntimeTraceEvent) => void
   projectId: string
   directory: string
   options: PluginOptions
@@ -143,7 +153,12 @@ export function createPluginRuntime(input: RuntimeInput) {
     sessions.set(id, state)
     return state
   }
+  const trace = (id: string, state: SessionState, stage: string, reason: string,
+    details: RuntimeTraceEvent["details"] = {}) => {
+    try { input.trace?.({ stage, reason, sessionId: id, generation: state.generation, strategy: options.headroom.strategy, details }) } catch { /* Diagnostics must not affect host execution. */ }
+  }
   const clearView = (id: string, state: SessionState) => {
+    trace(id, state, "view", "clear")
     delete state.view
     delete state.attempted
     state.generation++
@@ -242,39 +257,37 @@ export function createPluginRuntime(input: RuntimeInput) {
     })())
   }
   const schedule = (id: string, state: SessionState) => {
-    if (
-      mode("headroom") === "off" ||
-      !input.headroom ||
-      state.paused ||
-      state.busy ||
-      !state.snapshot
-    )
-      return
-    const raw = state.snapshot
+    const blocked = mode("headroom") === "off" ? "disabled" : !input.headroom ? "no-port" : state.paused ? "paused" : state.busy ? "busy" : !state.snapshot ? "no-snapshot" : null
+    if (blocked) { trace(id, state, "schedule", blocked); return }
+    const raw = state.snapshot!
+    trace(id, state, "schedule", "queued", { messages: raw.length })
     state.busy = true
     const generation = state.generation
     const accepted = enqueue(
       async () => {
         try {
           await resolveModel(state)
-          if (disposed || state.paused || state.generation !== generation) return
+          if (disposed || state.paused || state.generation !== generation) {
+            trace(id, state, "schedule", disposed ? "disposed" : state.paused ? "paused" : "generation-changed", { plannedGeneration: generation }); return
+          }
           const usable = usableBudget(state)
           const projection = projectMessages(raw)
-          if (!usable || !projection) return
+          if (!usable || !projection) { trace(id, state, "schedule", !usable ? "no-budget" : "invalid-projection"); return }
           const effective = structuredClone(raw)
           if (state.view) applyHostView(effective, state.view)
           const projectedEffective = projectMessages(effective)
-          if (!projectedEffective) return
+          if (!projectedEffective) { trace(id, state, "schedule", "invalid-effective-projection"); return }
           const tokens = projectedEffective.reduce(
             (sum, m) => sum + estimateTokens(JSON.stringify(m.parts)),
             0
           )
-          if (tokens < usable * options.headroom.triggerRatio) return
+          if (tokens < usable * options.headroom.triggerRatio) { trace(id, state, "schedule", "below-trigger", { tokens, usable }); return }
           const fingerprint = createHash("sha256")
             .update(JSON.stringify([projection, state.epoch, usable, options.headroom]))
             .digest("hex")
-          if (state.attempted === fingerprint) return
+          if (state.attempted === fingerprint) { trace(id, state, "schedule", "already-attempted"); return }
           state.attempted = fingerprint
+          trace(id, state, "compress", "started", { tokens, usable, plannedGeneration: generation })
           const result = await input.headroom!.compress({
             projectId,
             sessionId: id,
@@ -291,29 +304,29 @@ export function createPluginRuntime(input: RuntimeInput) {
             epoch: state.epoch ?? "",
           })
           if (result.enhancementReason) console.warn(`[bluecode] ${result.enhancementReason}`)
-          if (
-            disposed ||
-            state.paused ||
-            generation !== state.generation ||
-            !result.compacted ||
-            !result.sourceDigests
-          )
-            return
+          trace(id, state, "compress", "returned", { compacted: result.compacted, sourceCount: result.sourceSnapshot?.messageIds.length ?? 0, operations: result.operations?.length ?? 0, plannedGeneration: generation })
+          const rejection = disposed ? "disposed" : state.paused ? "paused" : generation !== state.generation ? "generation-changed" : !result.compacted ? "not-compacted" : !result.sourceDigests ? "missing-digests" : null
+          if (rejection) { trace(id, state, "publish", rejection, { plannedGeneration: generation }); return }
           // Validate against the freshest raw host snapshot before publishing a durable active view.
           const candidate = structuredClone(state.snapshot ?? raw)
-          if (applyHostView(candidate, result) !== "applied") return
+          const status = applyHostView(candidate, result)
+          if (status !== "applied") { trace(id, state, "publish", "invalid-view", { status, messages: candidate.length }); return }
           metrics.plans++
           if (mode("headroom") === "shadow") {
             metrics.shadowPlans++
+            trace(id, state, "publish", "shadow")
             return
           }
+          trace(id, state, "publish", "persisting")
           await input.headroom!.setView(namespace(id), result)
           if (!disposed && !state.paused && generation === state.generation) {
             state.view = result
+            trace(id, state, "publish", "ready")
             pollEnhancement(id, state, result, generation)
-          }
+          } else trace(id, state, "publish", "changed-during-persist", { plannedGeneration: generation })
         } catch (error) {
           delete state.attempted
+          trace(id, state, "schedule", "error")
           throw error
         } finally {
           state.busy = false
@@ -321,7 +334,7 @@ export function createPluginRuntime(input: RuntimeInput) {
       },
       Buffer.byteLength(JSON.stringify(raw))
     )
-    if (!accepted) state.busy = false
+    if (!accepted) { state.busy = false; trace(id, state, "schedule", "overloaded") }
   }
 
   const runtime = {
@@ -339,6 +352,7 @@ export function createPluginRuntime(input: RuntimeInput) {
     observeModel(id: string, model: Model, maxOutput?: number) {
       const state = stateFor(id)
       if (!state || disposed) return
+      const previous = state.model
       const oldKey = JSON.stringify(state.model)
       const newKey = JSON.stringify(model)
       state.model = model
@@ -349,6 +363,12 @@ export function createPluginRuntime(input: RuntimeInput) {
         delete state.attempted
         state.generation++
       }
+      trace(id, state, "model", oldKey === newKey ? "unchanged" : "changed", {
+        identityChanged: previous?.id !== model.id || previous?.modelID !== model.modelID || previous?.providerID !== model.providerID,
+        limitChanged: JSON.stringify(previous?.limit) !== JSON.stringify(model.limit),
+        shapeChanged: JSON.stringify(Object.keys(previous ?? {}).sort()) !== JSON.stringify(Object.keys(model).sort()),
+        context: model.limit?.context ?? null, output: model.limit?.output ?? null, maxOutput: state.maxOutput ?? null,
+      })
     },
     observeSystem(id: string, model: Model, system: string[]) {
       const state = stateFor(id)
@@ -360,6 +380,7 @@ export function createPluginRuntime(input: RuntimeInput) {
       )
         runtime.observeModel(id, model)
       state.systemTokens = estimateTokens(system.join("\n"))
+      trace(id, state, "system", "observed", { systemTokens: state.systemTokens })
     },
     async transform(output: { messages: HostMessage[] }) {
       if (disposed || mode("headroom") === "off") return
@@ -383,6 +404,7 @@ export function createPluginRuntime(input: RuntimeInput) {
       if (state.paused) return
       if (state.view && mode("headroom") === "on") {
         const status = applyHostView(output.messages, state.view)
+        trace(id, state, "transform", "view", { status })
         if (status === "applied") metrics.applied++
         else if (status !== "already-compacted") clearView(id, state)
       }
@@ -485,6 +507,7 @@ export function createPluginRuntime(input: RuntimeInput) {
         const affects = (sources: string[] | undefined) =>
           sources && (typeof messageID !== "string" || sources.includes(messageID))
         if (affects(state.view?.sourceSnapshot?.messageIds ?? state.view?.replacedMessageIds)) {
+          trace(id, state, "event", "ready-source", { type: event.type, hasMessageId: typeof messageID === "string" })
           // Events can precede the next authoritative transform. A view and
           // an old snapshot agreeing with each other does not prove freshness.
           delete state.snapshot
@@ -499,7 +522,9 @@ export function createPluginRuntime(input: RuntimeInput) {
         const sources = options.headroom.strategy === "layered" && lastUser >= 0
           ? state.snapshot?.slice(0, lastUser + 1)
           : state.snapshot
-        if (affects(sources?.map((message) => message.info.id))) {
+        const inPrefix = !!affects(sources?.map((message) => message.info.id))
+        trace(id, state, "event", inPrefix ? "snapshot-source" : "outside-source", { type: event.type, hasMessageId: typeof messageID === "string", sourceCount: sources?.length ?? 0 })
+        if (inPrefix) {
           // An expanding in-flight plan may cover more than the ready view.
           // Cancel its generation even when the ready prefix remains valid.
           delete state.snapshot
