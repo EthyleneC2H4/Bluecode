@@ -27,6 +27,7 @@ export async function runLiveEvaluation(options: LiveOptions) {
   if(!key) throw Error("Missing configured API key environment variable")
   const model=options.model.slice("opencode/".length)
   const root=await mkdtemp(join(tmpdir(),"headroom-live-"))
+  await mkdir(join(root, "npm-cache"), { recursive: true })
   const records: any[] = [], requests: any[] = []
   const budget = createLiveBudget(options), commands = createCommandScope()
   const activeRequests = new Map<any, { abort: AbortController; done: Promise<void> }>()
@@ -147,7 +148,7 @@ async function runTask(root:string,id:string,task:LiveTask,arm:string,repeat:num
     agent:{build:{steps:8,model:options.model}},permission:{"*":"deny",read:"allow",edit:"allow",write:"allow",glob:"allow",grep:"allow",list:"allow",bash:"allow",headroom_retrieve:"allow"},
     plugin:[[new URL("./live-plugin.ts",import.meta.url).href,{dataDir:join(sandbox,"bluecode"),rtk:{mode:"off"},headroom:{strategy:arm==="legacy"?"legacy":"layered",memoryMaxTokens:128,idleExitMs:1000,
       ...(arm==="enhanced"?{summarizer:{enabled:true,baseURL:`${proxy}/${id}/summary`,model,apiKeyEnv:options.apiKeyEnv}}:{})}}]]}
-  const env={BLUECODE_LIVE_TRACE:join(sandbox,"trace.jsonl"),OPENCODE_CONFIG_CONTENT:JSON.stringify(config),XDG_CONFIG_HOME:join(sandbox,"config"),XDG_DATA_HOME:join(sandbox,"data"),XDG_STATE_HOME:join(sandbox,"state"),XDG_CACHE_HOME:join(root,"cache"),[options.apiKeyEnv]:key}
+  const env={npm_config_cache:join(root,"npm-cache"),BLUECODE_LIVE_TRACE:join(sandbox,"trace.jsonl"),OPENCODE_CONFIG_CONTENT:JSON.stringify(config),XDG_CONFIG_HOME:join(sandbox,"config"),XDG_DATA_HOME:join(sandbox,"data"),XDG_STATE_HOME:join(sandbox,"state"),XDG_CACHE_HOME:join(root,"cache"),[options.apiKeyEnv]:key}
   const started=performance.now()
   const imported=await command(["opencode","import","--pure",seedPath],workdir,{...env,OPENCODE_CONFIG_CONTENT:JSON.stringify({...config,plugin:[]})},30000)
   if(imported.code!==0||!imported.stdout.includes("Imported session:")) return {id,task:task.id,arm,repeat,passed:false,incomplete:true,reason:"fixture-import-failed",detail:safe(imported.stderr,key).slice(-1600),usage:{input:null,output:null,cacheRead:null,cacheWrite:null,cost:null},usageComplete:false,durationMs:performance.now()-started}

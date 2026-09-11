@@ -12,6 +12,7 @@ for (const taskTimeoutMs of [undefined, 1000]) test(`offline runner passes task 
     await writeFile(join(dir, "opencode"), `#!/usr/bin/env bun
 import {writeFile} from 'node:fs/promises';
 const args=process.argv.slice(2);
+if(args[0]!=='--version' && !process.env.npm_config_cache?.endsWith('/npm-cache')) throw new Error('Missing isolated npm cache');
 if(args[0]==='--version') console.log('offline fixture (not OpenCode or LLM)');
 else if(args[0]==='import') console.log('Imported session: fixture');
 else {
