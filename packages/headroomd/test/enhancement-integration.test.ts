@@ -82,3 +82,15 @@ test("shared daemon refuses a caller's different summary provider and retains th
     expect(requests).toBe(0)
   } finally { engine.close();server.stop(true);delete process.env.BLUECODE_CONFIG_FIXTURE;await rm(dir,{recursive:true,force:true}) }
 })
+
+test("clearing sessions that never requested summaries does not fill the durable spend ledger", async()=>{
+  const dir=await mkdtemp(join(tmpdir(),"headroom-empty-ledgers-"))
+  const summarizer=summaryProviderSchema.parse({enabled:true,baseURL:"http://127.0.0.1:1",model:"fixture",apiKeyEnv:"UNUSED_FIXTURE_KEY"})
+  let engine=await createEngine({dataDir:dir,summarizer})
+  try {
+    for(let i=0;i<140;i++) engine.clearView({projectId:"p",sessionId:`unused-${i}`})
+    engine.close()
+    engine=await createEngine({dataDir:dir,summarizer})
+    expect(engine.sessionCount()).toBe(0)
+  } finally {engine.close();await rm(dir,{recursive:true,force:true})}
+})

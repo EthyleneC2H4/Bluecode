@@ -15,14 +15,17 @@ export function createEnhancementCoordinator(meta: HeadroomDb, dataDir: string, 
   const manager = config?.enabled ? new EnhancementManager(new OpenAICompatibleSummaryProvider(config), config, counter) : null
   const namespaces = new Map<string, Namespace>()
   for (const usage of loadSummaryUsage(meta)) {
+    if (usage.inputTokens === 0 && usage.outputTokens === 0) continue
     const ns = { projectId: usage.projectId, sessionId: usage.sessionId }
     manager?.restoreUsage(ns, usage)
     namespaces.set(JSON.stringify(ns), ns)
   }
   const persist = (ns: Namespace) => {
     if (!manager) return
+    const usage = manager.sessionUsage(ns)
+    if (usage.inputTokens === 0 && usage.outputTokens === 0 && !namespaces.has(JSON.stringify(ns))) return
     namespaces.set(JSON.stringify(ns), ns)
-    saveSummaryUsage(meta, ns, manager.sessionUsage(ns))
+    saveSummaryUsage(meta, ns, usage)
   }
   const reject = (ns: Namespace, jobId: string, reason: string): GetCandidateResult => {
     manager?.cancel(jobId)
