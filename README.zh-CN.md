@@ -1,25 +1,27 @@
 # BlueCode
 
-为 [OpenCode](https://github.com/anomalyco/opencode) 提供上下文优化：通过一个插件挂载 RTK 工具输出压缩与 headroomd 历史归档。
+为 [OpenCode](https://github.com/anomalyco/opencode) 提供上下文优化：通过一个插件连接 RTK 子进程与 headroomd 守护进程，分别负责工具输出压缩，以及有预算的分层会话记忆与证据按需恢复。
 
-[English](README.md) · [架构](docs/architecture.md) · [操作手册](docs/operations.md) · [实现与验收记录](docs/reliability-implementation.md)
+[English](README.md) · [架构](docs/architecture.md) · [Headroom 使用指南](docs/headroom-layered.md) · [Headroom 验收结果](docs/headroom-layered-acceptance.md) · [操作手册](docs/operations.md)
 
-本仓库是独立学习实现，不是 vivo 的 BlueCode 私有源码。评测使用本地合成数据。
+本仓库是独立学习实现，不是 vivo 的 BlueCode 私有源码。评测包括确定性合成历史回放，以及通过真实 OpenCode 调用 LLM 完成的小型编码任务，两者分别报告。
 
 ## 工作方式
 
 | 组件 | 职责 |
 |---|---|
 | RTK | 保守压缩已识别的命令输出，保护代码、diff 变更行和完整失败诊断。512 token 是软目标，保护内容允许超额。 |
-| headroomd | 归档已完成轮次，构建证据记忆，持久化能够反复应用到新宿主消息数组的视图；保护近期轮次、活动工具及未知内容。 |
+| headroomd | 归档较早的工具观察和明确标注的材料，维护任务状态与有预算的分层记忆，复用未变内容的分析，并跨过保护内容进行安全局部替换；保护用户需求、修正、近期轮次、活动工具及未知内容。 |
 | 插件 | 每实例拥有客户端与状态，以真实 project/session 隔离检索；根据模型窗口规划，与上游 compaction 协调。 |
-| 检索 | 全文分片、FTS5/BM25 搜索、经校验的归档恢复和有界游标分页；返回内容绕过 RTK。 |
+| 检索 | FTS5/BM25 先返回命中片段，再按需分页展开原文、归档历史或摘要节点；返回内容绕过 RTK。 |
 
-RTK 使用 stdio 协议 v3，headroomd 使用 Unix socket 协议 v2。持久数据与临时 socket 分离。故障保留宿主可见内容或暂停规划；归档缺失、损坏会显式报告。RTK 保存实际收到文本的 sanitized 版本，无法恢复进入 hook 前已被宿主截去的内容。
+通过 `headroom.strategy: "layered"` 启用新策略。默认仍为 `legacy`，等待完整切换验收；两种规则路径均可离线运行，可选的后台 LLM 摘要默认关闭。详见[配置与默认策略决定](docs/headroom-layered-acceptance.md#默认策略决定)。
+
+RTK 使用 stdio 协议 v3，headroomd 使用 Unix socket 协议 v3。持久数据与临时 socket 分离。故障保留宿主可见内容或暂停规划；归档缺失、损坏会显式报告。RTK 保存实际收到文本的 sanitized 版本，无法恢复进入 hook 前已被宿主截去的内容。
 
 ## 实现架构
 
-RTK 压缩单次工具返回，headroomd 归档累积的会话历史。下面三张图对应本仓库当前的 Bun / TypeScript 实现；两个 sidecar 互不调用，由宿主插件负责调度和检索路由。
+RTK 压缩单次工具返回，headroomd 管理较早证据在上下文中的保留方式。下面三张图对应本仓库当前的 Bun / TypeScript 实现；两个 sidecar 互不调用，由宿主插件负责调度和检索路由。
 
 ### 总体架构：两层压缩与检索闭环
 
@@ -47,7 +49,7 @@ flowchart TB
         TRANSFORM -.->|"后台提交快照<br/>当前调用不等待新计划"| HC
         HC -.->|"候选计划验证后发布<br/>后续 transform 重放"| TRANSFORM
         RETRIEVE -->|"sha256: 引用 → fetch"| RC
-        RETRIEVE -->|"消息 hash / historyHash / query"| HC
+        RETRIEVE -->|"hash / historyHash / query / nodeId"| HC
     end
 
     subgraph RTK["独立 RTK 子进程"]
@@ -57,9 +59,9 @@ flowchart TB
     end
 
     subgraph HR["独立 headroomd 守护进程"]
-        HE["HeadroomEngine<br/>轮次切分、归档规划、证据记忆"]
+        HE["HeadroomEngine<br/>增量分析、任务状态<br/>记忆预算与视图操作"]
         HO[("objects<br/>gzip 消息对象")]
-        HM[("meta.db<br/>归属、manifest、活动视图")]
+        HM[("meta.db<br/>归属、manifest、摘要节点<br/>活动视图与遍历游标")]
         HI[("index.db<br/>全文分片 + FTS5 / BM25")]
         HE <--> HO
         HE <--> HM
@@ -67,7 +69,7 @@ flowchart TB
     end
 
     RC <-->|"stdio JSONL v3"| RE
-    HC <-->|"Unix socket JSONL v2"| HE
+    HC <-->|"Unix socket JSONL v3"| HE
 ```
 
 RTK 在工具返回后等待一次有 deadline 的压缩调用；headroomd 在后台规划，模型调用前只验证和应用已就绪的视图。宿主加载客户端与纯计算入口，数据库和归档写入留在独立进程中。检索结果明确绕过 RTK，避免刚恢复的证据再次被折叠。
@@ -125,104 +127,146 @@ CAS 保存的是 sanitize / redactor 之后的文本；默认 redactor 为 ident
 
 源码：[客户端](packages/rtk/src/client.ts)、[分类器](packages/rtk-core/src/classify.ts)、[策略管线](packages/rtk-core/src/pipeline.ts)、[预算选择](packages/rtk-core/src/budget.ts)、[存储与降级](packages/rtk/src/engine.ts)。
 
-### headroomd 内部：后台规划与活动视图重放
+### headroomd 内部：分层记忆、增量规划与按需恢复
+
+下图展示需显式启用的 `layered` 策略；`legacy` 保留连续前缀规划方式。分层规划保护最近四个完整轮次及当前活动轮次，需求与明确修正保持原文，只归档较早的可处理观察结果和明确属于材料的文本范围。
 
 ```mermaid
 flowchart TB
-    SNAP["messages.transform<br/>复制当前宿主可见消息快照"]
-    READY{"已有活动视图？"}
-    VERIFY["校验有序消息 ID<br/>逐条内容 digest<br/>上游 compaction epoch"]
-    APPLY["替换安全历史前缀<br/>合成 user 消息：摘要 + 回取提示"]
-    MODEL["本次模型输入<br/>有效历史视图 + 保留尾部"]
+    SNAP["messages.transform<br/>保存宿主可见快照"]
+    VIEW["校验已有活动视图<br/>来源 ID、digest、compaction epoch"]
+    MODEL["本次模型输入<br/>有效操作全部原子应用<br/>校验失败时保留宿主原文"]
+    SNAP --> VIEW --> MODEL
 
-    SNAP --> READY
-    READY -->|"有"| VERIFY
-    VERIFY -->|"有效"| APPLY --> MODEL
-    VERIFY -->|"失效：清除旧视图，保留宿主消息"| MODEL
-    READY -->|"无：保留宿主消息"| MODEL
+    subgraph BACKGROUND["后台规则规划：本次调用不等待"]
+        ANALYZE["保护近期与未知内容<br/>复用未变内容的分析与 token 计数"]
+        TRIGGER{"有效上下文达到<br/>可用输入预算的 70%？"}
+        MATERIAL["选择较早工具观察<br/>与明确材料范围<br/>跨过保护内容继续选择"]
+        MEMORY["带来源的任务状态<br/>不可变叶子与父节点<br/>按记忆预算选择完整信息块"]
+        PLAN["绑定内容摘要的操作<br/>安全区间 / 工具输出 / 文本范围<br/>目标上下文占用 55%"]
+        ARCHIVE["确认原文 CAS 对象<br/>保存节点、归档关系与索引"]
+        CHECK["插件使用最新宿主历史<br/>再次校验候选"]
+        PUBLISH["view.set<br/>发布可重复应用的稳定视图"]
+        KEEP["保留有效视图或原文"]
 
-    subgraph BACKGROUND["后台规划：本次模型调用不等待"]
-        PROJECT["投影当前可见消息<br/>未知内容、附件、活动工具标记保护<br/>按应用旧视图后的有效上下文估算"]
-        TRIGGER{"模型窗口已知且<br/>有效上下文达到可用预算的 70%？"}
-        TURNS["按 user 消息划分轮次<br/>保留最后一轮及之前 4 轮"]
-        PREFIX["选取最老的连续安全前缀<br/>遇受保护轮次即停止扩张"]
-        MEMORY["规则生成证据记忆<br/>约束、决定、变更<br/>验证、失败、待办"]
-        PLAN["逐步评估前缀<br/>目标为可用预算的 55%<br/>必须产生正 token 收益"]
-        ARCHIVE["持久化归档<br/>消息对象 → 元数据 → 派生索引<br/>保存 manifest"]
-        CHECK["用最新宿主快照<br/>再次验证候选计划"]
-        PUBLISH["view.set<br/>持久化活动视图<br/>更新插件实例缓存"]
-        SKIP["不发布新视图<br/>保留现有有效视图或宿主消息"]
-
-        PROJECT --> TRIGGER
-        TRIGGER -->|"是"| TURNS
-        TRIGGER -->|"否"| SKIP
-        TURNS --> PREFIX --> MEMORY --> PLAN
+        ANALYZE --> TRIGGER
+        TRIGGER -->|"是"| MATERIAL --> MEMORY --> PLAN
+        TRIGGER -->|"否"| KEEP
         PLAN -->|"有收益"| ARCHIVE --> CHECK
-        PLAN -->|"无安全前缀或无收益"| SKIP
-        CHECK -->|"仍然有效"| PUBLISH
-        CHECK -->|"已过期"| SKIP
-        ARCHIVE -.->|"存储失败"| SKIP
+        PLAN -->|"无安全收益"| KEEP
+        CHECK -->|"有效"| PUBLISH
+        CHECK -->|"过期"| KEEP
+        ARCHIVE -.->|"存储失败"| KEEP
     end
 
-    SNAP -.->|"调度后台任务"| PROJECT
-    PUBLISH -.->|"下一次及后续 transform"| READY
-    UP["OpenCode 上游 compaction"]
-    UP -.->|"开始：暂停应用 / 取消旧规划<br/>完成：清除旧视图"| READY
+    SUMMARY["可选后台 LLM 摘要<br/>明确服务、时限与会话额度<br/>默认关闭"]
+    CANDIDATE["校验来源引用与大小<br/>getCandidate 返回增强候选"]
+    SNAP -.-> ANALYZE
+    ARCHIVE -.->|"记忆预算有压力且开启增强"| SUMMARY
+    SUMMARY --> CANDIDATE --> CHECK
+    SUMMARY -.->|"失败时沿用规则结果"| KEEP
+    PUBLISH -.->|"后续 transform"| VIEW
+    UP["上游 compaction 或源内容变更"]
+    UP -.->|"使相关计划与视图失效"| VIEW
 ```
 
-可用输入预算为 `min(input 上限, context 上限 − 输出预留) − 系统提示估算 tokens − 512`；缺少独立 input 上限时使用 context。窗口未知时暂停规划。在线阈值和规划使用 `ceil(text.length / 4)` 估算，离线评测才使用精确 tokenizer；检索页预算另用 UTF-8 字节数作为保守 token 上界。
+可用输入预算为 `min(input 上限, context 上限 − 输出预留) − 系统提示估算 tokens − 512`；缺少独立 input 上限时使用 context，窗口未知时暂停规划。默认历史记忆最多占 4,096 token 和可用输入的 15%，还受到保护内容、近期原文及 55% 目标水位限制；不会截断需求来满足目标。daemon 支持注入 token 计数器，默认采用 `ceil(text.length / 4)` 估算，与 provider usage 分开报告。
 
-记忆通过规则归类和重复折叠生成，没有调用 LLM：用户文本保持原文，工具 `input/output/error` 都参与，每条记忆保留 `sourceIds`。计划包含有序 `replacedMessageIds`、`sourceDigests`、`epoch`、摘要与归档引用。每次 transform 都重新验证并重放计划；尾部追加可以继续使用旧前缀，源消息修改、删除、重排或上游 epoch 改变会使旧计划失效。
+原文确认归档后才允许替换。任务状态事件保留来源与版本，未变材料复用分析缓存；不可变节点支持有预算的上层摘要，避免反复拼接全部旧记忆。完整宿主快照校验仍需线性扫描。多个互不重叠的操作一并验证，受保护的附件或活动工具不会阻止其他位置的安全内容参与优化。
 
-消息对象以内容 hash 寻址，回读时校验 schema 和 hash；`meta.db` 保存归属、manifest、多代归档关系和活动视图，`index.db` 保存可重建的全文索引。替换发生在模型输入视图中，不通过这条链路删除宿主持久历史。
+检索支持 `hash`、`historyHash`、`query` 和 `nodeId`。查询先给最多五个简短命中卡片，按需展开原文或节点；最终 JSON 包装也参与 token 和字节预算，默认上限为 2,048 token / 32 KiB。来源继续按项目／会话隔离。替换作用于模型输入视图，不删除宿主持久历史。
 
-源码：[调度与预算](packages/plugin/src/runtime.ts)、[宿主投影与替换](packages/plugin/src/host-adapter.ts)、[归档引擎](packages/headroomd/src/engine.ts)、[记忆生成](packages/headroomd/src/memory.ts)、[计划校验](packages/headroomd/src/compaction.ts)、[活动视图持久化](packages/headroomd/src/store/manifests.ts)。完整接口见[协议](docs/protocol.md)。
+可选摘要服务通过独立文本 API 调用，不经过 OpenCode Agent Loop。规则计划先返回，增强候选经来源、大小及最新宿主历史校验后才能发布；网络失败、超时、候选过期时保留规则结果。来源校验只证明可追溯，不能证明摘要语义正确。
+
+源码：[运行时](packages/plugin/src/runtime.ts)、[分层规划器](packages/headroomd/src/layered.ts)、[原子操作](packages/headroomd/src/layered-operations.ts)、[节点存储](packages/headroomd/src/store/nodes.ts)、[节点检索](packages/headroomd/src/node-retrieval.ts)、[后台增强](packages/headroomd/src/enhancement-integration.ts)。配置、预算和迁移详见[使用指南](docs/headroom-layered.md)与[协议](docs/protocol.md)。
 
 ## 本地运行
 
-使用 **Bun 1.4.0**。目标平台为 Linux/macOS；本次本地验证在 macOS 完成，Linux 已配置 CI，执行状态以实际流水线为准。
+使用 **Bun 1.4.0**。目标平台为 Linux/macOS；本次本地验证在 macOS 完成，Linux 已配置 CI，执行状态见[实际流水线](https://github.com/EthyleneC2H4/Bluecode/actions)。
 
 ```sh
 bun install --frozen-lockfile
 bun run verify
 bun run eval --check --skip-latency
+bun run eval:headroom --output /tmp/headroom-layered-results.json
 ```
 
-verify 包含全工作区 strict 类型检查、测试、依赖方向，以及宿主 bundle 不引入 SQLite 的检查。评测不需要模型密钥。
+verify 包含全工作区 strict 类型检查、测试、依赖方向，以及宿主 bundle 不引入 SQLite 的检查。上述命令均离线运行，不需要模型密钥。`eval:live` 是独立的实机入口，必须显式指定模型、密钥环境变量及总调用预算，不进入默认 CI。
 
-在 OpenCode 配置中挂载当前 checkout：
+在 OpenCode 配置中挂载当前 checkout。下面显式启用 `layered`；省略 `strategy` 时仍使用默认的 `legacy`：
 
 ```json
 {
   "plugin": [["file:///absolute/path/Bluecode/packages/plugin/src/index.ts", {
     "mode": "on",
     "rtk": {"budgetTokens": 512, "timeoutMs": 40, "minBytes": 512},
-    "headroom": {"triggerRatio": 0.7, "targetRatio": 0.55, "retainRecentTurns": 4}
+    "headroom": {
+      "strategy": "layered",
+      "triggerRatio": 0.7,
+      "targetRatio": 0.55,
+      "retainRecentTurns": 4,
+      "memoryMaxTokens": 4096,
+      "summarizer": {"enabled": false}
+    }
   }]]
 }
 ```
 
-宿主适配以已核实的 OpenCode **1.18.21** 为基准，部分 hook 属于 experimental API。参见[集成记录](docs/integration-notes.md)与[操作手册](docs/operations.md)，后者涵盖 off/shadow/on、配额、迁移和恢复。
+宿主适配最初基于 OpenCode **1.18.21** 检查，本轮真实模型对照使用 **1.18.23**；部分 hook 属于 experimental API。参见[集成记录](docs/integration-notes.md)与[操作手册](docs/operations.md)，后者涵盖 off/shadow/on、配额、迁移和恢复。
 
-## 回放实测
+## 实验结果
 
-11 份 fixture、四组配置均使用生产 runtime；o200k_base 计数包括所有固定调用的重复上下文、问题和实际检索返回。
+以下三类实验采用不同历史、计数方法和检索策略，百分比不能混用。[Headroom 验收报告](docs/headroom-layered-acceptance.md)记录了具体配置、原始数据与尚未完成的默认切换门槛。
+
+### 真实 OpenCode 编码任务：旧版与分层规则版
+
+12 个小型任务，每种策略各重复两次，通过 OpenCode **1.18.23** 调用 Zen **`opencode/mimo-v2.5-free`**。每个任务先导入 14 轮合成历史，再由真实模型完成编码工作，RTK 全程关闭。压力配置使用 40,000 token 输入窗口、2,048 输出上限及 **128 token 记忆预算**，不是默认的 4,096。
+
+| 主模型指标 | legacy | layered 规则版 |
+|---|---:|---:|
+| 可执行测试通过 | 24 / 24 | 24 / 24 |
+| 关键约束通过 | 24 / 24 | 24 / 24 |
+| 累计输入，含缓存 | 4,501,601 | 2,848,864 |
+| 未命中缓存的输入 | 732,769 | 949,792 |
+| 输出 token | 24,692 | 28,046 |
+
+规则版累计输入降低 **36.71%**，同时未命中缓存的输入增加 **29.62%**，输出增加 **13.58%**。累计输入按 `input + cacheRead + cacheWrite` 计算，不等同于缓存外 token 的计费量。本次免费模型实验尚不能证明付费账单下降，也不能据小任务样本推断生产成功率。
+
+第三组尝试启用 LLM 摘要。三组共 **72 次主任务全部通过**，但**没有增强摘要实际应用**：31 次摘要请求收到 `MissingSessionID`，1 次传输失败。摘要 usage 未知，增强对照仍标记为 `incomplete: true`；该组验证了规则回退，不能作为语义摘要质量的证据。见[实机原始结果](packages/eval/headroom-live-results.json)。
+
+### Headroom 专用离线回放
+
+8 类场景分别覆盖 50、200、1,000 轮，共 24 份历史，调用生产 runtime 和真实 daemon。按 `ceil(UTF-16 字符数 / 4)` 估算，并计入检索后的重复输入，不调用外部模型。
+
+| 观察项 | 结果 |
+|---|---|
+| 分层规则版完成 | 24 / 24 |
+| 新旧可比较组 | 17 / 24；旧版七个 1,000 轮组超时 |
+| 可比较组累计估算输入 | 15,810,622 → 4,428,698（**降低 71.99%**） |
+| 重复输出 50 / 200 轮的回归 | 输入**增加 2.79% / 12.20%** |
+| 每组一个预选来源的逐字恢复 | 24 / 24 |
+| 自然查询证据探针 | 18 / 24；六个首命中选中了其他历史版本 |
+| 工程回放：查询＋首命中展开 | 197,686 → 181,048（**降低 8.42%**）；两组事实 10/10、约束 3/3 |
+
+超时组不参与收益计算，不按零输入处理。结合上述回归和实机压力配置的适用范围，默认切换门槛仍未全部满足：**默认保留 `legacy`，LLM 增强继续关闭**。原始数据见[专用回放结果](packages/eval/headroom-layered-results.json)。
+
+### 冻结的 RTK＋旧版 headroom 基线
+
+原有 11 份 fixture 回放继续用于回归检查，以 o200k_base 计数固定输入、重复上下文及检索证据；使用 `legacy` headroom 和原 query-only 检索策略。
 
 | 配置 | 总输入 token |
 |---|---:|
 | A：关闭优化 | 582,501 |
 | B：仅 RTK | 464,781 |
-| C：仅 headroomd | 529,923 |
+| C：仅旧版 headroomd | 529,923 |
 | D：组合 | 435,436 |
 
-默认 query-only 回放中，组合总输入减少 **25.25%**。C/D 自然问题 Recall@5 为 10/10；每组明确关键约束 3/3、确定性答案检查 10/10；D 归档逐字恢复 108/108。普通旧 fixture 上下文事实 B/D 为 102/104，单独披露。
-
-这些是确定性内容检查，不能等同于真实 LLM 解题率或 provider 账单。主动展开全部命中文档的压力场景仅节省 **6.95%**，未达到 20% 成本门槛；32 并发时 RTK 在 40ms deadline 下发生13次降级。[完整口径、证据与限制](docs/reliability-implementation.md)、[评测 CLI](packages/eval/README.md)。
+组合输入相对关闭优化减少 **25.25%**；主动展开全部命中文档时仅节省 **6.95%**。这些是冻结的确定性回放结果，与本轮 headroom 实验和真实 LLM 解题率分别解释。见[原验收记录](docs/reliability-implementation.md)、[基线](packages/eval/baseline.json)及[评测 CLI](packages/eval/README.md)。
 
 ## 开发
 
 七个工作区包分离协议、基础原语、RTK 纯策略、RTK 传输与存储、headroomd、插件及评测。评测直接依赖生产 runtime，两个 sidecar 互不依赖。旧插件 helper 保留用于兼容测试，不在生产工厂导入链路内。
 
-参见[贡献指南](CONTRIBUTING.md)、[协议](docs/protocol.md)、[设计](docs/superpowers/specs/2026-09-05-reliability-design.md)、[实施计划](docs/superpowers/plans/2026-09-05-reliability.md)。
+参见[贡献指南](CONTRIBUTING.md)、[协议](docs/protocol.md)、[分层设计](docs/superpowers/specs/2026-09-11-headroom-layered-design.md)、[实施计划](docs/superpowers/plans/2026-09-11-headroom-layered.md)。
 
 MIT，见 [LICENSE](LICENSE)。实现和文档由 AI 辅助完成；参考项目及许可边界列于验收记录。
