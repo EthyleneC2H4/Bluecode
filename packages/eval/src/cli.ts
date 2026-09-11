@@ -18,6 +18,7 @@ export interface CliOptions {
   invariants: boolean
   help: boolean
   retrievalStrategy?: "query-only" | "eager-recovery"
+  headroomStrategy?: "legacy" | "layered"
   reportPath?: string
   baselinePath?: string
 }
@@ -40,6 +41,13 @@ export function parseArgs(argv: string[]): CliOptions {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     switch (arg) {
+      case "--headroom-strategy": {
+        const strategy = argv[++i]
+        if (strategy !== "legacy" && strategy !== "layered")
+          throw new Error("--headroom-strategy requires legacy or layered")
+        options.headroomStrategy = strategy
+        break
+      }
       case "--retrieval-strategy": {
         const strategy = argv[++i]
         if (strategy !== "query-only" && strategy !== "eager-recovery")
@@ -109,6 +117,7 @@ Options:
   --check              Run a fresh full evaluation, then compare to baseline
   --update-baseline    Run a fresh full evaluation, then update baseline
   --retrieval-strategy  query-only (default) or eager-recovery stress scenario
+  --headroom-strategy   legacy (frozen baseline default) or layered
   --benchmarks         Include real-client 1/8/32 concurrency observations
   --invariants         Run fresh full evaluation and absolute reliability targets
   --report-path PATH   Report destination (or EVAL_REPORT_PATH)
@@ -144,6 +153,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     const runnerResult = await runEvaluation({
       quick: execution.quick,
       ...(options.retrievalStrategy ? { retrievalStrategy: options.retrievalStrategy } : {}),
+      ...(options.headroomStrategy ? { headroomStrategy: options.headroomStrategy } : {}),
       headroomEntry: DEFAULT_HEADROOM_ENTRY,
     })
     const report = aggregateReport(
@@ -151,7 +161,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       runnerResult.latencies,
       runnerResult.recallResults
     )
-    if (options.benchmarks) report.concurrency = await runConcurrencyBenchmarks()
+    if (options.benchmarks) report.concurrency = await runConcurrencyBenchmarks(options.headroomStrategy)
     writeReport(report, options.reportPath)
     printSummary(report)
 

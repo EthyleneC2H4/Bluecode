@@ -14,7 +14,7 @@ test("a real CLI child writes only injected report and baseline destinations", (
   writeFileSync(isolatedBaseline, baseline)
   try {
     const child = Bun.spawnSync(
-      ["bun", path.resolve(import.meta.dir, "../src/cli.ts"), "--quick"],
+      ["bun", path.resolve(import.meta.dir, "../src/cli.ts"), "--quick", "--headroom-strategy", "layered"],
       {
         env: {
           ...process.env,
@@ -26,7 +26,15 @@ test("a real CLI child writes only injected report and baseline destinations", (
       }
     )
     expect(child.exitCode).toBe(0)
-    expect(JSON.parse(readFileSync(isolatedReport, "utf8")).meta.semanticsVersion).toBe(2)
+    const output = JSON.parse(readFileSync(isolatedReport, "utf8"))
+    expect(output.meta.semanticsVersion).toBe(2)
+    expect(output.meta.headroomStrategy).toBe("layered")
+    for (const group of ["C", "D"]) {
+      const rows = output.perFixture.filter((row: any) => row.group === group)
+      expect(rows.every((row: any) => row.replay.headroom.strategy === "layered")).toBe(true)
+      expect(rows.some((row: any) => row.replay.headroom.activeViewStrategy === "layered" && row.replay.runtime.applied > 0)).toBe(true)
+      expect(rows.every((row: any) => row.replay.headroom.memoryMaxTokens === 4096 && row.replay.headroom.summarizerEnabled === false)).toBe(true)
+    }
     expect(readFileSync(isolatedBaseline, "utf8")).toBe(baseline)
     expect(readFileSync(BASELINE_PATH, "utf8")).toBe(baseline)
     expect(existsSync(REPORT_PATH) ? readFileSync(REPORT_PATH, "utf8") : null).toBe(report)

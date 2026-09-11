@@ -54,3 +54,11 @@ test("invariants mode evaluates full data without needing a regression baseline"
     action: "invariants",
   })
 })
+
+test("headroom strategy is explicit and rejects misspelled or missing values", () => {
+  expect(parseArgs(["--headroom-strategy", "layered"]).headroomStrategy).toBe("layered")
+  expect(parseArgs(["--headroom-strategy", "legacy"]).headroomStrategy).toBe("legacy")
+  expect(parseArgs([]).headroomStrategy).toBeUndefined()
+  expect(() => parseArgs(["--headroom-strategy", "layred"])).toThrow("requires legacy or layered")
+  expect(() => parseArgs(["--headroom-strategy"])).toThrow("requires legacy or layered")
+})

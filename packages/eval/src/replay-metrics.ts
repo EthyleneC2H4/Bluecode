@@ -2,6 +2,14 @@
 export interface ReplayMetrics {
   adapter: "@bluecode/plugin/runtime"
   retrievalStrategy: "query-only" | "eager-recovery"
+  /** Actual runtime configuration and persisted view, not just a requested CLI label. */
+  headroom?: {
+    strategy: "legacy" | "layered"
+    activeViewStrategy: "legacy" | "layered" | null
+    memoryMaxTokens: number
+    memoryRatio: number
+    summarizerEnabled: boolean
+  }
   modelCalls: Array<{ phase: "host" | "retrieval"; inputTokens: number; retrievalTokens: number }>
   totalInputTokens: number
   retrievalOutputTokens: number

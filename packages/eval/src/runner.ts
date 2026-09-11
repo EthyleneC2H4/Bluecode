@@ -42,6 +42,7 @@ export interface RunnerOptions {
   fixtures?: FixtureSample[]
   replaySteps?: number
   retrievalStrategy?: "query-only" | "eager-recovery"
+  headroomStrategy?: "legacy" | "layered"
   dataDir?: string
   rtkEntry?: string
   headroomEntry?: string
@@ -154,7 +155,7 @@ async function runFixture(
     mode: "on",
     dataDir,
     rtk: { mode: hasRtk ? "on" : "off" },
-    headroom: { mode: hasHeadroom ? "on" : "off" },
+    headroom: { mode: hasHeadroom ? "on" : "off", strategy: options.headroomStrategy ?? "legacy", summarizer: { enabled: false } },
   })
   const runtime = createPluginRuntime({
     projectId: PROJECT_ID,
@@ -331,6 +332,13 @@ async function runFixture(
         metrics.violations.crossNamespace++
     }
     const plan = await headroom?.getView({ projectId: PROJECT_ID, sessionId: sessionID })
+    if (hasHeadroom) metrics.headroom = {
+      strategy: config.headroom.strategy,
+      activeViewStrategy: plan ? plan.strategy ?? "legacy" : null,
+      memoryMaxTokens: config.headroom.memoryMaxTokens,
+      memoryRatio: config.headroom.memoryRatio,
+      summarizerEnabled: config.headroom.summarizer.enabled,
+    }
     if (plan?.compacted && plan.historyHash) {
       const recovered: Array<{ hash: string; content: string }> = []
       let cursor: string | undefined,
@@ -544,6 +552,7 @@ export function dispose(): void {
 }
 
 export interface ConcurrencySample {
+  headroomStrategy?: "legacy" | "layered"
   concurrency: number
   completed: number
   rtkCalls: number
@@ -561,7 +570,7 @@ export interface ConcurrencySample {
   rssBytes: number
 }
 /** Shared real clients and one production runtime; queue overload is evidence, never hidden. */
-export async function runConcurrencyBenchmarks(): Promise<ConcurrencySample[]> {
+export async function runConcurrencyBenchmarks(headroomStrategy: "legacy" | "layered" = "legacy"): Promise<ConcurrencySample[]> {
   const samples: ConcurrencySample[] = []
   for (const concurrency of [1, 8, 32]) {
     const dataDir = await mkdtemp(path.join(tmpdir(), "bluecode-eval-bench-"))
@@ -577,7 +586,7 @@ export async function runConcurrencyBenchmarks(): Promise<ConcurrencySample[]> {
     const runtime = createPluginRuntime({
       projectId: "benchmark",
       directory: process.cwd(),
-      options: parseOptions({}),
+      options: parseOptions({ headroom: { strategy: headroomStrategy, summarizer: { enabled: false } } }),
       rtk,
       headroom,
     })
@@ -611,6 +620,7 @@ export async function runConcurrencyBenchmarks(): Promise<ConcurrencySample[]> {
       const stats = runtime.stats()
       hooks.sort((a, b) => a - b)
       samples.push({
+        headroomStrategy,
         concurrency,
         completed,
         rtkCalls: stats.rtkCalls,
