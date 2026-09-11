@@ -70,7 +70,7 @@ export function setView(meta: HeadroomDb, ns: Namespace, plan: HeadroomCompressR
   // Analysis cache counters change on an identical replay; they are telemetry,
   // not authority to alter the confirmed source or replacement content.
   const comparable = (value: HeadroomCompressResult) => {
-    const { metrics, enhancementJobId, ...content } = headroomCompressResultSchema.parse(value)
+    const { metrics, enhancementJobId, enhancementReason, ...content } = headroomCompressResultSchema.parse(value)
     return canonicalJSON(content)
   }
   if (

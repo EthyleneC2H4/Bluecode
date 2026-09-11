@@ -68,6 +68,7 @@ import {
   messageTokens,
 } from "./summarize"
 import {
+  canonicalJSON,
   contentHash as hashMessage,
   historyHash as hashHistory,
   splitTurns,
@@ -162,8 +163,12 @@ export async function createEngine(options: EngineOptions): Promise<Engine> {
             ? await compressLayered(openedStore, dataDir, params, maxStorageBytes, analysisCache, tokenCounter)
             : await compress(openedStore, dataDir, params, maxStorageBytes)
           if (params.strategy === "layered" && params.enhance !== false) {
-            const jobId = enhancements.prepare({ projectId: params.projectId, sessionId: params.sessionId }, params.messages, result)
-            if (jobId) result.enhancementJobId = jobId
+            if (params.enhance === true && (!params.summaryProvider || canonicalJSON(params.summaryProvider) !== canonicalJSON(options.summarizer))) {
+              result.enhancementReason = "Summary provider configuration differs from daemon; restart headroomd to use the requested model and budgets"
+            } else {
+              const jobId = enhancements.prepare({ projectId: params.projectId, sessionId: params.sessionId }, params.messages, result)
+              if (jobId) result.enhancementJobId = jobId
+            }
           }
           if (result.metrics) {
             const elapsedCpu = process.cpuUsage(cpu)

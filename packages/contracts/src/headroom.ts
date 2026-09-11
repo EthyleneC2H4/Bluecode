@@ -283,6 +283,7 @@ export const headroomCompressResultSchema = z
     budget: layeredBudgetSchema.optional(),
     metrics: layeredMetricsSchema.optional(),
     enhancementJobId: z.string().optional(),
+    enhancementReason: z.string().optional(),
     sourceDigests: z.array(headroomHashSchema).optional(),
     epoch: z.string().optional(),
     memory: z.array(memoryEntrySchema).optional(),

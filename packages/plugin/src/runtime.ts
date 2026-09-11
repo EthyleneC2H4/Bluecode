@@ -287,8 +287,10 @@ export function createPluginRuntime(input: RuntimeInput) {
             memoryMaxTokens: options.headroom.memoryMaxTokens,
             memoryRatio: options.headroom.memoryRatio,
             enhance: options.headroom.summarizer.enabled && mode("headroom") === "on",
+            ...(options.headroom.summarizer.enabled ? { summaryProvider: options.headroom.summarizer } : {}),
             epoch: state.epoch ?? "",
           })
+          if (result.enhancementReason) console.warn(`[bluecode] ${result.enhancementReason}`)
           if (
             disposed ||
             state.paused ||

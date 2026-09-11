@@ -65,3 +65,20 @@ test("background HTTP summaries return rules immediately, publish only confirmed
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test("shared daemon refuses a caller's different summary provider and retains the rule plan", async () => {
+  const dir=await mkdtemp(join(tmpdir(),"headroom-summary-config-"))
+  let requests=0
+  const server=Bun.serve({port:0,fetch(){requests++;return Response.json({})}})
+  const configured=summaryProviderSchema.parse({enabled:true,baseURL:server.url.toString(),model:"a",apiKeyEnv:"BLUECODE_CONFIG_FIXTURE"})
+  process.env.BLUECODE_CONFIG_FIXTURE="fixture"
+  const engine=await createEngine({dataDir:dir,summarizer:configured})
+  try {
+    const plan=await engine.compress({projectId:"p",sessionId:"s",messages:history(),strategy:"layered",contextWindowTokens:32000,memoryMaxTokens:400,triggerRatio:.7,retainRecentTurns:4,enhance:true,summaryProvider:{...configured,model:"b"}})
+    expect(plan.compacted).toBe(true)
+    expect(plan.enhancementJobId).toBeUndefined()
+    expect(plan.enhancementReason).toContain("restart")
+    await Bun.sleep(10)
+    expect(requests).toBe(0)
+  } finally { engine.close();server.stop(true);delete process.env.BLUECODE_CONFIG_FIXTURE;await rm(dir,{recursive:true,force:true}) }
+})
