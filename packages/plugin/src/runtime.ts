@@ -16,6 +16,7 @@ import type { PluginOptions } from "./config"
 import {
   applyHostView,
   projectMessages,
+  projectMessage,
   sessionOf,
   upstreamEpoch,
   type HostMessage,
@@ -504,6 +505,26 @@ export function createPluginRuntime(input: RuntimeInput) {
           event.properties?.part?.messageID ??
           event.properties?.messageID ??
           event.properties?.info?.id
+        // OpenCode refreshes the current user's diff summary after each tool
+        // step via message.updated. Full info events do not replace parts.
+        // Ignore only metadata changes proven invisible to both the projection
+        // and upstream compaction epoch; partial envelopes stay fail-closed.
+        const info = event.properties?.info
+        const previous = state.snapshot?.find((message) => message.info.id === messageID)
+        if (options.headroom.strategy === "layered" && event.type === "message.updated" && previous && info?.id === previous.info.id &&
+            info.sessionID === id && ["user", "assistant"].includes(info.role) &&
+            typeof info.time?.created === "number" && Number.isFinite(info.time.created)) {
+          const updated = { ...previous, info }
+          const before = projectMessage(previous), after = projectMessage(updated)
+          if (before && after && contentDigest(before) === contentDigest(after) &&
+              upstreamEpoch([previous]) === upstreamEpoch([updated]) &&
+              JSON.stringify(previous.info.error) === JSON.stringify(info.error)) {
+            previous.info = structuredClone(info)
+            trace(id, state, "event", "metadata-only", { type: event.type })
+            if (info.time.completed) schedule(id, state)
+            return
+          }
+        }
         const affects = (sources: string[] | undefined) =>
           sources && (typeof messageID !== "string" || sources.includes(messageID))
         if (affects(state.view?.sourceSnapshot?.messageIds ?? state.view?.replacedMessageIds)) {

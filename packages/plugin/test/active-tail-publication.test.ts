@@ -19,7 +19,7 @@ function source(): HostMessage[] {
   ]).flat()
 }
 
-for (const change of ["tail-event", "tail-transform", "same-model", "model-limit", "model-shape", "current-user", "protected-island"] as const) {
+for (const change of ["tail-event", "tail-transform", "same-model", "model-limit", "model-shape", "user-metadata", "summary-epoch", "assistant-error", "partial-info", "current-user", "protected-island"] as const) {
   test(`delayed real engine publication handles ${change}`, async () => {
     const dir = await mkdtemp(join(tmpdir(), "blue-active-tail-"))
     const engine = await createEngine({ dataDir: dir })
@@ -46,6 +46,12 @@ for (const change of ["tail-event", "tail-transform", "same-model", "model-limit
       await called.promise
       expect(plan?.compacted).toBe(true)
       if (change === "same-model") runtime.observeModel("s", structuredClone(model))
+      else if (["user-metadata", "summary-epoch", "assistant-error", "partial-info"].includes(change)) {
+        const index = change === "assistant-error" ? 3 : 8
+        const info = { ...messages[index]!.info, time: { created: 1 },
+          ...(change === "assistant-error" ? { error: { name: "APIError", data: { message: "failed" } } } : { summary: change === "summary-epoch" ? true : { diffs: [] } }) }
+        await runtime.event({ type: "message.updated", properties: { info: change === "partial-info" ? { id: info.id, sessionID: "s", summary: { diffs: [] } } : info } })
+      }
       else if (change === "model-shape") {
         // Actual SDK models carry metadata in addition to the runtime Model
         // surface. Observe the existing full-object generation comparison.
@@ -61,7 +67,7 @@ for (const change of ["tail-event", "tail-transform", "same-model", "model-limit
         await runtime.transform({ messages: structuredClone(messages) })
       }
       release.resolve(); await runtime.drain()
-      const invalid = ["model-limit", "model-shape", "current-user", "protected-island"].includes(change)
+      const invalid = ["model-limit", "model-shape", "summary-epoch", "assistant-error", "partial-info", "current-user", "protected-island"].includes(change)
       expect(published).toBe(invalid ? 0 : 1)
       expect(traces.some(event => event.stage === "compress" && event.reason === "returned")).toBe(true)
       expect(traces.some(event => event.stage === "publish" && event.reason === (invalid ? "generation-changed" : "ready"))).toBe(true)
@@ -77,6 +83,16 @@ for (const change of ["tail-event", "tail-transform", "same-model", "model-limit
           expect(output.messages.find(m => m.info.id === "u4")).toEqual(messages[8])
         }
         await runtime.drain()
+        if (change === "user-metadata") {
+          // The host updates the current user's diff summary every tool step,
+          // including after a view has already been published.
+          for (let step = 0; step < 3; step++) {
+            await runtime.event({ type: "message.updated", properties: { info: { ...messages[8]!.info, time: { created: 1 }, summary: { diffs: [], title: `Step ${step}` } } } })
+            const output = { messages: structuredClone(messages) }
+            await runtime.transform(output)
+            expect(JSON.stringify(output.messages)).toContain("[headroom node:")
+          }
+        }
         // An edit event must clear a ready view even before a fresh transform,
         // including a protected historical island that no operation replaces.
         await runtime.event({ type: "message.updated", properties: { info: { sessionID: "s", id: "a1" } } })
