@@ -49,6 +49,7 @@ interface SessionState {
   epoch?: string
   paused: boolean
   hydrated: boolean
+  hydrating?: boolean
   busy: boolean
   model?: Model
   maxOutput?: number
@@ -173,10 +174,21 @@ export function createPluginRuntime(input: RuntimeInput) {
   const hydrate = (id: string, state: SessionState) => {
     if (state.hydrated || !input.headroom || mode("headroom") === "off") return
     state.hydrated = true
+    state.hydrating = true
     const generation = state.generation
     const accepted = enqueue(async () => {
       try {
         const plan = await input.headroom!.getView(namespace(id))
+        const strategyMismatch = plan && (plan.strategy ?? "legacy") !== options.headroom.strategy
+        // Enhanced plans retain model identity but not the provider/config
+        // provenance needed to prove restart compatibility. Rebuild from raw
+        // history even when the model name still matches the current config.
+        const enhanced = plan?.nodes?.some(node => node.policyVersion.startsWith("layered-summary-"))
+        if (strategyMismatch || enhanced) {
+          trace(id, state, "hydrate", strategyMismatch ? "strategy-mismatch" : "enhanced-provider-unverified")
+          if (mode("headroom") === "on") await input.headroom!.clearView(namespace(id))
+          return
+        }
         if (
           !disposed &&
           !state.view &&
@@ -188,9 +200,12 @@ export function createPluginRuntime(input: RuntimeInput) {
       } catch (error) {
         state.hydrated = false
         throw error
+      } finally {
+        state.hydrating = false
+        if (!disposed && sessions.get(id) === state && state.hydrated) schedule(id, state)
       }
     })
-    if (!accepted) state.hydrated = false
+    if (!accepted) { state.hydrated = false; state.hydrating = false }
   }
   const usableBudget = (state: SessionState): number | null => {
     const limit = state.model?.limit
@@ -261,7 +276,7 @@ export function createPluginRuntime(input: RuntimeInput) {
     })())
   }
   const schedule = (id: string, state: SessionState) => {
-    const blocked = mode("headroom") === "off" ? "disabled" : !input.headroom ? "no-port" : state.paused ? "paused" : state.busy ? "busy" : !state.snapshot ? "no-snapshot" : null
+    const blocked = mode("headroom") === "off" ? "disabled" : !input.headroom ? "no-port" : state.hydrating ? "hydrating" : state.paused ? "paused" : state.busy ? "busy" : !state.snapshot ? "no-snapshot" : null
     if (blocked) { trace(id, state, "schedule", blocked); return }
     const raw = state.snapshot!
     trace(id, state, "schedule", "queued", { messages: raw.length })
