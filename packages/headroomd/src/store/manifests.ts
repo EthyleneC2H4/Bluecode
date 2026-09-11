@@ -4,6 +4,7 @@ import {
   type Namespace,
 } from "@bluecode/contracts"
 import type { HeadroomDb } from "./db"
+import { canonicalJSON } from "../turns"
 
 export function initializeManifests(meta: HeadroomDb): void {
   meta.db.exec(`CREATE TABLE IF NOT EXISTS archive_manifests(
@@ -34,8 +35,8 @@ export function saveManifest(
   headroomCompressResultSchema.parse(plan)
   meta.db
     .prepare(
-      `INSERT INTO archive_manifests VALUES(?, ?, ?, 2, ?, ?)
-    ON CONFLICT(project_id, session_id, history_hash) DO UPDATE SET plan=excluded.plan, children=excluded.children`
+      `INSERT INTO archive_manifests VALUES(?, ?, ?, 3, ?, ?)
+    ON CONFLICT(project_id, session_id, history_hash) DO UPDATE SET schema_version=excluded.schema_version, plan=excluded.plan, children=excluded.children`
     )
     .run(
       ns.projectId,
@@ -66,9 +67,15 @@ export function getView(meta: HeadroomDb, ns: Namespace): HeadroomCompressResult
 }
 export function setView(meta: HeadroomDb, ns: Namespace, plan: HeadroomCompressResult): void {
   const stored = plan.historyHash ? getManifest(meta, ns, plan.historyHash) : null
+  // Analysis cache counters change on an identical replay; they are telemetry,
+  // not authority to alter the confirmed source or replacement content.
+  const comparable = (value: HeadroomCompressResult) => {
+    const { metrics, enhancementJobId, ...content } = headroomCompressResultSchema.parse(value)
+    return canonicalJSON(content)
+  }
   if (
     !stored ||
-    JSON.stringify(stored) !== JSON.stringify(headroomCompressResultSchema.parse(plan))
+    comparable(stored) !== comparable(plan)
   ) {
     throw new Error("View must match a confirmed archive in its namespace")
   }

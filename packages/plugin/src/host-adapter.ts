@@ -90,6 +90,43 @@ export function applyHostView(
   if (!projection || !plan.sourceDigests || plan.sourceDigests.length === 0) return "invalid"
   const result = materializeCompaction(projection, plan)
   if (result.status !== "applied") return result.status
+  if (plan.operations) {
+    const originals = new Map(messages.map((message) => [message.info.id, message]))
+    const projected = new Map(projection.map((message) => [message.info.id, message]))
+    // Validate every operation on a projection first. Only then construct a new
+    // host array, retaining SDK metadata and opaque parts on surviving messages.
+    const rebuilt = result.messages.map((message): HostMessage => {
+      const original = originals.get(message.info.id)
+      const before = projected.get(message.info.id)
+      if (original && before) {
+        const host = structuredClone(original)
+        let index = 0
+        for (const part of host.parts) {
+          if (part.type !== "text" && part.type !== "tool") continue
+          const updated = message.parts[index++]
+          if (part.type === "text" && updated?.type === "text") part.text = updated.text
+          else if (part.type === "tool" && updated?.type === "tool") {
+            if (updated.state.output !== undefined) part.state.output = updated.state.output
+            if (updated.state.error !== undefined) part.state.error = updated.state.error
+          }
+        }
+        if (message.archive) host.archive = message.archive
+        return host
+      }
+      const operation = plan.operations!.find((operation) => operation.kind === "range" && operation.replacement.info.id === message.info.id)
+      const source = operation?.kind === "range" ? originals.get(operation.messageIds[0]!) : undefined
+      if (!source) throw new Error("Validated range has no host source")
+      const id = message.info.id
+      return {
+        info: { ...source.info, id, role: message.info.role },
+        parts: message.parts.map((part, index) => ({ ...part, id: `${id}-part-${index}`, messageID: id,
+          sessionID: source.info.sessionID, synthetic: true })),
+        ...(message.archive ? { archive: message.archive } : {}),
+      }
+    })
+    messages.splice(0, messages.length, ...rebuilt)
+    return "applied"
+  }
   const start = messages.findIndex((message) => message.info.id === plan.replacedMessageIds[0])
   // Plans can replace only the stable oldest prefix. Never discard an intervening host part.
   if (start !== 0) return "invalid"

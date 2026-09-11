@@ -6,6 +6,8 @@ import type {
   HeadroomRetrieveParams,
   HeadroomRetrieveResult,
   Namespace,
+  GetCandidateParams,
+  GetCandidateResult,
 } from "@bluecode/contracts"
 import type { CompressInput, CompressOutcome, FetchInput, FetchOutcome } from "@bluecode/rtk/client"
 import { estimateTokens, redactLocalPaths } from "@bluecode/shared"
@@ -24,6 +26,7 @@ export interface RtkPort {
   shutdown(): Promise<void>
 }
 export interface HeadroomPort {
+  getCandidate?(input: GetCandidateParams): Promise<GetCandidateResult>
   compress(input: HeadroomCompressParams): Promise<HeadroomCompressResult>
   retrieve(input: HeadroomRetrieveParams): Promise<HeadroomRetrieveResult>
   getView(namespace: Namespace): Promise<HeadroomCompressResult | null>
@@ -248,6 +251,9 @@ export function createPluginRuntime(input: RuntimeInput) {
             targetTokens: Math.floor(usable * options.headroom.targetRatio),
             triggerRatio: options.headroom.triggerRatio,
             retainRecentTurns: options.headroom.retainRecentTurns,
+            strategy: options.headroom.strategy,
+            memoryMaxTokens: options.headroom.memoryMaxTokens,
+            memoryRatio: options.headroom.memoryRatio,
             epoch: state.epoch ?? "",
           })
           if (
@@ -281,6 +287,7 @@ export function createPluginRuntime(input: RuntimeInput) {
   }
 
   const runtime = {
+    strategy: () => options.headroom.strategy,
     rtk: () => input.rtk,
     headroom: () => input.headroom,
     namespace,

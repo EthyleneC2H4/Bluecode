@@ -23,6 +23,9 @@ export function createRetrieveTool(runtime: PluginRuntime) {
       .regex(/^[0-9a-f]{64}$/)
       .optional(),
     query: z.string().optional(),
+    nodeId: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+    detail: z.enum(["summary", "children", "source"]).optional(),
+    depth: z.coerce.number().int().nonnegative().max(20).optional(),
     cursor: z.string().max(4096).optional(),
     offset: z.coerce.number().int().nonnegative().optional(),
     limit: z.coerce.number().int().positive().optional(),
@@ -31,17 +34,20 @@ export function createRetrieveTool(runtime: PluginRuntime) {
   }
   return tool({
     description:
-      "Recover archived evidence by hash (sha256: for tool output), historyHash, or natural search query. Choose exactly one. Responses are bounded; pass nextCursor verbatim to continue. A cursor continues the same reference and namespace. Retrieved text bypasses compression.",
+      "Recover archived evidence by hash (sha256: for tool output), historyHash, nodeId, or natural search query. Choose exactly one. Search returns short matching excerpts; expand only the relevant hash or node. nodeId accepts detail summary, children, or source and optional child depth. Responses are bounded; pass nextCursor verbatim when more evidence is needed. Retrieved text bypasses compression.",
     args: shape,
     async execute(args, context) {
-      if ([args.hash, args.historyHash, args.query].filter((v) => v !== undefined).length !== 1)
-        throw new Error("Choose exactly one of hash, historyHash, query")
+      if ([args.hash, args.historyHash, args.query, args.nodeId].filter((v) => v !== undefined).length !== 1)
+        throw new Error("Choose exactly one of hash, historyHash, query, nodeId")
+      if ((args.detail !== undefined || args.depth !== undefined) && !args.nodeId)
+        throw new Error("detail and depth require nodeId")
       if (args.offset !== undefined && args.historyHash === undefined)
         throw new Error("offset requires historyHash")
       const namespace = runtime.namespace(context.sessionID)
       const maxTokens = Math.min(args.maxTokens ?? DEFAULT_PAGE_TOKENS, MAX_PAGE_TOKENS)
       const maxBytes = Math.min(args.maxBytes ?? DEFAULT_PAGE_BYTES, MAX_PAGE_BYTES)
-      const envelopeBudget = Math.min(maxTokens, maxBytes)
+      const layered = runtime.strategy() === "layered"
+      const envelopeBudget = Math.min(maxTokens * (layered ? 4 : 1), maxBytes)
       const boundedError = (text: string) =>
         paginateText(text, {
           ref: "retrieval-error",
@@ -84,7 +90,10 @@ export function createRetrieveTool(runtime: PluginRuntime) {
                   limit,
                   ...paging,
                 }
-              : { namespace, query: args.query!, limit, ...paging }
+              : args.nodeId
+              ? { namespace, nodeId: args.nodeId, ...(args.detail ? { detail: args.detail } : {}),
+                  ...(args.depth !== undefined ? { depth: args.depth } : {}), ...paging }
+              : { namespace, query: args.query!, limit, style: layered ? "cards" : "segments", ...paging }
             result = await client.retrieve(params)
           }
           const output = JSON.stringify(result)
@@ -96,7 +105,7 @@ export function createRetrieveTool(runtime: PluginRuntime) {
               metadata: {
                 bluecode: {
                   retrieved: true,
-                  tokenCountKind: "utf8-upper-bound",
+                  tokenCountKind: layered ? "chars-div-4-estimate" : "utf8-upper-bound",
                   maxTokens,
                   maxBytes,
                 },

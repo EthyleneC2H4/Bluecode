@@ -16,7 +16,7 @@
  * are preserved and rejected. Only a confirmed stale socket may be removed.
  * 2. The engine acquires an OS-backed SQLite writer lease for its storage root
  * before opening the store. A cold-start loser waits at most two seconds for
- * a v2 hello on its requested socket, then yields `already-running`. A writer
+ * a v3 hello on its requested socket, then yields `already-running`. A writer
  * using another socket remains exclusive and the contender fails.
  * 3. UDS bind arbitrates ownership of the socket address independently of the
  * root writer lease. The pid file records the winner and is cleaned on exit.
@@ -35,6 +35,7 @@ import {
   healthParamsSchema,
   namespaceSchema,
   headroomCompressResultSchema,
+  getCandidateParamsSchema,
   type HeadroomResponse,
   type ProtocolError,
 } from "@bluecode/contracts"
@@ -283,6 +284,8 @@ export async function startHeadroomServer(
 
     try {
       switch (knownOp.data) {
+        case "getCandidate":
+          return { v: HEADROOM_PROTOCOL_VERSION, id, ok: true, result: await engine.getCandidate(getCandidateParamsSchema.parse(rawParams)) }
         case "view.get":
           return {
             v: HEADROOM_PROTOCOL_VERSION,
@@ -417,7 +420,7 @@ export async function startHeadroomServer(
     clients += 1
     openClients.add(client)
     disarmIdleTimer()
-    // Handshake first, always: {"proto":2,"pid":<pid>}
+    // Handshake first, always: {"proto":3,"pid":<pid>}
     client.write(frameFor({ proto: HEADROOM_PROTOCOL_VERSION, pid: process.pid }))
 
     const lines = createLineReconstructor(

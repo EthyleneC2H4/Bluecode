@@ -5,7 +5,7 @@ process.stderr.on("error", () => {})
  *                      [--version]
  *
  * Handwritten arg parsing (no dependency). Boot order: parse → start server
- * → print one handshake line to stdout ({"proto":2,"pid":N}) so a spawning
+ * → print one handshake line to stdout ({"proto":3,"pid":N}) so a spawning
  * client can confirm the daemon came up → wire SIGTERM/SIGINT to a graceful
  * stop (socket + pid file removed). An already-running instance makes the
  * start yield `already-running`, which exits 0 quietly: spawn callers then

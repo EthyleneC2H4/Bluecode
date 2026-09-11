@@ -77,7 +77,7 @@ describe("handshake framing (byte-level)", () => {
   test("handshake split across two chunks connects and loses nothing", async () => {
     const socketPath = path.join(await freshDir(), "split.sock")
     await serve(socketPath, (sock) => {
-      sock.write('{"proto":2,"pi')
+      sock.write('{"proto":3,"pi')
       setTimeout(() => sock.write('d":4242}\n'), 40)
       setTimeout(() => sock.write(`${JSON.stringify({ later: true })}\n`), 140)
     })
@@ -99,7 +99,7 @@ describe("handshake framing (byte-level)", () => {
     const first = JSON.stringify({ seq: 1 })
     const second = JSON.stringify({ seq: 2 })
     await serve(socketPath, (sock) => {
-      sock.write(`{"proto":2,"pid":7}\n${first}\n${second}\n`)
+      sock.write(`{"proto":3,"pid":7}\n${first}\n${second}\n`)
     })
     const { socket, pending } = await attemptConnect(socketPath)
     // Multi-line-first-chunk: everything past the handshake comes back as
@@ -118,7 +118,7 @@ describe("handshake framing (byte-level)", () => {
   test("incomplete handshake keeps waiting for the timeout instead of failing empty", async () => {
     const socketPath = path.join(await freshDir(), "partial.sock")
     await serve(socketPath, (sock) => {
-      sock.write('{"proto":2,') // never completed by the server
+      sock.write('{"proto":3,') // never completed by the server
     })
     let thrown: unknown
     try {
@@ -248,7 +248,7 @@ describe("connect-or-spawn", () => {
   test("oversized frame fails in-flight requests with FrameOverflowError and tears down", async () => {
     const socketPath = path.join(await freshDir(), "overflow.sock")
     await serve(socketPath, (sock) => {
-      sock.write('{"proto":2,"pid":9}\n')
+      sock.write('{"proto":3,"pid":9}\n')
       setTimeout(() => sock.write("x".repeat(2048)), 40) // unterminated flood frame
     })
     const client = await HeadroomClient.connect({ socketPath, maxFrameBytes: 1024 })

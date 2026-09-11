@@ -15,6 +15,9 @@
 import net from "node:net"
 import {
   headroomCompressResultSchema,
+  getCandidateResultSchema,
+  type GetCandidateParams,
+  type GetCandidateResult,
   headroomResponseSchema,
   HEADROOM_PROTOCOL_VERSION,
   healthResultSchema,
@@ -36,6 +39,7 @@ import {
   retrieveByHashResultSchema,
   retrieveByHistoryResultSchema,
   retrieveByQueryResultSchema,
+  retrieveByNodeResultSchema,
 } from "@bluecode/contracts"
 
 export interface HeadroomClientOptions {
@@ -170,7 +174,9 @@ export function attemptConnect(socketPath: string): Promise<AttemptedConnection>
           !Number.isSafeInteger(parsed.pid) ||
           (parsed.pid as number) <= 0
         ) {
-          fail(new Error(`headroomd: bad handshake ${handshake}`))
+          fail(new Error(parsed.proto !== HEADROOM_PROTOCOL_VERSION
+            ? `headroomd: bad handshake; protocol mismatch (daemon ${String(parsed.proto)}, client ${HEADROOM_PROTOCOL_VERSION}); restart headroomd and the plugin together`
+            : "headroomd: bad handshake; invalid process identity"))
           return
         }
       } catch {
@@ -356,8 +362,13 @@ export class HeadroomClient {
     return this.request("retrieve", params, (value) => {
       if ("query" in params) return retrieveByQueryResultSchema.safeParse(value)
       if ("historyHash" in params) return retrieveByHistoryResultSchema.safeParse(value)
+      if ("nodeId" in params) return retrieveByNodeResultSchema.safeParse(value)
       return retrieveByHashResultSchema.safeParse(value)
     })
+  }
+
+  getCandidate(params: GetCandidateParams): Promise<GetCandidateResult> {
+    return this.request("getCandidate", params, (value) => getCandidateResultSchema.safeParse(value))
   }
 
   getView(namespace: Namespace): Promise<HeadroomCompressResult | null> {

@@ -1,4 +1,11 @@
 import { storageBytes, collectAbandonedTemps } from "./store/quota"
+import { readHistoryPage } from "./history-reader"
+import { initializeHistoryCursors, loadHistoryCursor, saveHistoryCursor } from "./store/history-cursors"
+import { buildLayeredPlan, createLayeredCache, type LayeredCache } from "./layered"
+import { createCachedTokenCounter, type TokenCounter } from "./token-counter"
+import { initializeNodes, nodesForView, nodesForSource, saveNodes } from "./store/nodes"
+import { focusSearchHit } from "./search-focus"
+import { retrieveNode } from "./node-retrieval"
 /**
  * headroomd business layer: compress archives the turns being evicted into
  * CAS objects + the SQLite/FTS index and returns a deterministic summary;
@@ -25,6 +32,8 @@ import type {
   HeadroomCompressResult,
   HeadroomRetrieveParams,
   HeadroomRetrieveResult,
+  GetCandidateParams,
+  GetCandidateResult,
 } from "@bluecode/contracts"
 import { estimateTokens, paginateText, encodeCursor, decodeCursor } from "@bluecode/shared"
 import {
@@ -66,6 +75,7 @@ import {
 export interface EngineOptions {
   dataDir: string
   maxStorageBytes?: number
+  tokenCounter?: TokenCounter
 }
 
 /** Mirrors retrieveByQueryParamsSchema's max(limit); see retrieve's clamp. */
@@ -78,6 +88,7 @@ export interface Engine {
   /** Distinct namespaces archived so far (health metric). */
   sessionCount(): number
   getView(namespace: Namespace): HeadroomCompressResult | null
+  getCandidate(params: GetCandidateParams): Promise<GetCandidateResult>
   setView(namespace: Namespace, plan: HeadroomCompressResult): void
   clearView(namespace: Namespace): void
   close(): void
@@ -99,6 +110,8 @@ export async function createEngine(options: EngineOptions): Promise<Engine> {
     await collectAbandonedTemps(dataDir)
     store = openStore(dataDir)
     const openedStore = store
+    initializeHistoryCursors(store.meta)
+    initializeNodes(store.meta)
 
     // Self-heal on startup. The derived index is rebuilt from objects +
     // meta.cas_meta when it is corrupt, speaks a foreign schema version, or
@@ -122,15 +135,30 @@ export async function createEngine(options: EngineOptions): Promise<Engine> {
     if (!Number.isSafeInteger(maxStorageBytes) || maxStorageBytes <= 0)
       throw new Error("Invalid storage capacity")
     let tail: Promise<unknown> = Promise.resolve()
+    const analysisCache = createLayeredCache()
+    const tokenCounter = createCachedTokenCounter(options.tokenCounter)
     let closed = false
     return {
       dataDir,
       getView: (ns) => getView(openedStore.meta, ns),
+      getCandidate: async () => ({ status: "missing", candidate: null }),
       setView: (ns, plan) => setView(openedStore.meta, ns, plan),
       clearView: (ns) => clearView(openedStore.meta, ns),
       compress: (params) => {
         if (closed) return Promise.reject(new Error("Engine closed"))
-        const next = tail.then(() => compress(openedStore, dataDir, params, maxStorageBytes))
+        const queuedAt = performance.now()
+        const next = tail.then(async () => {
+          const started = performance.now(), cpu = process.cpuUsage()
+          const result = params.strategy === "layered"
+            ? await compressLayered(openedStore, dataDir, params, maxStorageBytes, analysisCache, tokenCounter)
+            : await compress(openedStore, dataDir, params, maxStorageBytes)
+          if (result.metrics) {
+            const elapsedCpu = process.cpuUsage(cpu)
+            result.metrics = { ...result.metrics, queueMs: started - queuedAt, durationMs: performance.now() - started,
+              cpuUserMicros: elapsedCpu.user, cpuSystemMicros: elapsedCpu.system, rssBytes: process.memoryUsage().rss }
+          }
+          return result
+        })
         tail = next.catch(() => {})
         return next
       },
@@ -163,6 +191,44 @@ interface ArchivePlan {
   historyHashValue: string
   summary: string
   summaryTokens: number
+}
+
+async function compressLayered(
+  store: HeadroomStore, dataDir: string, params: HeadroomCompressParamsParsed,
+  maxStorageBytes: number, cache: LayeredCache, tokenCounter: TokenCounter,
+): Promise<HeadroomCompressResult> {
+  const namespace = { projectId: params.projectId, sessionId: params.sessionId }
+  const visibleNodeIds = params.messages.flatMap((message) => [
+    ...(message.archive?.nodeIds ?? []),
+    ...message.parts.flatMap((part) => [...(part.type === "text" ? part.text : part.state.output ?? "")
+      .matchAll(/\[headroom node:([0-9a-f]{64})\]/g)].map((match) => match[1]!)),
+  ])
+  const result = buildLayeredPlan(params.messages, {
+    namespace, contextWindowTokens: params.contextWindowTokens, retainRecentTurns: params.retainRecentTurns,
+    cache, tokenCounter, nodes: nodesForView(store.meta, namespace, visibleNodeIds),
+    ...(params.targetTokens !== undefined ? { targetTokens: params.targetTokens } : {}),
+    ...(params.memoryMaxTokens !== undefined ? { memoryMaxTokens: params.memoryMaxTokens } : {}),
+    ...(params.memoryRatio !== undefined ? { memoryRatio: params.memoryRatio } : {}),
+    ...(params.protectedMessageIds ? { protectedMessageIds: params.protectedMessageIds } : {}),
+    ...(params.epoch !== undefined ? { epoch: params.epoch } : {}),
+  })
+  if (!result.compacted || !result.historyHash) return result
+  const wanted = new Set([...result.replacedMessageIds, ...result.nodes.flatMap((node) => node.sourceRefs.map((ref) => ref.messageId))])
+  const messages = params.messages.filter((message) => wanted.has(message.info.id))
+  const hashes = await Promise.all(messages.map(hashMessage))
+  const archive: ArchivePlan = {
+    turns: splitTurns(messages), messages, hashes, historyHashValue: result.historyHash,
+    summary: result.summary ?? "", summaryTokens: result.summaryTokens,
+  }
+  if (!hasHistoryMeta(store.meta, namespace, result.historyHash)) {
+    const reserve = Buffer.byteLength(JSON.stringify([messages, result.nodes, result])) * 16 + 256 * 1024
+    if ((await storageBytes(dataDir)) + reserve > maxStorageBytes) throw new Error("Headroom storage capacity exceeded")
+  }
+  // CAS and authoritative source ownership precede every node and view reference.
+  await persistArchive(store, dataDir, params.projectId, params.sessionId, archive, result.rawTokens)
+  saveNodes(store.meta, namespace, result.nodes)
+  saveManifest(store.meta, namespace, result, messages.flatMap((message) => message.archive ? [message.archive.historyHash] : []))
+  return result
 }
 
 async function compress(
@@ -546,6 +612,7 @@ async function retrieve(
     maxBytes: params.maxBytes,
     maxTokens: params.maxTokens,
   })
+  if ("nodeId" in params) return retrieveNode(store.meta, dataDir, params)
   if ("hash" in params) {
     const ref = JSON.stringify([params.namespace, params.hash])
     decodeCursor(params.cursor, ref)
@@ -558,6 +625,31 @@ async function retrieve(
   if ("historyHash" in params) {
     if (!hasHistoryMeta(store.meta, params.namespace, params.historyHash)) {
       return { found: false }
+    }
+    // v3 pages persist their traversal stack. Legacy ordinal cursors remain readable.
+    if ((!params.cursor && !params.offset) || params.cursor?.startsWith("h3-")) {
+      const state = params.cursor
+        ? loadHistoryCursor(store.meta, params.namespace, params.historyHash, params.cursor)
+        : { stack: [{ hash: params.historyHash, offset: 0 }], ordinal: 0, intra: 0 }
+      const page = await readHistoryPage({
+        row: async (hash, offset) => {
+          const row = listHistoryMeta(store.meta, params.namespace, hash, offset, 1)[0]
+          return row ? { hash: row.hash, role: row.role, turnIndex: row.turnIndex } : null
+        },
+        content: async ({ hash }) => {
+          const projection = await readValidProjection(dataDir, hash)
+          if (!projection) return null
+          const child = projection.archive?.historyHash
+          return child && projection.info.id === `compaction-${child}` && hasHistoryMeta(store.meta, params.namespace, child)
+            ? { child }
+            : { text: renderProjection(projection) }
+        },
+      }, state, params)
+      return {
+        found: true, items: page.items, nextOffset: page.more ? page.state.ordinal : null,
+        nextCursor: page.more ? saveHistoryCursor(store.meta, params.namespace, params.historyHash, page.state) : null,
+        truncated: page.more, partial: page.missingHashes.length > 0, missingHashes: page.missingHashes,
+      }
     }
     const ref = JSON.stringify([params.namespace, params.historyHash])
     // Encode message ordinal and intra-message position in a reference-bound outer cursor.
@@ -646,12 +738,28 @@ async function retrieve(
   // Unusable query text (no tokens left after quoting/segmentation) → no hits.
   const matchExpression = buildMatchQuery(params.query)
   if (matchExpression === null) return { hits: [] }
-  const all = searchChunks(
+  const matches = searchChunks(
     store.index.db,
     params.namespace,
     matchExpression,
-    Math.min(params.limit ?? 5, RETRIEVE_LIMIT_CAP)
+    Math.min(params.limit ?? 5, params.style === "segments" ? RETRIEVE_LIMIT_CAP : 5)
   )
+  const all: Array<(typeof matches)[number] & { filePaths?: string[]; identifiers?: string[]; nodeIds?: string[] }> = []
+  for (const hit of matches) {
+    if (params.style === "segments") { all.push(hit); continue }
+    const projection = await readValidProjection(dataDir, hit.hash)
+    if (!projection) continue
+    const focused = focusSearchHit(hit, params.query)
+    if (renderProjection(projection).slice(focused.startOffset, focused.endOffset) !== focused.snippet) continue
+    const filePaths = [...new Set(projection.parts.flatMap((part) => {
+      if (part.type !== "tool" || !part.input || typeof part.input !== "object") return []
+      const args = part.input as Record<string, unknown>
+      return [args.path, args.filePath, args.file_path, args.filename].filter((value): value is string => typeof value === "string" && value.length <= 256)
+    }))].slice(0, 5)
+    const identifiers = [...new Set(params.query.match(/[A-Za-z_][A-Za-z0-9_]{2,}/g) ?? [])]
+      .filter((word) => focused.snippet.toLowerCase().includes(word.toLowerCase())).slice(0, 8)
+    all.push({ ...focused, filePaths, identifiers, nodeIds: nodesForSource(store.meta, params.namespace, hit.hash) })
+  }
   const snapshot = await sha256Hex(
     JSON.stringify(
       all.map(({ hash, chunkId, startOffset, endOffset, snippet }) => ({

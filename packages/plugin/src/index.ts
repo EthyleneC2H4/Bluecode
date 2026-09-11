@@ -89,6 +89,7 @@ export default async function bluecodePlugin(
           compress: (params) => call(() => client.compress(params)),
           retrieve: (params) => call(() => client.retrieve(params)),
           getView: (ns) => call(() => client.getView(ns)),
+          getCandidate: (params) => call(() => client.getCandidate(params)),
           setView: (ns, plan) => call(() => client.setView(ns, plan)),
           clearView: (ns) => call(() => client.clearView(ns)),
           close: () => client.close(),

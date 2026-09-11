@@ -80,7 +80,7 @@ function rawConnect(socketPath: string): Promise<RawClient> {
         } catch {
           continue
         }
-        // First frame is the daemon handshake {"proto":2,"pid":N}.
+        // First frame is the daemon handshake {"proto":3,"pid":N}.
         if (!handshaken && typeof frame.pid === "number") {
           handshaken = true
           resolve({
@@ -148,7 +148,7 @@ describe("socket protocol", () => {
         parts: [{ type: "text", text: "Progress repeated. ".repeat(200) }],
       })
     const compressed = await client.roundtrip({
-      v: 2,
+      v: 3,
       op: "compress",
       params: {
         sessionId: "s1",
@@ -167,7 +167,7 @@ describe("socket protocol", () => {
     // retrieve by hash over the wire
     const refs = result.refs as Array<{ contentHash: string }>
     const fetched = await client.roundtrip({
-      v: 2,
+      v: 3,
       op: "retrieve",
       params: { namespace: { projectId: "p1", sessionId: "s1" }, hash: refs[0]!.contentHash },
     })
@@ -175,11 +175,11 @@ describe("socket protocol", () => {
     expect(fetched.result).toMatchObject({ found: true })
 
     // health over the wire
-    const health = await client.roundtrip({ v: 2, op: "health", params: {} })
+    const health = await client.roundtrip({ v: 3, op: "health", params: {} })
     expect(health.result).toMatchObject({ ok: true, sessions: 1 })
 
     // unknown op -> E_UNKNOWN_OP
-    const unknown = await client.roundtrip({ v: 2, op: "teleport", params: {} })
+    const unknown = await client.roundtrip({ v: 3, op: "teleport", params: {} })
     expect(unknown.ok).toBe(false)
     expect((unknown.error as Record<string, unknown>).code).toBe("E_UNKNOWN_OP")
 
@@ -190,12 +190,12 @@ describe("socket protocol", () => {
     expect((protocolError.error as Record<string, unknown>).code).toBe("E_PROTOCOL")
 
     // invalid params -> E_INVALID_PARAMS
-    const invalid = await client.roundtrip({ v: 2, op: "compress", params: { nope: 1 } })
+    const invalid = await client.roundtrip({ v: 3, op: "compress", params: { nope: 1 } })
     expect(invalid.ok).toBe(false)
     expect((invalid.error as Record<string, unknown>).code).toBe("E_INVALID_PARAMS")
 
     // The loop survived everything above.
-    const stillAlive = await client.roundtrip({ v: 2, op: "health", params: {} })
+    const stillAlive = await client.roundtrip({ v: 3, op: "health", params: {} })
     expect(stillAlive.ok).toBe(true)
 
     client.close()
@@ -316,7 +316,7 @@ describe("cold-start writer arbitration", () => {
       ])
       const client = await rawConnect(path.join(dataDir, "headroomd.sock"))
       try {
-        expect((await client.roundtrip({ v: 2, op: "health", params: {} })).ok).toBe(true)
+        expect((await client.roundtrip({ v: 3, op: "health", params: {} })).ok).toBe(true)
       } finally {
         client.close()
       }
@@ -348,7 +348,7 @@ describe("cold-start writer arbitration", () => {
       expect(existsSync(path.join(dataDir, "other.sock"))).toBe(false)
       const client = await rawConnect(first.socketPath)
       try {
-        expect((await client.roundtrip({ v: 2, op: "health", params: {} })).ok).toBe(true)
+        expect((await client.roundtrip({ v: 3, op: "health", params: {} })).ok).toBe(true)
       } finally {
         client.close()
       }

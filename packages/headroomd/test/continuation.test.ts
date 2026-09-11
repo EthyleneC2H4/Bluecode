@@ -284,7 +284,7 @@ test("daemon rejects coalesced requests beyond admission capacity", async () => 
     socket.write(
       Array.from(
         { length: 33 },
-        (_, i) => JSON.stringify({ v: 2, id: `f${i}`, op: "health", params: {} }) + "\n"
+        (_, i) => JSON.stringify({ v: 3, id: `f${i}`, op: "health", params: {} }) + "\n"
       ).join("")
     )
     await closed
