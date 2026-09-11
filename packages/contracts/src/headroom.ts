@@ -1,5 +1,5 @@
 /**
- * headroomd protocol v2 — schemas and inferred types only (no runtime logic).
+ * headroomd protocol v3 — schemas and inferred types only (no runtime logic).
  *
  * Key design decision: this module deliberately does NOT import any opencode
  * type. Messages cross the boundary as a minimal structured projection (the
@@ -7,8 +7,8 @@
  * snapshot that gets refreshed periodically.
  */
 import { z } from "zod"
-/** v2 binds replacement plans to complete source digests. */
-export const HEADROOM_PROTOCOL_VERSION = 2 as const
+/** v3 adds snapshot-bound atomic operations and layered evidence nodes. */
+export const HEADROOM_PROTOCOL_VERSION = 3 as const
 
 /**
  * Headroom hashes are BARE 64-char lowercase hex — the digest itself is the
@@ -52,10 +52,142 @@ export const chatMessageSchema = z.object({
   parts: z.array(partSchema),
   protected: z.boolean().optional(),
   archive: z
-    .object({ historyHash: headroomHashSchema, memory: z.array(memoryEntrySchema) })
+    .object({ historyHash: headroomHashSchema, memory: z.array(memoryEntrySchema), nodeIds: z.array(headroomHashSchema).optional(), protectedMemory: z.array(memoryEntrySchema).optional() })
     .optional(),
 })
 export type ChatMessage = z.infer<typeof chatMessageSchema>
+
+export const namespaceSchema = z.object({
+  projectId: z.string(),
+  sessionId: z.string(),
+})
+export type Namespace = z.infer<typeof namespaceSchema>
+
+export const sourceSnapshotSchema = z.object({
+  messageIds: z.array(z.string()),
+  sourceDigests: z.array(headroomHashSchema),
+}).refine((snapshot) => snapshot.messageIds.length === snapshot.sourceDigests.length && new Set(snapshot.messageIds).size === snapshot.messageIds.length, "invalid source snapshot")
+export type SourceSnapshot = z.infer<typeof sourceSnapshotSchema>
+
+const operationBase = {
+  operationId: headroomHashSchema,
+  sourceVersion: z.literal(1),
+  nodeId: headroomHashSchema,
+}
+export const viewOperationSchema = z.discriminatedUnion("kind", [
+  z.object({
+    ...operationBase,
+    kind: z.literal("range"),
+    messageIds: z.array(z.string()).min(1),
+    sourceDigests: z.array(headroomHashSchema).min(1),
+    replacement: chatMessageSchema,
+  }),
+  z.object({
+    ...operationBase,
+    kind: z.literal("tool-output"),
+    messageId: z.string(),
+    sourceDigest: headroomHashSchema,
+    partIndex: z.number().int().nonnegative(),
+    outputDigest: headroomHashSchema,
+    replacement: z.string(),
+  }),
+  z.object({
+    ...operationBase,
+    kind: z.literal("text-range"),
+    messageId: z.string(),
+    sourceDigest: headroomHashSchema,
+    partIndex: z.number().int().nonnegative(),
+    start: z.number().int().nonnegative(),
+    end: z.number().int().positive(),
+    textDigest: headroomHashSchema,
+    replacement: z.string(),
+  }),
+]).refine((operation) => operation.kind === "text-range" ? operation.end > operation.start : operation.kind === "range" ? operation.messageIds.length === operation.sourceDigests.length && new Set(operation.messageIds).size === operation.messageIds.length : true, "invalid operation range")
+export type ViewOperation = z.infer<typeof viewOperationSchema>
+
+export const layeredSourceRefSchema = z.object({
+  messageId: z.string(),
+  contentHash: headroomHashSchema,
+  partIndex: z.number().int().nonnegative().optional(),
+  start: z.number().int().nonnegative().optional(),
+  end: z.number().int().nonnegative().optional(),
+  historyHash: headroomHashSchema.optional(),
+  nodeId: headroomHashSchema.optional(),
+})
+export type LayeredSourceRef = z.infer<typeof layeredSourceRefSchema>
+export const layeredNodeSchema = z.object({
+  nodeId: headroomHashSchema,
+  namespace: namespaceSchema,
+  level: z.number().int().nonnegative(),
+  children: z.array(headroomHashSchema),
+  sourceRefs: z.array(layeredSourceRefSchema),
+  policyVersion: z.string(),
+  text: z.string(),
+  tokens: z.number().int().nonnegative(),
+  sourceTokens: z.number().int().nonnegative(),
+})
+export type LayeredNode = z.infer<typeof layeredNodeSchema>
+export const layeredBudgetSchema = z.object({
+  availableInputTokens: z.number().nonnegative(),
+  targetTokens: z.number().nonnegative(),
+  protectedTokens: z.number().nonnegative(),
+  recentTokens: z.number().nonnegative(),
+  wrapperTokens: z.number().nonnegative(),
+  historyBudgetTokens: z.number().nonnegative(),
+  memoryTokens: z.number().nonnegative(),
+  reasons: z.array(z.string()),
+})
+export type LayeredBudget = z.infer<typeof layeredBudgetSchema>
+export const layeredMetricsSchema = z.object({
+  queueMs: z.number().nonnegative().optional(),
+  durationMs: z.number().nonnegative().optional(),
+  cpuUserMicros: z.number().nonnegative().optional(),
+  cpuSystemMicros: z.number().nonnegative().optional(),
+  rssBytes: z.number().nonnegative().optional(),
+  scannedMessages: z.number().int().nonnegative(),
+  analyzedMessages: z.number().int().nonnegative(),
+  analysisCacheHits: z.number().int().nonnegative(),
+  candidateCount: z.number().int().nonnegative(),
+  selectedMemoryBlocks: z.number().int().nonnegative(),
+  deduplicatedObservations: z.number().int().nonnegative(),
+  operationCount: z.number().int().nonnegative(),
+  leafNodes: z.number().int().nonnegative(),
+  parentNodes: z.number().int().nonnegative(),
+  tokenCounter: z.string(),
+  tokenCountMode: z.enum(["estimated", "tokenizer"]),
+})
+export type LayeredMetrics = z.infer<typeof layeredMetricsSchema>
+
+/** Append-only source-bound task events. A successful different command never resolves a failure. */
+export const layeredStateEventSchema = memoryEntrySchema.extend({
+  eventId: headroomHashSchema,
+  sourceDigests: z.array(headroomHashSchema),
+  order: z.number().int().nonnegative(),
+  tool: z.string().optional(),
+  inputDigest: headroomHashSchema.optional(),
+  outputDigest: headroomHashSchema.optional(),
+  status: z.string().optional(),
+})
+export type LayeredStateEvent = z.infer<typeof layeredStateEventSchema>
+export const layeredTaskStateSchema = z.object({
+  events: z.array(layeredStateEventSchema),
+  currentRequestIds: z.array(z.string()),
+})
+export type LayeredTaskState = z.infer<typeof layeredTaskStateSchema>
+
+export const summaryProviderSchema = z.object({
+  enabled: z.boolean().optional(),
+  provider: z.string().optional(),
+  model: z.string().optional(),
+  endpoint: z.string().optional(),
+  timeoutMs: z.number().int().positive().optional(),
+  maxInputTokens: z.number().int().positive().max(8192).optional(),
+  maxOutputTokens: z.number().int().positive().max(1024).optional(),
+  sessionInputTokens: z.number().int().positive().max(32768).optional(),
+  sessionOutputTokens: z.number().int().positive().max(4096).optional(),
+})
+export type SummaryProviderConfig = z.infer<typeof summaryProviderSchema>
+
 
 // ---------------------------------------------------------------------------
 // compress
@@ -68,6 +200,10 @@ export const headroomCompressParamsSchema = z.object({
   contextWindowTokens: z.number().positive(),
   targetTokens: z.number().nonnegative().optional(),
   epoch: z.string().optional(),
+  strategy: z.enum(["legacy", "layered"]).optional(),
+  memoryMaxTokens: z.number().int().nonnegative().optional(),
+  memoryRatio: z.number().min(0).max(1).optional(),
+  summaryProvider: summaryProviderSchema.optional(),
   protectedMessageIds: z.array(z.string()).optional(),
   /** Compaction trigger watermark; applied by headroomd as 0.7 when omitted. */
   triggerRatio: z.number().default(0.7),
@@ -85,9 +221,57 @@ export const compactionRefSchema = z.object({
   turnIndex: z.number(),
 })
 
+function operationSourcesAligned(plan: { compacted: boolean; operations?: ViewOperation[] | undefined; sourceSnapshot?: SourceSnapshot | undefined; replacedMessageIds: string[]; sourceDigests?: string[] | undefined }): boolean {
+  if (plan.operations === undefined) return true // Legacy single-range plan.
+  if (!plan.compacted) return plan.operations.length === 0
+  if (!plan.operations.length || !plan.sourceSnapshot) return false
+  const snapshot = new Map(plan.sourceSnapshot.messageIds.map((id, index) => [id, { index, digest: plan.sourceSnapshot!.sourceDigests[index] }]))
+  const touched = new Set<string>(), operationIds = new Set<string>()
+  const spans = new Map<string, Array<{ start: number; end: number }>>()
+  const whole = new Set<string>()
+  for (const operation of plan.operations) {
+    if (operationIds.has(operation.operationId)) return false
+    operationIds.add(operation.operationId)
+    const ids = operation.kind === "range" ? operation.messageIds : [operation.messageId]
+    const digests = operation.kind === "range" ? operation.sourceDigests : [operation.sourceDigest]
+    for (let i = 0; i < ids.length; i++) {
+      const source = snapshot.get(ids[i]!)
+      if (!source || source.digest !== digests[i]) return false
+      if (operation.kind === "range" && source.index !== snapshot.get(ids[0]!)!.index + i) return false
+      touched.add(ids[i]!)
+      if (operation.kind === "range") {
+        if (whole.has(ids[i]!)) return false
+        whole.add(ids[i]!)
+      }
+    }
+    if (operation.kind !== "range") {
+      const key = JSON.stringify([operation.messageId, operation.partIndex])
+      const list = spans.get(key) ?? []
+      list.push(operation.kind === "tool-output" ? { start: 0, end: Infinity } : { start: operation.start, end: operation.end })
+      spans.set(key, list)
+    }
+  }
+  for (const operation of plan.operations) if (operation.kind !== "range" && whole.has(operation.messageId)) return false
+  for (const list of spans.values()) {
+    list.sort((a, b) => a.start - b.start)
+    for (let i = 1; i < list.length; i++) if (list[i - 1]!.end > list[i]!.start) return false
+  }
+  const ordered = plan.sourceSnapshot.messageIds.filter((id) => touched.has(id))
+  return ordered.length === plan.replacedMessageIds.length && ordered.every((id, index) => id === plan.replacedMessageIds[index] && snapshot.get(id)!.digest === plan.sourceDigests?.[index])
+}
+
 export const headroomCompressResultSchema = z
   .object({
     compacted: z.boolean(),
+    strategy: z.enum(["legacy", "layered"]).optional(),
+    operations: z.array(viewOperationSchema).optional(),
+    nodes: z.array(layeredNodeSchema).optional(),
+    protectedMemory: z.array(memoryEntrySchema).optional(),
+    taskState: layeredTaskStateSchema.optional(),
+    sourceSnapshot: sourceSnapshotSchema.optional(),
+    budget: layeredBudgetSchema.optional(),
+    metrics: layeredMetricsSchema.optional(),
+    enhancementJobId: z.string().optional(),
     sourceDigests: z.array(headroomHashSchema).optional(),
     epoch: z.string().optional(),
     memory: z.array(memoryEntrySchema).optional(),
@@ -116,6 +300,7 @@ export const headroomCompressResultSchema = z
   // historyHash/summary are null, freedTokens is 0 and both lists are empty.
   .refine(
     (r) =>
+      operationSourcesAligned(r) &&
       r.rawTokens === r.sourceTokensEst &&
       r.finalTokensEst === r.retainedTokensEst + r.replacementTokensEst &&
       r.freedTokens === r.sourceTokensEst - r.finalTokensEst &&
@@ -145,15 +330,24 @@ export const headroomCompressResultSchema = z
   )
 export type HeadroomCompressResult = z.infer<typeof headroomCompressResultSchema>
 
+export const getCandidateParamsSchema = z.object({
+  namespace: namespaceSchema,
+  jobId: z.string(),
+  epoch: z.string().optional(),
+  sourceDigests: z.array(headroomHashSchema).optional(),
+})
+export type GetCandidateParams = z.infer<typeof getCandidateParamsSchema>
+export const getCandidateResultSchema = z.object({
+  status: z.enum(["queued", "running", "ready", "rejected", "missing"]),
+  candidate: headroomCompressResultSchema.nullable(),
+  reason: z.string().optional(),
+})
+export type GetCandidateResult = z.infer<typeof getCandidateResultSchema>
+
 // ---------------------------------------------------------------------------
 // retrieve
 // ---------------------------------------------------------------------------
 
-export const namespaceSchema = z.object({
-  projectId: z.string(),
-  sessionId: z.string(),
-})
-export type Namespace = z.infer<typeof namespaceSchema>
 
 /** Retrieve by hash: fetch the full original content stored under `hash`. */
 export const retrieveByHashParamsSchema = z.strictObject({
@@ -185,6 +379,7 @@ export const retrieveByQueryParamsSchema = z.strictObject({
   maxBytes: z.number().int().positive().optional(),
   maxTokens: z.number().int().positive().optional(),
   query: z.string(),
+  style: z.enum(["cards", "segments"]).optional(),
   // Protocol hygiene cap: one unbounded query could dump the whole archive
   // into model context (each hit carries a snippet). The plugin tool CLAMPS
   // to this cap instead of mirroring it, so LLM callers see truncation rather
@@ -194,8 +389,19 @@ export const retrieveByQueryParamsSchema = z.strictObject({
 export type RetrieveByQueryParams = z.input<typeof retrieveByQueryParamsSchema>
 export type RetrieveByQueryParamsParsed = z.output<typeof retrieveByQueryParamsSchema>
 
+export const retrieveByNodeParamsSchema = z.strictObject({
+  namespace: namespaceSchema,
+  nodeId: headroomHashSchema,
+  detail: z.enum(["summary", "children", "source"]).optional(),
+  depth: z.number().int().nonnegative().max(20).optional(),
+  cursor: z.string().optional(),
+  maxBytes: z.number().int().positive().optional(),
+  maxTokens: z.number().int().positive().optional(),
+})
+export type RetrieveByNodeParams = z.infer<typeof retrieveByNodeParamsSchema>
+
 /**
- * The three retrieve modes share no literal discriminator field, so a plain
+ * The four retrieve modes share no literal discriminator field, so a plain
  * union of strict members is used instead of z.discriminatedUnion: strictness
  * makes the match exclusive (an object carrying both `hash` and `query`, or
  * neither, fails both branches -> caller answers E_INVALID_PARAMS).
@@ -204,6 +410,7 @@ export const headroomRetrieveParamsSchema = z.union([
   retrieveByHashParamsSchema,
   retrieveByHistoryParamsSchema,
   retrieveByQueryParamsSchema,
+  retrieveByNodeParamsSchema,
 ])
 export type HeadroomRetrieveParams = z.input<typeof headroomRetrieveParamsSchema>
 
@@ -252,6 +459,9 @@ export const retrieveHitSchema = z.object({
   turnIndex: z.number(),
   role: z.enum(["user", "assistant"]),
   snippet: z.string(),
+  filePaths: z.array(z.string()).optional(),
+  identifiers: z.array(z.string()).optional(),
+  nodeIds: z.array(headroomHashSchema).optional(),
   chunkId: z.string().optional(),
   startOffset: z.number().optional(),
   endOffset: z.number().optional(),
@@ -265,10 +475,26 @@ export const retrieveByQueryResultSchema = z.object({
 })
 export type RetrieveByQueryResult = z.infer<typeof retrieveByQueryResultSchema>
 
+export const retrieveByNodeResultSchema = z.discriminatedUnion("found", [
+  z.object({ found: z.literal(false) }),
+  z.object({
+    found: z.literal(true),
+    node: z.object({ nodeId: headroomHashSchema, level: z.number().int().nonnegative(), policyVersion: z.string(), tokens: z.number().int().nonnegative(), sourceTokens: z.number().int().nonnegative() }),
+    content: z.string(),
+    children: z.array(z.object({ nodeId: headroomHashSchema, level: z.number().int().nonnegative(), tokens: z.number().int().nonnegative() })).optional(),
+    sourceRefs: z.array(layeredSourceRefSchema).optional(),
+    sourceItems: z.array(retrieveByHistoryItemSchema).optional(),
+    nextCursor: z.string().nullable().optional(),
+    truncated: z.boolean().optional(),
+  }),
+])
+export type RetrieveByNodeResult = z.infer<typeof retrieveByNodeResultSchema>
+
 export const headroomRetrieveResultSchema = z.union([
   retrieveByHashResultSchema,
   retrieveByHistoryResultSchema,
   retrieveByQueryResultSchema,
+  retrieveByNodeResultSchema,
 ])
 export type HeadroomRetrieveResult = z.infer<typeof headroomRetrieveResultSchema>
 
@@ -291,6 +517,7 @@ export type HealthResult = z.infer<typeof healthResultSchema>
 
 export const headroomOpSchema = z.enum([
   "compress",
+  "getCandidate",
   "retrieve",
   "health",
   "view.get",

@@ -1,9 +1,10 @@
 import type { ChatMessage, HeadroomCompressResult } from "@bluecode/contracts"
+import { materializeOperations } from "./layered-operations"
 import { COMPACTION_MARKER, isCompactionReplacement, contentDigest } from "./turns"
 
 export type CompactionPlan = Pick<
   HeadroomCompressResult,
-  "historyHash" | "summary" | "refs" | "replacedMessageIds" | "sourceDigests" | "epoch" | "memory"
+  "historyHash" | "summary" | "refs" | "replacedMessageIds" | "sourceDigests" | "epoch" | "memory" | "operations" | "sourceSnapshot"
 >
 
 export type CompactionApplyStatus = "applied" | "no-match" | "invalid" | "already-compacted"
@@ -44,6 +45,7 @@ export function materializeCompaction(
   messages: readonly ChatMessage[],
   plan: CompactionPlan
 ): MaterializedCompaction {
+  if (plan.operations !== undefined) return materializeOperations(messages, plan.operations, plan.sourceSnapshot)
   const ids = plan.replacedMessageIds
   if (ids.length === 0 || new Set(ids).size !== ids.length) {
     return { status: "invalid", messages: [...messages] }

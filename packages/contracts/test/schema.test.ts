@@ -255,7 +255,7 @@ describe("rtk protocol v3", () => {
   })
 })
 
-describe("headroomd protocol v2", () => {
+describe("headroomd protocol v3", () => {
   const ns = { projectId: "p1", sessionId: "s1" }
 
   test("chat message projection", () => {
@@ -446,10 +446,10 @@ describe("headroomd protocol v2", () => {
     expect(headroomRetrieveParamsSchema.safeParse({ namespace: ns }).success).toBe(false)
   })
 
-  test("headroom envelopes require protocol v2", () => {
-    expect(HEADROOM_PROTOCOL_VERSION).toBe(2)
+  test("headroom envelopes require protocol v3", () => {
+    expect(HEADROOM_PROTOCOL_VERSION).toBe(3)
     expect(
-      headroomRequestSchema.safeParse({ v: 2, id: "h1", op: "health", params: {} }).success
+      headroomRequestSchema.safeParse({ v: 3, id: "h1", op: "health", params: {} }).success
     ).toBe(true)
     expect(
       headroomRequestSchema.safeParse({ v: 1, id: "h1", op: "health", params: {} }).success
