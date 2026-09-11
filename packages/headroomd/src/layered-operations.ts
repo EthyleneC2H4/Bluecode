@@ -18,6 +18,7 @@ export function materializeOperations(
   const fail = (status: MaterializedCompaction["status"] = "invalid"): MaterializedCompaction => ({ status, messages: [...messages] })
   if (!operations.length || !snapshot) return fail()
   const byId = new Map<string, number>()
+  const digests = new Map<number, string>()
   for (let i = 0; i < messages.length; i++) {
     if (byId.has(messages[i]!.info.id)) return fail()
     byId.set(messages[i]!.info.id, i)
@@ -25,15 +26,15 @@ export function materializeOperations(
   if (snapshot) {
     if (snapshot.messageIds.length !== snapshot.sourceDigests.length || new Set(snapshot.messageIds).size !== snapshot.messageIds.length) return fail()
     for (let i = 0; i < snapshot.messageIds.length; i++) {
-      if (messages[i]?.info.id !== snapshot.messageIds[i] || contentDigest(messages[i]!) !== snapshot.sourceDigests[i]) return fail()
+      if (messages[i]?.info.id !== snapshot.messageIds[i]) return fail()
+      const digest = contentDigest(messages[i]!)
+      if (digest !== snapshot.sourceDigests[i]) return fail()
+      digests.set(i, digest)
     }
   }
-  const digests = new Map<number, string>()
-  const matches = (index: number, digest: string): boolean => {
-    let actual = digests.get(index)
-    if (!actual) { actual = contentDigest(messages[index]!); digests.set(index, actual) }
-    return actual === digest
-  }
+  // An operation may only touch sources inside the validated prefix. A digest
+  // of an appended message does not make that message part of this snapshot.
+  const matches = (index: number, digest: string): boolean => digests.get(index) === digest
   const ranges: Array<{ start: number; end: number; replacement: ChatMessage }> = []
   const parts = new Map<number, Map<number, Array<Extract<ViewOperation, { kind: "tool-output" | "text-range" }>>>>()
   const whole = new Set<number>()

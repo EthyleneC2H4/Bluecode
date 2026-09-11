@@ -4,7 +4,7 @@ import { canonicalJSON, contentDigest } from "./turns"
 import { COMPLETED_TOOL_STATUSES, materializeOperations, textDigest } from "./layered-operations"
 import { createCachedTokenCounter, estimatedTokenCounter, type TokenCounter } from "./token-counter"
 
-export const LAYERED_POLICY_VERSION = "layered-rules-v1"
+export const LAYERED_POLICY_VERSION = "layered-rules-v2"
 const NODE_MARKER = "[headroom node:"
 const LEAF_SOURCE_TOKENS = 8192
 const LEAF_SUMMARY_TOKENS = 512
@@ -66,7 +66,7 @@ export interface LayeredPlanOptions {
   epoch?: string
   cache?: LayeredCache
   tokenCounter?: TokenCounter
-  /** Existing immutable nodes, e.g. from the namespace archive. */
+  /** Existing immutable nodes reachable from visible references, including all descendants. */
   nodes?: readonly LayeredNode[]
 }
 export type LayeredPlan = HeadroomCompressResult & {
@@ -81,8 +81,11 @@ export type LayeredPlan = HeadroomCompressResult & {
 export function nodeContentHash(node: Omit<LayeredNode, "nodeId">): string {
   return textDigest(canonicalJSON(node))
 }
+function immutableEvent(event: LayeredStateEvent): LayeredStateEvent {
+  return Object.freeze({ ...event, sourceIds: Object.freeze([...event.sourceIds]) as unknown as string[], sourceDigests: Object.freeze([...event.sourceDigests]) as unknown as string[] })
+}
 function makeNode(node: Omit<LayeredNode, "nodeId">): LayeredNode {
-  return Object.freeze({ ...node, namespace: Object.freeze({ ...node.namespace }), nodeId: nodeContentHash(node), children: Object.freeze([...node.children]) as unknown as string[], sourceRefs: Object.freeze(node.sourceRefs.map((ref) => Object.freeze({ ...ref }))) as unknown as LayeredSourceRef[] })
+  return Object.freeze({ ...node, ...(node.stateEvents ? { stateEvents: Object.freeze(node.stateEvents.map(immutableEvent)) as unknown as LayeredStateEvent[] } : {}), namespace: Object.freeze({ ...node.namespace }), nodeId: nodeContentHash(node), children: Object.freeze([...node.children]) as unknown as string[], sourceRefs: Object.freeze(node.sourceRefs.map((ref) => Object.freeze({ ...ref }))) as unknown as LayeredSourceRef[] })
 }
 function clip(text: string, maxTokens: number, counter: TokenCounter): string {
   if (counter.count(text) <= maxTokens) return text
@@ -112,7 +115,7 @@ function materialRanges(text: string): Array<{ start: number; end: number }> {
   }
   return ranges
 }
-function skeleton(tool: string, input: unknown, status: string, output: string, error: string, counter: TokenCounter): { text: string; kind: MemoryEntry["kind"] } {
+function skeleton(tool: string, input: unknown, status: string, output: string, error: string, counter: TokenCounter): { text: string; kind: MemoryEntry["kind"]; safeToReplace: boolean } {
   const args = input === undefined ? "" : canonicalJSON(input)
   const failure = /error|fail/i.test(status) || /\b(?:error|failed|exception|panic|traceback)\b|失败|错误/i.test(output + error)
   const command = typeof input === "object" && input ? String((input as Record<string, unknown>).command ?? "") : ""
@@ -134,9 +137,14 @@ function skeleton(tool: string, input: unknown, status: string, output: string, 
   else if (/grep|search|glob/i.test(tool)) diagnostics.push(...lines.filter((line) => line.trim()).slice(0, 5))
   // Read evidence records the file and revision via its source reference, without restating source code.
   if (failure && !diagnostics.length) diagnostics.push(...lines.slice(0, 3), ...lines.slice(-3))
-  const header = `tool ${tool} (${status}) input: ${clip(args, 120, counter)}`
-  const body = [header, error, ...diagnostics].filter(Boolean).join("\n")
-  return { text: clip(body, 480, counter), kind }
+  // Reserve independent capacity for the actual assertion/diagnosis. The
+  // original state.error remains untouched in the host, so generic runner
+  // context must not consume the diagnostic allowance in the replacement.
+  const header = clip(`tool ${tool} (${status}) input: ${clip(args, 120, counter)}`, 128, counter)
+  const diagnosis = diagnostics.join("\n")
+  const safeToReplace = !failure || counter.count(diagnosis) <= 320
+  const body = [header, clip(diagnosis, 320, counter), clip(error, 24, counter)].filter(Boolean).join("\n")
+  return { text: clip(body, 480, counter), kind, safeToReplace }
 }
 function analyze(message: ChatMessage, namespaceKey: string, counter: TokenCounter, digest: string): Analysis {
   const observations: Observation[] = [], protectedMemory: MemoryEntry[] = []
@@ -165,10 +173,10 @@ function analyze(message: ChatMessage, namespaceKey: string, counter: TokenCount
         observations.push({ partIndex, kind: "text-range", ...range, fieldDigest: textDigest(material), sourceTokens: counter.count(material), text: "Explicit reference material; expand source for original content.", memoryKind: "decisions", key: textDigest(namespaceKey + "\0material\0" + material) })
       }
     } else if (part.type === "tool" && COMPLETED_TOOL_STATUSES.has(part.state.status) && part.state.output && !part.state.output.includes(NODE_MARKER)) {
-      const { text, kind } = skeleton(part.tool, part.input, part.state.status, part.state.output, part.state.error ?? "", counter)
+      const { text, kind, safeToReplace } = skeleton(part.tool, part.input, part.state.status, part.state.output, part.state.error ?? "", counter)
       const fieldDigest = textDigest(part.state.output)
       stateEntries.push({ partIndex, kind, text, tool: part.tool, inputDigest: textDigest(canonicalJSON(part.input)), outputDigest: fieldDigest, status: part.state.status })
-      observations.push({ partIndex, kind: "tool-output", fieldDigest, sourceTokens: counter.count(part.state.output), text, memoryKind: kind, key: textDigest(canonicalJSON([namespaceKey, part.tool, part.input, part.state.status, fieldDigest, part.state.error])) })
+      if (safeToReplace) observations.push({ partIndex, kind: "tool-output", fieldDigest, sourceTokens: counter.count(part.state.output), text, memoryKind: kind, key: textDigest(canonicalJSON([namespaceKey, part.tool, part.input, part.state.status, fieldDigest, part.state.error])) })
     }
   }
   if (message.archive?.protectedMemory) protectedMemory.push(...message.archive.protectedMemory)
@@ -208,6 +216,7 @@ export function buildLayeredPlan(messages: readonly ChatMessage[], options: Laye
   const protectedMemory: MemoryEntry[] = []
   const protectedKeys = new Set<string>()
   const events: LayeredStateEvent[] = []
+  const messageEvents: LayeredStateEvent[][] = []
   let rawTokens = 0
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i]!
@@ -219,10 +228,13 @@ export function buildLayeredPlan(messages: readonly ChatMessage[], options: Laye
     if (analysis) metrics.analysisCacheHits++
     else { analysis = analyze(message, namespaceKey, counter, digest); options.cache?.set(key, analysis); metrics.analyzedMessages++ }
     analyses.push(analysis); rawTokens += analysis.tokens
+    const sourceEvents: LayeredStateEvent[] = []
     for (const entry of analysis.stateEntries) {
       const { partIndex, ...event } = entry
-      events.push({ ...event, eventId: textDigest(canonicalJSON([namespaceKey, digest, partIndex, event.kind])), sourceIds: [message.info.id], sourceDigests: [digest], order: i })
+      sourceEvents.push({ ...event, eventId: textDigest(canonicalJSON([namespaceKey, digest, partIndex, event.kind])), sourceIds: [message.info.id], sourceDigests: [digest], order: i })
     }
+    events.push(...sourceEvents)
+    messageEvents.push(sourceEvents)
     for (const entry of analysis.protectedMemory) {
       const key = canonicalJSON([entry.text, entry.sourceIds])
       if (!protectedKeys.has(key)) { protectedKeys.add(key); protectedMemory.push({ ...entry, sourceIds: [...entry.sourceIds] }) }
@@ -235,7 +247,8 @@ export function buildLayeredPlan(messages: readonly ChatMessage[], options: Laye
   const byKey = new Map<string, Candidate[]>()
   for (let i = 0; i < recentStart; i++) {
     const message = messages[i]!, analysis = analyses[i]!
-    if (message.protected || protectedIds.has(message.info.id)) continue
+    // Preserve a message verbatim when its state cannot fit one bounded leaf.
+    if (message.protected || protectedIds.has(message.info.id) || messageEvents[i]!.length > 64) continue
     for (const observation of analysis.observations) {
       // Minimum reference wrapper has a fixed-size node ID. Nonpositive gains are inert.
       const minimumReplacement = `${NODE_MARKER}${"0".repeat(64)}]${observation.memoryKind === "failures" ? `\n${observation.text}` : ""}`
@@ -252,40 +265,65 @@ export function buildLayeredPlan(messages: readonly ChatMessage[], options: Laye
   // Persisted ancestors are included only when referenced by this visible input, never from another session.
   const available = new Map((options.nodes ?? []).filter((node) => canonicalJSON(node.namespace) === namespaceKey && nodeContentHash(nodeWithoutId(node)) === node.nodeId).map((node) => [node.nodeId, node]))
   const roots: LayeredNode[] = []
-  const usedExisting = new Set<string>()
-  const addExisting = (id: string) => {
-    if (usedExisting.has(id)) return
-    usedExisting.add(id)
+  const usedExisting = new Set<string>(), restored = new Set<string>()
+  const eventIds = new Set(events.map((event) => event.eventId))
+  const restoreState = (id: string) => {
+    if (restored.has(id)) return
+    restored.add(id)
     const node = available.get(id)
     if (!node) return
-    roots.push(node)
-  }
-  for (const message of messages.slice(0, recentStart)) {
-    for (const id of message.archive?.nodeIds ?? []) addExisting(id)
-    for (const part of message.parts) {
-      const text = part.type === "text" ? part.text : part.type === "tool" ? part.state.output ?? "" : ""
-      for (const match of text.matchAll(/\[headroom node:([0-9a-f]{64})\]/g)) addExisting(match[1]!)
+    if (node.level === 0 && !node.children.length) {
+      const sources = new Map(node.sourceRefs.map((ref) => [ref.messageId, ref.contentHash]))
+      for (const event of node.stateEvents ?? []) {
+        if (!event.sourceIds.length || event.sourceIds.length !== event.sourceDigests.length || event.sourceIds.some((sourceId, index) => sources.get(sourceId) !== event.sourceDigests[index])) continue
+        if (!eventIds.has(event.eventId)) { events.push(immutableEvent(event)); eventIds.add(event.eventId) }
+      }
+    }
+    for (const childId of node.children) {
+      const child = available.get(childId)
+      if (child && child.level < node.level) restoreState(childId)
     }
   }
+  const addExisting = (id: string, merge: boolean) => {
+    restoreState(id)
+    if (!merge || usedExisting.has(id)) return
+    usedExisting.add(id)
+    const node = available.get(id)
+    if (node) roots.push(node)
+  }
+  for (let index = 0; index < messages.length; index++) {
+    const message = messages[index]!
+    for (const id of message.archive?.nodeIds ?? []) addExisting(id, index < recentStart)
+    for (const part of message.parts) {
+      const text = part.type === "text" ? part.text : part.type === "tool" ? part.state.output ?? "" : ""
+      for (const match of text.matchAll(/\[headroom node:([0-9a-f]{64})\]/g)) addExisting(match[1]!, index < recentStart)
+    }
+  }
+  // Keep the original source order and identity; summaries are never reclassified.
+  events.sort((a, b) => a.order - b.order || a.eventId.localeCompare(b.eventId))
   interface SourcePiece { candidate: Candidate; start?: number; end?: number; tokens: number }
   const candidateNodes = new Map<Candidate, string[]>()
   let group: SourcePiece[] = [], groupTokens = 0
+  const groupEvents = new Map<string, LayeredStateEvent>()
   const flush = () => {
     if (!group.length) return
     const refs: LayeredSourceRef[] = group.map(({ candidate, start, end }) => ({ messageId: candidate.message.info.id, contentHash: candidate.digest, partIndex: candidate.observation.partIndex, ...(start !== undefined ? { start, end: end! } : candidate.observation.start !== undefined ? { start: candidate.observation.start, end: candidate.observation.end! } : {}), ...(candidate.message.archive ? { historyHash: candidate.message.archive.historyHash } : {}) }))
     const uniqueText = [...new Set(group.map(({ candidate }) => candidate.observation.text))]
     const text = clip(uniqueText.join("\n"), LEAF_SUMMARY_TOKENS, counter)
-    const node = makeNode({ namespace: { ...options.namespace }, level: 0, children: [], sourceRefs: refs, policyVersion: LAYERED_POLICY_VERSION, text, tokens: counter.count(text), sourceTokens: groupTokens })
+    const node = makeNode({ namespace: { ...options.namespace }, level: 0, children: [], sourceRefs: refs, stateEvents: [...groupEvents.values()], policyVersion: LAYERED_POLICY_VERSION, text, tokens: counter.count(text), sourceTokens: groupTokens })
     nodes.push(node); roots.push(node); metrics.leafNodes++
     for (const { candidate } of group) {
       const ids = candidateNodes.get(candidate) ?? []
       if (ids.at(-1) !== node.nodeId) ids.push(node.nodeId)
       candidateNodes.set(candidate, ids)
     }
-    group = []; groupTokens = 0
+    group = []; groupTokens = 0; groupEvents.clear()
   }
   const addPiece = (piece: SourcePiece) => {
-    if (group.length && groupTokens + piece.tokens > LEAF_SOURCE_TOKENS) flush()
+    const stateEvents = messageEvents[piece.candidate.messageIndex]!
+    const extraEvents = stateEvents.filter((event) => !groupEvents.has(event.eventId))
+    if (group.length && (groupTokens + piece.tokens > LEAF_SOURCE_TOKENS || groupEvents.size + extraEvents.length > 64)) flush()
+    for (const event of stateEvents) groupEvents.set(event.eventId, event)
     group.push(piece); groupTokens += piece.tokens
     if (groupTokens >= LEAF_SOURCE_TOKENS) flush()
   }

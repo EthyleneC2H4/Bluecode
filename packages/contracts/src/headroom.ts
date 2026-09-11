@@ -115,17 +115,36 @@ export const layeredSourceRefSchema = z.object({
   nodeId: headroomHashSchema.optional(),
 })
 export type LayeredSourceRef = z.infer<typeof layeredSourceRefSchema>
+/** Append-only source-bound task events. A successful different command never resolves a failure. */
+export const layeredStateEventSchema = memoryEntrySchema.extend({
+  eventId: headroomHashSchema,
+  sourceDigests: z.array(headroomHashSchema),
+  order: z.number().int().nonnegative(),
+  tool: z.string().optional(),
+  inputDigest: headroomHashSchema.optional(),
+  outputDigest: headroomHashSchema.optional(),
+  status: z.string().optional(),
+})
+export type LayeredStateEvent = z.infer<typeof layeredStateEventSchema>
+
 export const layeredNodeSchema = z.object({
   nodeId: headroomHashSchema,
   namespace: namespaceSchema,
   level: z.number().int().nonnegative(),
   children: z.array(headroomHashSchema),
   sourceRefs: z.array(layeredSourceRefSchema),
+  /** Original immutable task events, bounded per leaf. Parents retain only child references. */
+  stateEvents: z.array(layeredStateEventSchema).max(64).optional(),
   policyVersion: z.string(),
   text: z.string(),
   tokens: z.number().int().nonnegative(),
   sourceTokens: z.number().int().nonnegative(),
-})
+}).refine((node) => {
+  if (!node.stateEvents) return true
+  if (node.level !== 0 || node.children.length !== 0) return false
+  const sources = new Map(node.sourceRefs.map((ref) => [ref.messageId, ref.contentHash]))
+  return new Set(node.stateEvents.map((event) => event.eventId)).size === node.stateEvents.length && node.stateEvents.every((event) => event.sourceIds.length > 0 && event.sourceIds.length === event.sourceDigests.length && event.sourceIds.every((id, index) => sources.get(id) === event.sourceDigests[index]))
+}, "invalid leaf state provenance")
 export type LayeredNode = z.infer<typeof layeredNodeSchema>
 export const layeredBudgetSchema = z.object({
   availableInputTokens: z.number().nonnegative(),
@@ -158,17 +177,6 @@ export const layeredMetricsSchema = z.object({
 })
 export type LayeredMetrics = z.infer<typeof layeredMetricsSchema>
 
-/** Append-only source-bound task events. A successful different command never resolves a failure. */
-export const layeredStateEventSchema = memoryEntrySchema.extend({
-  eventId: headroomHashSchema,
-  sourceDigests: z.array(headroomHashSchema),
-  order: z.number().int().nonnegative(),
-  tool: z.string().optional(),
-  inputDigest: headroomHashSchema.optional(),
-  outputDigest: headroomHashSchema.optional(),
-  status: z.string().optional(),
-})
-export type LayeredStateEvent = z.infer<typeof layeredStateEventSchema>
 export const layeredTaskStateSchema = z.object({
   events: z.array(layeredStateEventSchema),
   currentRequestIds: z.array(z.string()),
