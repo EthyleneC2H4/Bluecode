@@ -60,7 +60,7 @@ export function createRetrieveTool(runtime: PluginRuntime) {
       try {
         for (let attempt = 0; attempt < 8; attempt++) {
           const paging = {
-            maxTokens: contentBudget,
+            maxTokens: Math.min(contentBudget, MAX_PAGE_TOKENS),
             maxBytes: contentBudget,
             ...(args.cursor ? { cursor: args.cursor } : {}),
           }

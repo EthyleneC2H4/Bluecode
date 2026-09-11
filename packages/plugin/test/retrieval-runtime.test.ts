@@ -6,6 +6,42 @@ import { createEngine } from "../../rtk/src/engine"
 import { createPluginRuntime } from "../src/runtime"
 import { createRetrieveTool } from "../src/retrieval"
 import { parseOptions } from "../src/config"
+import { RtkClient } from "@bluecode/rtk"
+
+test("layered retrieval respects RTK wire token limits when the outer byte budget is larger", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "retrieval-layered-wire-"))
+  const rtk = await RtkClient.create({ dataDir: dir, timeoutMs: 2000 })
+  const runtime = createPluginRuntime({
+    projectId: "p", directory: dir,
+    options: parseOptions({ headroom: { strategy: "layered" } }),
+    headroom: null, rtk,
+  })
+  try {
+    const original = 'row "quoted" \\ 中文🙂\n'.repeat(2000)
+    const stored = await rtk.compress({ tool: "unknown", output: original, sessionId: JSON.stringify(["p", "s"]) })
+    expect(stored.result).toBeDefined()
+    const retrieve = createRetrieveTool(runtime)
+    let cursor: string | undefined, recovered = "", pages = 0
+    do {
+      const result = await retrieve.execute({ hash: stored.result!.rawHash, maxTokens: 8192, maxBytes: 32768, ...(cursor ? { cursor } : {}) }, { sessionID: "s", metadata: () => {} } as any)
+      expect(typeof result).toBe("object")
+      if (typeof result === "string") throw new Error(result)
+      expect(Buffer.byteLength(result.output)).toBeLessThanOrEqual(32768)
+      const page = JSON.parse(result.output)
+      expect(page.kind).toBe("found")
+      expect(page.content.length).toBeGreaterThan(0)
+      recovered += page.content
+      expect(page.nextCursor).not.toBe(cursor)
+      cursor = page.nextCursor ?? undefined
+      expect(++pages).toBeLessThan(100)
+    } while (cursor)
+    expect(pages).toBeGreaterThan(1)
+    expect(recovered).toBe(original)
+  } finally {
+    await runtime.dispose()
+    await rm(dir, { recursive: true, force: true })
+  }
+})
 
 test("production retrieval budgets the envelope and reassembles escaped unicode without recompression", async () => {
   const dir = await mkdtemp(join(tmpdir(), "retrieval-tool-"))
