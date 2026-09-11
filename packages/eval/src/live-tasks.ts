@@ -1,5 +1,5 @@
 /** Small executable continuation tasks. Seed history is deterministic fixture data, not model-generated evidence. */
-export interface LiveTask { id: string; category: string; files: Record<string, string>; request: string; checks: string; fact: string; reason: string }
+export interface LiveTask { id: string; category: string; files: Record<string, string>; request: string; checks: string; fact: string; reason: string; mutant?: string }
 export function liveTasks(): LiveTask[] {
   const tasks: LiveTask[] = []
   const add = (task: LiveTask) => tasks.push(task)
@@ -13,7 +13,7 @@ export function liveTasks(): LiveTask[] {
     ["median-test", "export const median=xs=>{const a=[...xs].sort((a,b)=>a-b); const i=Math.floor(a.length/2); return a.length%2?a[i]:(a[i-1]+a[i])/2}", "assert.equal(m.median([1,5]),5)", "assert.equal(m.median([1,5]),3)", "Even medians average the middle values"],
     ["slug-test", "export const slug=s=>s.trim().toLowerCase().replace(/\\s+/g,'-')", "assert.equal(m.slug(' Hello World '),'Hello-World')", "assert.equal(m.slug(' Hello World '),'hello-world')", "Slugs use lowercase"],
     ["empty-test", "export const sum=xs=>xs.reduce((a,b)=>a+b,0)", "assert.equal(m.sum([]),undefined)", "assert.equal(m.sum([]),0)", "The sum of an empty list is zero"],
-  ]) add({ id: id!, category: "test-repair", files: { "src/main.js": code!+"\n", "test.mjs": "import assert from 'node:assert/strict'; import * as m from './src/main.js';\n"+wrong+"\n" }, request: "Repair the incorrect expectation in test.mjs to match the documented contract. Do not change src/main.js.", checks: correct!, fact: fact!, reason: "The implementation already matches the contract" })
+  ]) add({ id: id!, category: "test-repair", mutant: id === "median-test" ? "export const median=xs=>[...xs].sort((a,b)=>a-b)[Math.floor(xs.length/2)]\n" : id === "slug-test" ? "export const slug=s=>s.trim().replace(/\\s+/g,'-')\n" : "export const sum=xs=>xs.length?xs.reduce((a,b)=>a+b,0):undefined\n", files: { "src/main.js": code!+"\n", "test.mjs": "import assert from 'node:assert/strict'; import * as m from './src/main.js';\n"+wrong+"\n" }, request: "Repair the incorrect expectation in test.mjs to match the documented contract. Do not change src/main.js.", checks: correct!, fact: fact!, reason: "The implementation already matches the contract" })
   for (const [id, marker, key, expected] of [["log-timeout","ETIMEDOUT","retryable",true],["log-auth","EACCES","retryable",false],["log-input","EINVAL","retryable",false]] as const) add({
     id, category: "long-log", files: { "src/main.js": "export const classify=log=>({code:'UNKNOWN',retryable:true})\n", "diagnostic.log": Array.from({length:320},(_,i)=> i===217?`ERROR code=${marker} operation=worker`: `TRACE worker step=${i} heartbeat=healthy`).join("\n") },
     request: "Read diagnostic.log and fix classify(log) to extract its ERROR code. Retry ETIMEDOUT only; EACCES and EINVAL are permanent. Ignore harmless TRACE lines.",

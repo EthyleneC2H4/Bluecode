@@ -13,7 +13,7 @@ export default async function livePlugin(input: PluginInput, options?: PluginOpt
     const before=JSON.stringify(output.messages).length
     await transform?.(event,output)
     const text=JSON.stringify(output.messages)
-    record({event:"transform",messages:output.messages.length,beforeChars:before,afterChars:text.length,nodeMarkers:(text.match(/\[headroom node:/g)??[]).length})
+    record({event:"transform",messages:output.messages.length,beforeChars:before,afterChars:text.length,nodeMarkers:(text.match(/\[headroom node:/g)??[]).length,nodeIds:[...new Set([...text.matchAll(/\[headroom node:([0-9a-f]{64})\]/g)].map(match=>match[1]))]})
   }
   const params=hooks["chat.params"]
   hooks["chat.params"]=async(event,output)=>{await params?.(event,output);record({event:"model",limit:event.model.limit,maxOutputTokens:output.maxOutputTokens})}
