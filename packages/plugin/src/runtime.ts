@@ -106,6 +106,8 @@ export function createPluginRuntime(input: RuntimeInput) {
       ? "shadow"
       : options[component].mode ?? options.mode
   const namespace = (sessionId: string): Namespace => ({ projectId, sessionId })
+  const applyView = (messages: HostMessage[], plan: HeadroomCompressResult) =>
+    applyHostView(messages, plan, options.headroom.retainRecentTurns)
   const track = (operation: Promise<void>) => {
     const handled = operation
       .catch((error: unknown) => {
@@ -256,12 +258,12 @@ export function createPluginRuntime(input: RuntimeInput) {
         while (Date.now() < until && !disposed && !state.paused && state.generation === generation &&
             sessions.get(id) === state && state.view?.historyHash === base.historyHash) {
           const raw = state.snapshot, projection = raw ? projectMessages(raw) : null
-          if (!projection || applyHostView(structuredClone(raw!), base) !== "applied") return
+          if (!projection || applyView(structuredClone(raw!), base) !== "applied") return
           const result = await input.headroom!.getCandidate!({ namespace: namespace(id), jobId,
             epoch: state.epoch ?? "", sourceDigests: projection.map(contentDigest) })
           if (result.status === "ready" && result.candidate) {
             if (disposed || state.paused || state.generation !== generation || state.view?.historyHash !== base.historyHash ||
-                !state.snapshot || applyHostView(structuredClone(state.snapshot), result.candidate) !== "applied") return
+                !state.snapshot || applyView(structuredClone(state.snapshot), result.candidate) !== "applied") return
             await input.headroom!.setView(namespace(id), result.candidate)
             if (!disposed && !state.paused && state.generation === generation && state.view?.historyHash === base.historyHash) {
               state.view = result.candidate
@@ -293,7 +295,7 @@ export function createPluginRuntime(input: RuntimeInput) {
           const projection = projectMessages(raw)
           if (!usable || !projection) { trace(id, state, "schedule", !usable ? "no-budget" : "invalid-projection"); return }
           const effective = structuredClone(raw)
-          if (state.view) applyHostView(effective, state.view)
+          if (state.view) applyView(effective, state.view)
           const projectedEffective = projectMessages(effective)
           if (!projectedEffective) { trace(id, state, "schedule", "invalid-effective-projection"); return }
           const tokens = projectedEffective.reduce(
@@ -328,7 +330,7 @@ export function createPluginRuntime(input: RuntimeInput) {
           if (rejection) { trace(id, state, "publish", rejection, { plannedGeneration: generation }); return }
           // Validate against the freshest raw host snapshot before publishing a durable active view.
           const candidate = structuredClone(state.snapshot ?? raw)
-          const status = applyHostView(candidate, result)
+          const status = applyView(candidate, result)
           if (status !== "applied") { trace(id, state, "publish", "invalid-view", { status, messages: candidate.length }); return }
           metrics.plans++
           if (mode("headroom") === "shadow") {
@@ -422,7 +424,7 @@ export function createPluginRuntime(input: RuntimeInput) {
       hydrate(id, state)
       if (state.paused) return
       if (state.view && mode("headroom") === "on") {
-        const status = applyHostView(output.messages, state.view)
+        const status = applyView(output.messages, state.view)
         trace(id, state, "transform", "view", { status })
         if (status === "applied") metrics.applied++
         else if (status !== "already-compacted") clearView(id, state)
@@ -603,7 +605,7 @@ export function createPluginRuntime(input: RuntimeInput) {
         state.view &&
         state.snapshot &&
         state.view.epoch === state.epoch &&
-        applyHostView(structuredClone(state.snapshot), state.view) === "applied"
+        applyView(structuredClone(state.snapshot), state.view) === "applied"
       ) {
         output.context.push(
           `[bluecode headroom] Archived memory:\n${state.view.summary}\nRetrieve original evidence with headroom_retrieve(historyHash="${state.view.historyHash}"); follow nextCursor.`

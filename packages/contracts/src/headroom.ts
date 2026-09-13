@@ -203,6 +203,9 @@ export type SummaryProviderConfig = z.infer<typeof summaryProviderSchema>
 // compress
 // ---------------------------------------------------------------------------
 
+/** Completed turns retained in addition to the current active turn. */
+export const DEFAULT_RETAIN_RECENT_TURNS = { legacy: 4, layered: 1 } as const
+
 export const headroomCompressParamsSchema = z.object({
   sessionId: z.string(),
   projectId: z.string(),
@@ -218,9 +221,11 @@ export const headroomCompressParamsSchema = z.object({
   protectedMessageIds: z.array(z.string()).optional(),
   /** Compaction trigger watermark; applied by headroomd as 0.7 when omitted. */
   triggerRatio: z.number().default(0.7),
-  /** Recent turns kept verbatim; applied by headroomd as 4 when omitted. */
-  retainRecentTurns: z.number().int().nonnegative().default(4),
-})
+  /** Omitted values use the strategy default; explicit zero still protects the active turn. */
+  retainRecentTurns: z.number().int().nonnegative().optional(),
+}).transform(params => ({ ...params,
+  retainRecentTurns: params.retainRecentTurns ?? DEFAULT_RETAIN_RECENT_TURNS[params.strategy ?? "legacy"],
+}))
 /** Wire shape (what the plugin sends); defaults still optional here. */
 export type HeadroomCompressParams = z.input<typeof headroomCompressParamsSchema>
 /** Parsed shape; defaults materialized. */

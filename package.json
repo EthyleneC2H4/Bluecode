@@ -24,6 +24,7 @@
     "check:host": "bun scripts/check-host-imports.ts",
     "gc": "bun scripts/gc-storage.ts",
     "eval:headroom": "bun packages/eval/src/headroom-cli.ts",
+    "eval:retention": "bun scripts/eval-headroom-retention.ts",
     "eval:live": "bun packages/eval/src/live-cli.ts"
   },
   "devDependencies": {

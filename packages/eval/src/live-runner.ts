@@ -13,6 +13,8 @@ export interface LiveOptions {
   output: string; tasks?: string[]; repeats?: number; arms?: Array<"legacy"|"layered"|"enhanced">; concurrency?: number; taskTimeoutMs?: number
 }
 const FREE_MODEL = "opencode/mimo-v2.5-free"
+// This historical experiment must not change when production strategy defaults change.
+const REPLAY_RETAIN_RECENT_TURNS = 4
 const safe = (text: string, key: string) => text.replaceAll(key,"[redacted]").replace(/sk-[A-Za-z0-9_-]{16,}/g,"[redacted]")
 
 export async function runLiveEvaluation(options: LiveOptions) {
@@ -84,6 +86,7 @@ export async function runLiveEvaluation(options: LiveOptions) {
   const todo = liveTasks().filter(task => !options.tasks || options.tasks.includes(task.id)).flatMap(task =>
     Array.from({ length: options.repeats ?? 2 }, (_, repeat) => (options.arms ?? ["legacy", "layered", "enhanced"]).map(arm => ({ task, repeat, arm }))).flat())
   const report = () => ({ version: 2, baseline: "62589ac", model: options.model, concurrency: options.concurrency ?? 2, hostVersion, taskTimeoutMs: options.taskTimeoutMs ?? 600000, monetaryBudget: 0,
+    retainRecentTurns: REPLAY_RETAIN_RECENT_TURNS,
     usageMode: "Main OpenCode input excludes cache. Summary usage is separately observed from provider responses. Missing fields remain null/incomplete; reservations are not usage.",
     seedKind: "14 deterministic imported fixture turns; only subsequent OpenCode calls are real LLM usage", requestedRuns: todo.length, completedRuns: records.length,
     budgets: budget.snapshot(), incomplete: commands.signal.aborted || budget.snapshot().violation || !budget.snapshot().usageComplete || records.length !== todo.length || records.some(r => r.incomplete), records, requests })
@@ -146,7 +149,7 @@ async function runTask(root:string,id:string,task:LiveTask,arm:string,repeat:num
   const config={model:options.model,small_model:options.model,autoupdate:false,share:"disabled",compaction:{auto:false,prune:false},
     provider:{opencode:{options:{apiKey:`{env:${options.apiKeyEnv}}`,baseURL:`${proxy}/${id}/main`},models:{[model]:{limit:{context:40000,input:40000,output:2048}}}}},
     agent:{build:{steps:8,model:options.model}},permission:{"*":"deny",read:"allow",edit:"allow",write:"allow",glob:"allow",grep:"allow",list:"allow",bash:"allow",headroom_retrieve:"allow"},
-    plugin:[[new URL("./live-plugin.ts",import.meta.url).href,{dataDir:join(sandbox,"bluecode"),rtk:{mode:"off"},headroom:{strategy:arm==="legacy"?"legacy":"layered",memoryMaxTokens:128,idleExitMs:1000,
+    plugin:[[new URL("./live-plugin.ts",import.meta.url).href,{dataDir:join(sandbox,"bluecode"),rtk:{mode:"off"},headroom:{strategy:arm==="legacy"?"legacy":"layered",retainRecentTurns:REPLAY_RETAIN_RECENT_TURNS,memoryMaxTokens:128,idleExitMs:1000,
       ...(arm==="enhanced"?{summarizer:{enabled:true,baseURL:`${proxy}/${id}/summary`,model,apiKeyEnv:options.apiKeyEnv}}:{})}}]]}
   const env={npm_config_cache:join(root,"npm-cache"),BLUECODE_LIVE_TRACE:join(sandbox,"trace.jsonl"),OPENCODE_CONFIG_CONTENT:JSON.stringify(config),XDG_CONFIG_HOME:join(sandbox,"config"),XDG_DATA_HOME:join(sandbox,"data"),XDG_STATE_HOME:join(sandbox,"state"),XDG_CACHE_HOME:join(root,"cache"),[options.apiKeyEnv]:key}
   const started=performance.now()

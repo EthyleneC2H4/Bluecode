@@ -84,10 +84,22 @@ export function upstreamEpoch(messages: readonly HostMessage[]): string {
 
 export function applyHostView(
   messages: HostMessage[],
-  plan: HeadroomCompressResult
+  plan: HeadroomCompressResult,
+  retainRecentTurns?: number
 ): "applied" | "already-compacted" | "invalid" | "no-match" {
   const projection = projectMessages(messages)
   if (!projection || !plan.sourceDigests || plan.sourceDigests.length === 0) return "invalid"
+  // A persisted or delayed plan must respect the current policy even below the
+  // trigger watermark. Its source digests alone cannot prove that compatibility.
+  if (plan.strategy === "layered" && retainRecentTurns !== undefined) {
+    const starts: number[] = []
+    for (let i = 0; i < projection.length; i++)
+      if (i === 0 || projection[i]!.info.role === "user") starts.push(i)
+    const recentStart = starts[Math.max(0, starts.length - retainRecentTurns - 1)] ?? 0
+    const recentIds = new Set(projection.slice(recentStart).map(message => message.info.id))
+    const affected = plan.operations?.flatMap(operation => operation.kind === "range" ? operation.messageIds : [operation.messageId]) ?? plan.replacedMessageIds
+    if (affected.some(id => recentIds.has(id))) return "invalid"
+  }
   const result = materializeCompaction(projection, plan)
   if (result.status !== "applied") return result.status
   if (plan.operations) {

@@ -1,5 +1,6 @@
 /** Deterministic, I/O-free, incremental evidence planner. Raw requests are never summarized. */
 import type { ChatMessage, HeadroomCompressResult, LayeredBudget, LayeredMetrics, LayeredNode, LayeredSourceRef, LayeredStateEvent, LayeredTaskState, MemoryEntry, Namespace, ViewOperation } from "@bluecode/contracts"
+import { DEFAULT_RETAIN_RECENT_TURNS } from "@bluecode/contracts"
 import { canonicalJSON, contentDigest } from "./turns"
 import { COMPLETED_TOOL_STATUSES, materializeOperations, textDigest } from "./layered-operations"
 import { createCachedTokenCounter, estimatedTokenCounter, type TokenCounter } from "./token-counter"
@@ -240,7 +241,7 @@ export function buildLayeredPlan(messages: readonly ChatMessage[], options: Laye
       if (!protectedKeys.has(key)) { protectedKeys.add(key); protectedMemory.push({ ...entry, sourceIds: [...entry.sourceIds] }) }
     }
   }
-  const keepTurns = (options.retainRecentTurns ?? 4) + 1
+  const keepTurns = (options.retainRecentTurns ?? DEFAULT_RETAIN_RECENT_TURNS.layered) + 1
   const recentStart = turnStarts[Math.max(0, turnStarts.length - keepTurns)] ?? 0
   const recentTokens = analyses.slice(recentStart).reduce((sum, a) => sum + a.tokens, 0)
   const candidates: Candidate[] = []

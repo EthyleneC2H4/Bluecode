@@ -19,6 +19,33 @@ const params = (raw: HostMessage[], strategy: "legacy" | "layered") => headroomC
 function port(engine: Engine): HeadroomPort {
   return { compress: p => engine.compress(headroomCompressParamsSchema.parse(p)), retrieve: engine.retrieve, getView: async n => engine.getView(n), setView: async (n, p) => engine.setView(n, p), clearView: async n => engine.clearView(n), close: async () => {} }
 }
+
+for (const [savedTurns, configuredTurns, compatible] of [[0, 1, false], [1, 4, false], [4, 1, true], [0, 0, true]] as const) {
+  test(`restart enforces ${configuredTurns} retained turns on a persisted ${savedTurns}-turn view below the trigger`, async () => {
+    const dir = await mkdtemp(join(tmpdir(), "blue-retention-hydrate-")), raw = source(), engine = await createEngine({ dataDir: dir })
+    let runtime: ReturnType<typeof createPluginRuntime> | undefined
+    try {
+      const plan = await engine.compress({ ...params(raw, "layered"), retainRecentTurns: savedTurns })
+      expect(plan.compacted).toBe(true)
+      engine.setView(ns, plan)
+      runtime = createPluginRuntime({ projectId: "p", directory: dir, rtk: null, headroom: port(engine),
+        options: parseOptions({ headroom: { strategy: "layered", retainRecentTurns: configuredTurns } }) })
+      runtime.observeModel("s", { id: "fixture", limit: { context: 1e9, output: 0 } })
+      await runtime.transform({ messages: structuredClone(raw) }); await runtime.drain()
+      const expected = structuredClone(raw)
+      if (compatible) expect(applyHostView(expected, plan)).toBe("applied")
+      const output = { messages: structuredClone(raw) }
+      await runtime.transform(output); await runtime.drain()
+      expect(output.messages).toEqual(expected)
+      expect(output.messages.slice(-2 * (configuredTurns + 1))).toEqual(raw.slice(-2 * (configuredTurns + 1)))
+      expect(runtime.stats().plans).toBe(0)
+      if (!compatible) {
+        expect(engine.getView(ns)).toBeNull()
+        expect(await engine.retrieve({ namespace: ns, hash: plan.refs[0]!.contentHash })).toMatchObject({ found: true })
+      }
+    } finally { await runtime?.dispose(); engine.close(); await rm(dir, { recursive: true, force: true }) }
+  })
+}
 for (const [saved, configured] of [["layered", "legacy"], ["legacy", "layered"], ["legacy", "legacy"], ["layered", "layered"]] as const) {
   test(`restart restores only compatible ${saved} view under ${configured}, even below trigger`, async () => {
     const dir = await mkdtemp(join(tmpdir(), "blue-hydrate-")), raw = source(true)

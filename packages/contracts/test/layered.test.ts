@@ -4,6 +4,14 @@ const hash = "a".repeat(64), ns = { projectId: "p", sessionId: "s" }
 const legacy = { compacted: true, historyHash: hash, summary: "summary", memory: [], refs: [{ contentHash: hash, role: "assistant", turnIndex: 0 }], replacedMessageIds: ["a"], sourceDigests: [hash], rawTokens: 100, sourceTokensEst: 100, summaryTokens: 20, evictedTokensEst: 50, retainedTokensEst: 50, replacementTokensEst: 20, finalTokensEst: 70, freedTokens: 30 }
 const operation = { operationId: hash, sourceVersion: 1, nodeId: hash, kind: "tool-output", messageId: "a", sourceDigest: hash, partIndex: 0, outputDigest: hash, replacement: "reference" }
 
+test("Wire retention defaults follow the chosen strategy without overriding zero", () => {
+  const input = { ...ns, messages: [], contextWindowTokens: 1000 }
+  expect(headroomCompressParamsSchema.parse({ ...input, strategy: "layered" }).retainRecentTurns).toBe(1)
+  expect(headroomCompressParamsSchema.parse(input).retainRecentTurns).toBe(4)
+  expect(headroomCompressParamsSchema.parse({ ...input, strategy: "legacy" }).retainRecentTurns).toBe(4)
+  expect(headroomCompressParamsSchema.parse({ ...input, strategy: "layered", retainRecentTurns: 0 }).retainRecentTurns).toBe(0)
+})
+
 test("v3 accepts legacy omissions and optional layered configuration", () => {
   expect(headroomCompressResultSchema.safeParse(legacy).success).toBe(true)
   const parsed = headroomCompressParamsSchema.parse({ ...ns, messages: [], contextWindowTokens: 1000 })

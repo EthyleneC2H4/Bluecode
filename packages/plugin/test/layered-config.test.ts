@@ -1,6 +1,14 @@
 import { expect, test } from "bun:test"
 import { parseOptions } from "../src/config"
 
+test("Layered defaults to one completed turn while legacy and explicit retention remain compatible", () => {
+  expect(parseOptions({ headroom: { strategy: "layered" } }).headroom.retainRecentTurns).toBe(1)
+  expect(parseOptions({}).headroom.retainRecentTurns).toBe(4)
+  expect(parseOptions({ headroom: { strategy: "legacy" } }).headroom.retainRecentTurns).toBe(4)
+  for (const retainRecentTurns of [0, 1, 2, 3, 4, 10])
+    expect(parseOptions({ headroom: { strategy: "layered", retainRecentTurns } }).headroom.retainRecentTurns).toBe(retainRecentTurns)
+})
+
 test("layered memory is configurable and enhancement requires an explicit provider", () => {
   const defaults = parseOptions({})
   expect(defaults.headroom.strategy).toBe("legacy")

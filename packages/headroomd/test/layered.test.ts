@@ -17,6 +17,18 @@ function plan(messages: ChatMessage[], overrides: Record<string, unknown> = {}):
   return build(messages, { ...options, ...overrides })
 }
 
+test("Default retention externalizes older observations and preserves the last completed and active turns", () => {
+  const messages = source(10)
+  const result = pure.buildLayeredPlan(messages, { namespace: ns, contextWindowTokens: 32000 })
+  expect(result.replacedMessageIds).toContain("a7")
+  expect(result.replacedMessageIds).not.toContain("a8")
+  expect(result.replacedMessageIds).not.toContain("a9")
+  const applied = pure.materializeCompaction(messages, result)
+  expect(applied.status).toBe("applied")
+  expect(applied.messages.slice(-4)).toEqual(messages.slice(-4))
+  expect(applied.messages.filter(m => m.info.role === "user")).toEqual(messages.filter(m => m.info.role === "user"))
+})
+
 test("three hundred unique reads compact despite absence of duplicate outputs", () => {
   const messages = source(300)
   const result = plan(messages)

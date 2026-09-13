@@ -6,7 +6,7 @@
  */
 import { z } from "zod"
 import { defaultDataDir } from "@bluecode/shared"
-import { summaryProviderSchema } from "@bluecode/contracts"
+import { DEFAULT_RETAIN_RECENT_TURNS, summaryProviderSchema } from "@bluecode/contracts"
 
 export const RtkOptionsSchema = z.object({
   mode: z.enum(["off", "shadow", "on"]).optional(),
@@ -28,12 +28,14 @@ export const HeadroomOptionsSchema = z.object({
   summarizer: SummarizerOptionsSchema.default(SummarizerOptionsSchema.parse({})),
   targetRatio: z.number().min(0).max(1).default(0.55),
   triggerRatio: z.number().min(0).max(1).default(0.7),
-  retainRecentTurns: z.number().int().nonnegative().default(4),
+  retainRecentTurns: z.number().int().nonnegative().optional(),
   fallback: z.enum(["passthrough", "upstream"]).default("upstream"),
   socketPath: z.string().optional(),
   idleExitMs: z.number().int().positive().optional(),
   entry: z.string().optional(),
-})
+}).transform(options => ({ ...options,
+  retainRecentTurns: options.retainRecentTurns ?? DEFAULT_RETAIN_RECENT_TURNS[options.strategy],
+}))
 
 export type HeadroomOptions = z.infer<typeof HeadroomOptionsSchema>
 
@@ -60,7 +62,7 @@ export const PluginOptionsSchema = z.object({
     summarizer: SummarizerOptionsSchema.parse({}),
     triggerRatio: 0.7,
     targetRatio: 0.55,
-    retainRecentTurns: 4,
+    retainRecentTurns: DEFAULT_RETAIN_RECENT_TURNS.legacy,
     fallback: "upstream",
   }),
   sidecarDir: z.string().optional(),
