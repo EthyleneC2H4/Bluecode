@@ -5,6 +5,7 @@ export interface ReplayMetrics {
   /** Actual runtime configuration and persisted view, not just a requested CLI label. */
   headroom?: {
     strategy: "legacy" | "layered"
+    retainRecentTurns?: number
     activeViewStrategy: "legacy" | "layered" | null
     memoryMaxTokens: number
     memoryRatio: number

@@ -14,7 +14,7 @@ test("a real CLI child writes only injected report and baseline destinations", (
   writeFileSync(isolatedBaseline, baseline)
   try {
     const child = Bun.spawnSync(
-      ["bun", path.resolve(import.meta.dir, "../src/cli.ts"), "--quick", "--headroom-strategy", "layered"],
+      ["bun", path.resolve(import.meta.dir, "../src/cli.ts"), "--quick", "--headroom-strategy", "layered", "--retain-recent-turns", "0"],
       {
         env: {
           ...process.env,
@@ -29,9 +29,11 @@ test("a real CLI child writes only injected report and baseline destinations", (
     const output = JSON.parse(readFileSync(isolatedReport, "utf8"))
     expect(output.meta.semanticsVersion).toBe(2)
     expect(output.meta.headroomStrategy).toBe("layered")
+    expect(output.meta.retainRecentTurns).toBe(0)
     for (const group of ["C", "D"]) {
       const rows = output.perFixture.filter((row: any) => row.group === group)
       expect(rows.every((row: any) => row.replay.headroom.strategy === "layered")).toBe(true)
+      expect(rows.every((row: any) => row.replay.headroom.retainRecentTurns === 0)).toBe(true)
       expect(rows.some((row: any) => row.replay.headroom.activeViewStrategy === "layered" && row.replay.runtime.applied > 0)).toBe(true)
       expect(rows.every((row: any) => row.replay.headroom.memoryMaxTokens === 4096 && row.replay.headroom.summarizerEnabled === false)).toBe(true)
     }

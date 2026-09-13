@@ -62,3 +62,12 @@ test("headroom strategy is explicit and rejects misspelled or missing values", (
   expect(() => parseArgs(["--headroom-strategy", "layred"])).toThrow("requires legacy or layered")
   expect(() => parseArgs(["--headroom-strategy"])).toThrow("requires legacy or layered")
 })
+
+test("retained turns accepts zero and rejects invalid or missing counts", () => {
+  for (const turns of [0, 1, 2, 3, 4])
+    expect(parseArgs(["--retain-recent-turns", String(turns)]).retainRecentTurns).toBe(turns)
+  expect(parseArgs([]).retainRecentTurns).toBeUndefined()
+  for (const value of ["-1", "1.5", "NaN", "Infinity", "", "9007199254740992"])
+    expect(() => parseArgs(["--retain-recent-turns", value])).toThrow("nonnegative safe integer")
+  expect(() => parseArgs(["--retain-recent-turns"])).toThrow("nonnegative safe integer")
+})

@@ -43,6 +43,8 @@ export interface RunnerOptions {
   replaySteps?: number
   retrievalStrategy?: "query-only" | "eager-recovery"
   headroomStrategy?: "legacy" | "layered"
+  /** Pin four turns for historical replay reproducibility unless explicitly swept. */
+  retainRecentTurns?: number
   dataDir?: string
   rtkEntry?: string
   headroomEntry?: string
@@ -155,7 +157,7 @@ async function runFixture(
     mode: "on",
     dataDir,
     rtk: { mode: hasRtk ? "on" : "off" },
-    headroom: { mode: hasHeadroom ? "on" : "off", strategy: options.headroomStrategy ?? "legacy", summarizer: { enabled: false } },
+    headroom: { mode: hasHeadroom ? "on" : "off", strategy: options.headroomStrategy ?? "legacy", retainRecentTurns: options.retainRecentTurns ?? 4, summarizer: { enabled: false } },
   })
   const runtime = createPluginRuntime({
     projectId: PROJECT_ID,
@@ -334,6 +336,7 @@ async function runFixture(
     const plan = await headroom?.getView({ projectId: PROJECT_ID, sessionId: sessionID })
     if (hasHeadroom) metrics.headroom = {
       strategy: config.headroom.strategy,
+      retainRecentTurns: config.headroom.retainRecentTurns,
       activeViewStrategy: plan ? plan.strategy ?? "legacy" : null,
       memoryMaxTokens: config.headroom.memoryMaxTokens,
       memoryRatio: config.headroom.memoryRatio,
@@ -570,7 +573,7 @@ export interface ConcurrencySample {
   rssBytes: number
 }
 /** Shared real clients and one production runtime; queue overload is evidence, never hidden. */
-export async function runConcurrencyBenchmarks(headroomStrategy: "legacy" | "layered" = "legacy"): Promise<ConcurrencySample[]> {
+export async function runConcurrencyBenchmarks(headroomStrategy: "legacy" | "layered" = "legacy", retainRecentTurns = 4): Promise<ConcurrencySample[]> {
   const samples: ConcurrencySample[] = []
   for (const concurrency of [1, 8, 32]) {
     const dataDir = await mkdtemp(path.join(tmpdir(), "bluecode-eval-bench-"))
@@ -586,7 +589,7 @@ export async function runConcurrencyBenchmarks(headroomStrategy: "legacy" | "lay
     const runtime = createPluginRuntime({
       projectId: "benchmark",
       directory: process.cwd(),
-      options: parseOptions({ headroom: { strategy: headroomStrategy, summarizer: { enabled: false } } }),
+      options: parseOptions({ headroom: { strategy: headroomStrategy, retainRecentTurns, summarizer: { enabled: false } } }),
       rtk,
       headroom,
     })

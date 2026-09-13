@@ -19,6 +19,7 @@ export interface CliOptions {
   help: boolean
   retrievalStrategy?: "query-only" | "eager-recovery"
   headroomStrategy?: "legacy" | "layered"
+  retainRecentTurns?: number
   reportPath?: string
   baselinePath?: string
 }
@@ -41,6 +42,14 @@ export function parseArgs(argv: string[]): CliOptions {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     switch (arg) {
+      case "--retain-recent-turns": {
+        const value = argv[++i]
+        const turns = Number(value)
+        if (!value?.trim() || !Number.isSafeInteger(turns) || turns < 0)
+          throw new Error("--retain-recent-turns requires a nonnegative safe integer")
+        options.retainRecentTurns = turns
+        break
+      }
       case "--headroom-strategy": {
         const strategy = argv[++i]
         if (strategy !== "legacy" && strategy !== "layered")
@@ -118,6 +127,7 @@ Options:
   --update-baseline    Run a fresh full evaluation, then update baseline
   --retrieval-strategy  query-only (default) or eager-recovery stress scenario
   --headroom-strategy   legacy (frozen baseline default) or layered
+  --retain-recent-turns N  Completed turns kept plus the current turn (replay default: 4)
   --benchmarks         Include real-client 1/8/32 concurrency observations
   --invariants         Run fresh full evaluation and absolute reliability targets
   --report-path PATH   Report destination (or EVAL_REPORT_PATH)
@@ -154,6 +164,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       quick: execution.quick,
       ...(options.retrievalStrategy ? { retrievalStrategy: options.retrievalStrategy } : {}),
       ...(options.headroomStrategy ? { headroomStrategy: options.headroomStrategy } : {}),
+      ...(options.retainRecentTurns !== undefined ? { retainRecentTurns: options.retainRecentTurns } : {}),
       headroomEntry: DEFAULT_HEADROOM_ENTRY,
     })
     const report = aggregateReport(
@@ -161,7 +172,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       runnerResult.latencies,
       runnerResult.recallResults
     )
-    if (options.benchmarks) report.concurrency = await runConcurrencyBenchmarks(options.headroomStrategy)
+    if (options.benchmarks) report.concurrency = await runConcurrencyBenchmarks(options.headroomStrategy, options.retainRecentTurns)
     writeReport(report, options.reportPath)
     printSummary(report)
 

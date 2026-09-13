@@ -76,6 +76,7 @@ export interface FullReport {
   concurrency?: import("./runner").ConcurrencySample[]
   meta: {
     headroomStrategy?: "legacy" | "layered" | "mixed"
+    retainRecentTurns?: number | "mixed"
     semanticsVersion?: 2
     measurement?: string
     timestamp: string
@@ -247,12 +248,14 @@ export function aggregateReport(
 ): FullReport {
   const groups = {} as Record<EvalGroup, GroupMetrics>
   const strategies = [...new Set(perFixture.flatMap(row => row.replay?.headroom ? [row.replay.headroom.strategy] : []))]
+  const retainedTurns = [...new Set(perFixture.flatMap(row => row.replay?.headroom?.retainRecentTurns !== undefined ? [row.replay.headroom.retainRecentTurns] : []))]
   for (const group of ["A", "B", "C", "D"] as const) {
     groups[group] = computeGroupMetrics(group, perFixture, latencies, recallResults)
   }
   return {
     meta: {
       ...(strategies.length ? { headroomStrategy: strategies.length === 1 ? strategies[0]! : "mixed" as const } : {}),
+      ...(retainedTurns.length ? { retainRecentTurns: retainedTurns.length === 1 ? retainedTurns[0]! : "mixed" as const } : {}),
       semanticsVersion: 2,
       measurement:
         "Deterministic offline plugin replay proxy, not provider usage or task-solving ability. o200k_base of role-tagged visible text; all fixed host calls and model-visible retrieval outputs counted. Integrity-only archive probes excluded. Queue/service split unavailable from current public clients; RPC/hook/drain elapsed measured. RSS is the harness process only.",

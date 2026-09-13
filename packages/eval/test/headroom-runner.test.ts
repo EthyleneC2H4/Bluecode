@@ -4,6 +4,21 @@ import { existsSync } from "node:fs"
 import { makeHeadroomFixture } from "../src/headroom-fixtures"
 import { runHeadroomEvaluation } from "../src/headroom-runner"
 
+test("Retention sweep reaches the real runtime while preserving the current turn and original evidence", async () => {
+  const fixture = makeHeadroomFixture("unique-code", 50)
+  fixture.protectedMessageIds.push(fixture.messages.at(-2)!.info.id, fixture.messages.at(-1)!.info.id)
+  const rows = []
+  for (const retainRecentTurns of [4, 0]) {
+    const result = await runHeadroomEvaluation({ fixtures: [fixture], strategies: ["layered"], retainRecentTurns })
+    const row = result.comparisons[0]!.layered
+    expect(row.retainRecentTurns).toBe(retainRecentTurns)
+    expect(row.quality.protectedMessagesIntact).toBe(true)
+    expect(row.quality.sourceRecovered).toBe(true)
+    rows.push(row)
+  }
+  expect(rows[1]!.cumulativeInputTokens).toBeLessThan(rows[0]!.cumulativeInputTokens)
+}, 30_000)
+
 test("Production replay preserves native safety islands and constraints while compressing later evidence", async () => {
   const result = await runHeadroomEvaluation({ fixtures: [makeHeadroomFixture("protected-islands", 50)], replaySteps: 3 })
   const row = result.comparisons[0]!.layered

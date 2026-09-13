@@ -14,6 +14,7 @@ export interface HeadroomEvaluationOptions {
   fixtures?: HeadroomFixture[]
   strategies?: Array<"legacy" | "layered">
   replaySteps?: number
+  retainRecentTurns?: number
   recoveryCheckpoints?: number[]
   contextWindowTokens?: number
   headroomTimeoutMs?: number
@@ -22,6 +23,7 @@ export interface HeadroomEvaluationOptions {
 }
 export interface HeadroomReplayRow {
   strategy: "legacy" | "layered"
+  retainRecentTurns?: number
   status: "completed" | "degraded" | "incomplete"
   errors: string[]
   rawSourceTokens: number
@@ -100,6 +102,8 @@ async function replay(fixture: HeadroomFixture, strategy: "legacy" | "layered", 
   const daemon = { cpuSeconds: null as number | null, rssPeakBytes: 0, queueMs: null as number | null, serviceMs: null as number | null, samples: 0, forcedTermination: false, metrics: [] as LayeredMetrics[] }
   const calls: HeadroomReplayRow["calls"] = [], checkpoints: HeadroomReplayRow["recoveryCheckpoints"] = []
   const source = structuredClone(fixture.messages), ns = { projectId: "headroom-dedicated-eval", sessionId: fixture.name }
+  const config = parseOptions({ mode: "on", rtk: { mode: "off" }, headroom: { mode: "on", strategy,
+    retainRecentTurns: options.retainRecentTurns ?? 4, summarizer: { enabled: false } } })
   let final = source, priorCall = "", cumulativeInputTokens = 0, retrievalTokens = 0, compressCalls = 0
   let originalRef: string | undefined, incomplete = false
   const sample = async () => {
@@ -136,7 +140,7 @@ async function replay(fixture: HeadroomFixture, strategy: "legacy" | "layered", 
       retrieve: (params) => real.retrieve(params), getView: (params) => real.getView(params),
       setView: (params, plan) => real.setView(params, plan), clearView: (params) => real.clearView(params), close: () => real.close(),
     }
-    runtime = createPluginRuntime({ projectId: ns.projectId, directory: process.cwd(), options: parseOptions({ mode: "on", rtk: { mode: "off" }, headroom: { mode: "on", strategy, summarizer: { enabled: false } } }), rtk: null, headroom: port })
+    runtime = createPluginRuntime({ projectId: ns.projectId, directory: process.cwd(), options: config, rtk: null, headroom: port })
     runtime.observeModel(ns.sessionId, { id: "offline-no-model", limit: { context: options.contextWindowTokens ?? 8192, output: 1024 } })
     const retrieve = createRetrieveTool(runtime)
     const context = { sessionID: ns.sessionId, messageID: "eval-probe", agent: "offline-eval", directory: process.cwd(), worktree: process.cwd(), abort: new AbortController().signal, metadata: () => {}, ask: async () => {} }
@@ -215,7 +219,7 @@ async function replay(fixture: HeadroomFixture, strategy: "legacy" | "layered", 
     }
     const sum = (key: "scannedMessages" | "analyzedMessages" | "analysisCacheHits") => daemon.metrics.length ? daemon.metrics.reduce((n, m) => n + m[key], 0) : null
     const stats = runtime.stats()
-    return { strategy, status: incomplete ? "incomplete" : stats.errors || errors.length ? "degraded" : "completed", errors, rawSourceTokens: estimateTokens(renderHeadroomInput(source)),
+    return { strategy, retainRecentTurns: config.headroom.retainRecentTurns, status: incomplete ? "incomplete" : stats.errors || errors.length ? "degraded" : "completed", errors, rawSourceTokens: estimateTokens(renderHeadroomInput(source)),
       cumulativeInputTokens, retrievalTokens, finalSourceTokens: estimateTokens(visibleSource.join("\n")), finalMemoryTokens: estimateTokens(memory.join("\n")), finalVisibleTokens: estimateTokens(finalText),
       providerUsage: null, providerCacheReadTokens: null, providerCacheWriteTokens: null, summaryCalls: 0,
       calls, runtime: stats, operations: { compressCalls, operationCount: plans.reduce((n, p) => n + (p.operations?.length ?? (p.compacted ? 1 : 0)), 0), scannedMessages: sum("scannedMessages"), analyzedMessages: sum("analyzedMessages"), analysisCacheHits: sum("analysisCacheHits") }, daemon,
