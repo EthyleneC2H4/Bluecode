@@ -1,5 +1,7 @@
 # RTK＋当前分层 headroom 四组消融
 
+本文件记录 **保留四轮** 的历史消融。当前 layered 默认保留一轮，0～4 轮对照及最新数据见[轮数实验](headroom-retention.md)；以下原始配置和数字继续保留。
+
 2026-09-11 在同一代码版本 `e1c1781289090550cb024d77befc445ae8427c93` 上重新运行原有 11 份 fixture。正式方案为 `layered` 规则版，LLM 摘要关闭。分别运行旧版 query-only 对照、分层 query-only 正式组和分层 eager-recovery 压力组，每次均完整执行 A/B/C/D，共 132 条 fixture／组记录；未调用外部 LLM。
 
 原始记录：[旧版对照](../packages/eval/ablation-legacy-query.json)、[当前 query-only](../packages/eval/ablation-layered-query.json)、[当前 eager-recovery](../packages/eval/ablation-layered-eager.json)。[运行清单](../packages/eval/ablation-summary.json)保存代码版本、fixture 名称与摘要、报告 SHA-256、配置和门禁结果。

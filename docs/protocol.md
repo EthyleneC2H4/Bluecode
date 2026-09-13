@@ -51,6 +51,8 @@ JSONL 一行一帧，限制单帧 UTF-8 字节数为 8MiB。多帧粘包不会�
 
 ## 分层计划与后台候选
 
+`retainRecentTurns` 省略时按策略取默认值：layered 为 1，legacy（含省略 strategy）为 4；显式 0 有效，所有值均另加当前活动轮次的保护。
+
 `compress` 增加 `strategy:legacy|layered`、`memoryMaxTokens/memoryRatio`、`enhance` 与显式 `summaryProvider`。分层结果携带 `operations/nodes/taskState/protectedMemory/budget/metrics/sourceSnapshot`；后台提交成功时带 `enhancementJobId`，配置不匹配时带 `enhancementReason` 并保留规则结果。每项操作绑定来源摘要和位置，必须互不重叠、全部有效，才能原子应用。
 
 节点恢复可选 `detail:summary|children|source`、`depth` 与游标。v3历史游标持久保存SQL seek位置，旧ordinal游标仍可读。query `cards` 返回短片段和路径、标识符、节点引用；legacy `segments` 兼容保留。layered最终工具JSON按明确字符估算及字节双预算，legacy沿用UTF-8保守上界。

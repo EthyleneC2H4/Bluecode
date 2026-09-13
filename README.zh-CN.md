@@ -2,7 +2,7 @@
 
 为 [OpenCode](https://github.com/anomalyco/opencode) 提供上下文优化：通过一个插件连接 RTK 子进程与 headroomd 守护进程，分别负责工具输出压缩，以及有预算的分层会话记忆与证据按需恢复。
 
-[English](README.md) · [架构](docs/architecture.md) · [Headroom 使用指南](docs/headroom-layered.md) · [Headroom 消融结果](docs/headroom-ablation.md) · [操作手册](docs/operations.md)
+[English](README.md) · [架构](docs/architecture.md) · [Headroom 使用指南](docs/headroom-layered.md) · [Headroom 消融结果](docs/headroom-retention.md) · [操作手册](docs/operations.md)
 
 本仓库是独立学习实现，不是 vivo 的 BlueCode 私有源码。评测包括确定性合成历史回放，以及通过真实 OpenCode 调用 LLM 完成的小型编码任务，两者分别报告。
 
@@ -129,7 +129,7 @@ CAS 保存的是 sanitize / redactor 之后的文本；默认 redactor 为 ident
 
 ### headroomd 内部：分层记忆、增量规划与按需恢复
 
-下图展示需显式启用的 `layered` 策略；`legacy` 保留连续前缀规划方式。分层规划保护最近四个完整轮次及当前活动轮次，需求与明确修正保持原文，只归档较早的可处理观察结果和明确属于材料的文本范围。
+下图展示需显式启用的 `layered` 策略；`legacy` 保留连续前缀规划方式。分层规划保护最近一个完整轮次及当前活动轮次（`retainRecentTurns` 可配置），需求与明确修正保持原文，只归档较早的可处理观察结果和明确属于材料的文本范围。
 
 ```mermaid
 flowchart TB
@@ -204,7 +204,7 @@ verify 包含全工作区 strict 类型检查、测试、依赖方向，以及�
       "strategy": "layered",
       "triggerRatio": 0.7,
       "targetRatio": 0.55,
-      "retainRecentTurns": 4,
+      "retainRecentTurns": 1,
       "memoryMaxTokens": 4096,
       "summarizer": {"enabled": false}
     }
@@ -220,24 +220,36 @@ verify 包含全工作区 strict 类型检查、测试、依赖方向，以及�
 
 ### RTK＋当前分层 headroom：四组消融
 
-本次正式 A/B/C/D 回放在 C/D 中使用 **`layered` headroom，关闭 LLM 摘要**。原有 11 份 fixture 在同一代码版本上重新运行，以 o200k_base 计数，固定四个历史阶段、每阶段两次全新宿主调用及 query-only 检索策略。Headroom 使用标准的 4,096 token 记忆预算；实验采用的方案与插件仍为 `legacy` 的配置默认值分别说明。
+正式 A/B/C/D 回放在 C/D 中使用 **`layered` headroom、保留 1 个完整历史轮次及当前活动轮次、关闭 LLM 摘要**。原有 11 份 fixture 使用 o200k_base 计数，固定四个历史阶段、每阶段两次全新宿主调用及 query-only 检索策略。记忆预算为 4,096 token；插件默认策略仍为 `legacy`，显式启用 layered 后默认保留一轮。
 
 | 配置 | 总输入 token | 相对 A 减少 |
 |---|---:|---:|
 | A：关闭优化 | 582,501 | — |
 | B：仅 RTK | 464,781 | 20.21% |
-| C：仅分层 headroom | 434,209 | 25.46% |
-| D：RTK＋分层 headroom | 369,220 | **36.61%** |
+| C：仅分层 headroom | 391,029 | 32.87% |
+| D：RTK＋分层 headroom | 338,584 | **41.87%** |
 
-组合相对仅 RTK 进一步减少输入 **20.56%**。C/D 的关键约束均为 3/3、确定性答案检查 10/10，自然问题 Recall@5 为 10/10；归档逐字恢复分别为 30/30 和 62/62，跨命名空间访问、过期计划应用、检索再次压缩的违规均为零。B/D 普通上下文事实仍为 102/104，与关键约束单独统计。query-only 正式回放通过全部绝对门禁。
+组合相对仅 RTK 进一步减少输入 **27.15%**。C/D 的关键约束均为 3/3、确定性答案 10/10、自然问题 Recall@5 为 10/10；所选归档逐字恢复为 34/34 和 66/66，三类安全违规均为零。B/D 普通上下文事实仍为 102/104，与关键约束单独统计。
 
-另行重跑的 **eager-recovery** 压力策略使组合输入升至 **467,608** token，相对 A 减少 **19.72%**，仍低于 20% 收益门槛；质量与恢复检查通过。这是离线回放结果，不是新增的真实 LLM 解题率或 provider 账单。
+保留轮数 0～4 的对照固定了其他配置，轮数均不包含当前活动轮次：
 
-本轮旧版对照完整复现冻结输入数据，旧组合仍为 435,436 token；因此当前组合相对旧组合进一步减少 **15.21%** 输入。[旧基线](packages/eval/baseline.json)继续用于回归，不覆盖历史记录。详见[实验配置与结果](docs/headroom-ablation.md)、[query-only 数据](packages/eval/ablation-layered-query.json)、[eager 数据](packages/eval/ablation-layered-eager.json)及[运行清单](packages/eval/ablation-summary.json)。
+| 保留完整历史轮数 | 组合输入 token | 相对关闭优化减少 | 组合可见上下文事实 |
+|---|---:|---:|---:|
+| 4 | 369,220 | 36.61% | 102/104 |
+| 3 | 354,615 | 39.12% | 102/104 |
+| 2 | 345,875 | 40.62% | 102/104 |
+| **1（采用）** | **338,584** | **41.87%** | **102/104** |
+| 0 | 331,464 | 43.10% | 99/104 |
+
+一轮相对四轮进一步减少 **8.30%** 输入，现有质量指标不退步。零轮更省 token，但额外移出三条可见事实，因此采用一轮。24 份专用历史的交叉检查同样没有新增质量失败，累计输入估算下降 **4.10%**；已有六例旧版本首命中问题仍保留。
+
+一轮配置在 **eager-recovery** 压力组中输入为 **428,885** token，相对 A 减少 **26.37%**。正式组和压力组均通过绝对门禁。此前四轮压力组的 19.72% 是另一保留配置的结果，继续保存在历史报告中。这些都是离线回放，未新增真实 LLM 调用。
+
+一轮组合相对旧版 legacy 组合 435,436 token 减少 **22.24%**。详见[轮数实验与选择依据](docs/headroom-retention.md)、[全部原始数据清单](packages/eval/retention-results/manifest.json)、[一轮正式数据](packages/eval/retention-results/query-only-1.json)及[压力数据](packages/eval/retention-results/eager-recovery-1.json)。[原四轮实验](docs/headroom-ablation.md)和[旧基线](packages/eval/baseline.json)保持独立。
 
 ### 真实 OpenCode 编码任务：旧版与分层规则版
 
-12 个小型任务，每种策略各重复两次，通过 OpenCode **1.18.23** 调用 Zen **`opencode/mimo-v2.5-free`**。每个任务先导入 14 轮合成历史，再由真实模型完成编码工作，RTK 全程关闭。压力配置使用 40,000 token 输入窗口、2,048 输出上限及 **128 token 记忆预算**，不是默认的 4,096。
+以下为保留四轮配置的历史实机结果，未因本轮调参重新调用模型。12 个小型任务，每种策略各重复两次，通过 OpenCode **1.18.23** 调用 Zen **`opencode/mimo-v2.5-free`**。每个任务先导入 14 轮合成历史，再由真实模型完成编码工作，RTK 全程关闭。压力配置使用 40,000 token 输入窗口、2,048 输出上限及 **128 token 记忆预算**，不是默认的 4,096。
 
 | 主模型指标 | legacy | layered 规则版 |
 |---|---:|---:|

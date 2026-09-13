@@ -1,31 +1,34 @@
 # 评测：当前方案消融、分层回放与真实模型
 
-本包提供三个独立入口，下面的命令均从仓库根目录运行。离线输入计数、真实 provider usage 和任务通过率采用不同口径，不合并为同一个收益数字。
+本包提供四个入口，下面的命令均从仓库根目录运行。离线输入计数、真实 provider usage 和任务通过率采用不同口径，不合并为同一个收益数字。
 
 | 入口 | 验证内容 | 是否调用外部 LLM | 已提交记录 |
 |---|---|---|---|
-| `bun run eval --headroom-strategy layered` | RTK＋当前分层 headroom 的正式 A/B/C/D 消融 | 否；o200k_base 计数 | [ablation-layered-query.json](ablation-layered-query.json) |
+| `bun run eval --headroom-strategy layered --retain-recent-turns 1` | RTK＋当前分层 headroom 的正式 A/B/C/D 消融 | 否；o200k_base 计数 | [一轮正式数据](retention-results/query-only-1.json) |
+| `bun run eval:retention` | 五档保留轮数 × 两种检索策略，另加 24 份专用历史交叉检查 | 否；两种计量口径分别报告 | [运行清单](retention-results/manifest.json) |
 | `bun run eval:headroom` | 24 份历史的新旧 headroom 对照与工程回放 | 否；字符数 / 4 估算 | [headroom-layered-results.json](headroom-layered-results.json) |
 | `bun run eval:live` | 真实 OpenCode 编码任务、缓存 usage 和可选摘要尝试 | 是；须显式提供模型、密钥环境变量和预算 | [headroom-live-results.json](headroom-live-results.json) |
 
-本轮正式消融见[配置与结果](../../docs/headroom-ablation.md)，早期分层专用回放、实机结果与默认策略决定见 [headroom 验收报告](../../docs/headroom-layered-acceptance.md)。普通开发与默认 CI 使用离线入口，实机实验单独运行。
+本轮正式消融见[配置与结果](../../docs/headroom-retention.md)，早期分层专用回放、实机结果与默认策略决定见 [headroom 验收报告](../../docs/headroom-layered-acceptance.md)。普通开发与默认 CI 使用离线入口，实机实验单独运行。
 
 ## 当前方案：生产插件四组消融
 
 A（关闭两项）、B（RTK）、C（headroom）、D（组合）均调用生产使用的 `createPluginRuntime`。每份 fixture 分四个阶段送入，阶段内两次独立宿主调用均从原始宿主数组重新克隆：首次触发后台任务，`drain()` 后再次调用以应用持久视图。工具输出通过 `toolAfter`，检索通过 `createRetrieveTool`，不在评测中重新实现视图替换算法。
 
 ```sh
-bun run eval --invariants --headroom-strategy layered \
+bun run eval --invariants --headroom-strategy layered --retain-recent-turns 1 \
   --retrieval-strategy query-only --report-path /tmp/layered-query.json
-bun run eval --invariants --headroom-strategy layered \
+bun run eval --invariants --headroom-strategy layered --retain-recent-turns 1 \
   --retrieval-strategy eager-recovery --report-path /tmp/layered-eager.json
 bun run eval --check --headroom-strategy legacy --skip-latency \
   --report-path /tmp/legacy-regression.json
 ```
 
-`--headroom-strategy legacy|layered` 将策略传入真实插件；默认保留 `legacy`，使原基线的 CI 回归继续可用。本轮正式实验显式选择 `layered`，历史记忆上限 4096、比例 15%，摘要关闭；`--benchmarks` 也使用所选策略。报告的 `meta.headroomStrategy` 与每行 `replay.headroom` 记录实际配置和持久活动视图策略，区分“配置为分层”与“实际应用了分层视图”。
+`--headroom-strategy legacy|layered` 与 `--retain-recent-turns N` 传入真实插件，N 为非负整数，0 始终保留当前轮次。历史回放的省略值仍固定为 legacy / 4，独立于生产 layered 的一轮默认值。`--benchmarks` 同样接收显式轮数。报告的 `meta.headroomStrategy/retainRecentTurns` 与每行 `replay.headroom` 来源于实际配置，另记录持久活动视图策略。
 
-本轮 query-only 四组输入为 **582,501 / 464,781 / 434,209 / 369,220**，组合降低 **36.61%**，全部绝对门禁通过。eager-recovery 的组合输入为 **467,608**，降低 **19.72%**，仅收益门槛未达标，因此 `--invariants` 返回 1；不能把该压力组报告为全部通过。原 `baseline.json` 未覆盖，另有[本轮旧版对照](ablation-legacy-query.json)和[运行清单](ablation-summary.json)。
+当前一轮 query-only 四组输入为 **582,501 / 464,781 / 391,029 / 338,584**，组合降低 **41.87%**；eager-recovery 组合输入 **428,885**，降低 **26.37%**，两组均通过绝对门禁。一轮相对四轮组合进一步减少 **8.30%** 输入，0 轮额外减少三条可见事实，因此采用 1。原 `baseline.json` 未覆盖，四轮的 36.61% / 19.72% 继续保存在[历史实验](../../docs/headroom-ablation.md)。
+
+`bun run eval:retention` 重跑 0～4 轮全部对照并更新 `retention-results`：11 份 fixture × 四组 × 两种检索，共 440 条；专用历史 24 × 五档，共 120 条。原有消融按 o200k_base，专用历史按字符数 / 4，不能合并数字。新驱动记录提交号、工作区源码差异摘要和驱动摘要。选择依据、五档表格和仍存在的六例自然检索问题见[轮数报告](../../docs/headroom-retention.md)。
 
 `--report-path` / `EVAL_REPORT_PATH` 和 `--baseline-path` / `EVAL_BASELINE_PATH` 可分别注入目的路径；API `writeReport(report, path)`、`readReport(path)`、`checkBaseline(update, {reportPath, baselinePath})` 同样支持隔离。测试在临时目录建立自己的报告和基线，不替换或恢复仓库跟踪文件。`--update-baseline` 必须完整运行且所有绝对门禁通过；比较旧基线的相对回归门禁是另一项检查。
 
@@ -84,4 +87,4 @@ bun run eval:live --model opencode/mimo-v2.5-free \
 
 提交结果的 72 次主任务全部通过。分层规则版相对旧版累计完整输入降低 **36.71%**，缓存外输入增加 **29.62%**，输出增加 **13.58%**。因此不能把总输入缩减直接当作付费账单同比下降。可选摘要共尝试 32 次，31 次收到 Zen 的 `MissingSessionID`、1 次传输失败，**没有增强候选实际应用**；增强对照保留 `incomplete: true`，CLI 按设计退出 2。主任务完成与增强效果验收是两项独立结果。[实机原始记录](headroom-live-results.json)
 
-当前默认策略仍为 `legacy`，LLM 增强继续关闭；配置、候选校验和回退方式见[使用指南](../../docs/headroom-layered.md)。
+历史实机入口显式固定 `retainRecentTurns=4` 并记录在报告中，避免新默认值改变旧对照；本轮轮数实验没有真实模型调用。当前默认策略仍为 `legacy`，LLM 增强继续关闭；配置、候选校验和回退方式见[使用指南](../../docs/headroom-layered.md)。

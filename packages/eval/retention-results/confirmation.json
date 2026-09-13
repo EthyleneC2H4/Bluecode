@@ -1,0 +1,43 @@
+{
+  "codeRevision": "355b0f464e4d7e146e5ad9a232417b86250bab78",
+  "sweepCodeRevision": "08ecb2f420717004d3d6c0b7735d5e724918503f",
+  "selectedRetainRecentTurns": 1,
+  "externalModelCalls": 0,
+  "sweepRowsVerified": 560,
+  "confirmedReports": [
+    {
+      "file": "confirmed-query-only-1.json",
+      "sha256": "c86aa6226f1358c4574c1ce0f87273f15fbc6cf34395dcf20d91fda04f2bbae9",
+      "invariantExitCode": 0,
+      "modelInputCallsMatchSweep": true,
+      "qualityMatchesSweep": true
+    },
+    {
+      "file": "confirmed-eager-recovery-1.json",
+      "sha256": "b18a4d743da0c7f699503735bff16697ee87352bafbc6a51a1d6d3c6908ab8ab",
+      "invariantExitCode": 0,
+      "modelInputCallsMatchSweep": true,
+      "qualityMatchesSweep": true
+    }
+  ],
+  "legacyBaselineCheck": {
+    "exitCode": 0,
+    "relativeLatencySkipped": true,
+    "inputs": {
+      "A": 582501,
+      "B": 464781,
+      "C": 529923,
+      "D": 435436
+    }
+  },
+  "verification": {
+    "command": "bun run verify",
+    "testsPassed": 590,
+    "testsFailed": 0,
+    "assertions": 11437,
+    "testFiles": 84,
+    "typecheckedPackages": 7,
+    "dependencyDirection": "passed",
+    "hostBoundary": "passed"
+  }
+}

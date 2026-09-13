@@ -2,7 +2,7 @@
 
 Context engineering for [OpenCode](https://github.com/anomalyco/opencode): one plugin connects an RTK subprocess for tool-output compression and a headroomd daemon for budgeted, layered conversation memory and on-demand evidence recovery.
 
-[简体中文](README.zh-CN.md) · [Architecture](docs/architecture.md) · [Headroom guide](docs/headroom-layered.md) · [Headroom ablation](docs/headroom-ablation.md) · [Operations](docs/operations.md)
+[简体中文](README.zh-CN.md) · [Architecture](docs/architecture.md) · [Headroom guide](docs/headroom-layered.md) · [Headroom ablation](docs/headroom-retention.md) · [Operations](docs/operations.md)
 
 This is an independent learning implementation, not vivo's private BlueCode source. Evaluation includes deterministic synthetic replays and small coding tasks executed by a real LLM through OpenCode; their metrics are reported separately.
 
@@ -129,7 +129,7 @@ Source: [client](packages/rtk/src/client.ts), [classifier](packages/rtk-core/src
 
 ### Inside headroomd: layered memory, incremental planning and recovery
 
-The diagram shows the opt-in `layered` strategy. `legacy` retains its contiguous-prefix planner. Layered planning protects the four recent complete turns and the active turn, keeps user requirements and corrections verbatim, and archives only older eligible observations and clearly identified material ranges.
+The diagram shows the opt-in `layered` strategy. `legacy` retains its contiguous-prefix planner. Layered planning protects the most recent completed turn and the active turn by default (`retainRecentTurns` is configurable), keeps user requirements and corrections verbatim, and archives only older eligible observations and clearly identified material ranges.
 
 ```mermaid
 flowchart TB
@@ -204,7 +204,7 @@ Mount the checkout through OpenCode's tuple-form configuration. This example exp
       "strategy": "layered",
       "triggerRatio": 0.7,
       "targetRatio": 0.55,
-      "retainRecentTurns": 4,
+      "retainRecentTurns": 1,
       "memoryMaxTokens": 4096,
       "summarizer": {"enabled": false}
     }
@@ -220,24 +220,36 @@ The three protocols below use different histories, counting methods and retrieva
 
 ### RTK + current layered headroom: four-way ablation
 
-The formal A/B/C/D replay now uses **`layered` headroom with LLM summaries off** in C/D. All 11 original fixtures were rerun on the same code revision with o200k_base counting, four history stages, two fresh host calls per stage and the fixed query-only policy. Headroom uses its standard 4,096-token memory budget; the plugin configuration default remains `legacy` independently of this experiment.
+The formal A/B/C/D replay uses **`layered` headroom with one completed historical turn plus the active turn retained, and LLM summaries off** in C/D. The 11 original fixtures use o200k_base counting, four history stages, two fresh host calls per stage and query-only retrieval. The memory budget is 4,096 tokens. The plugin strategy still defaults to `legacy`; opting into layered now defaults to one retained completed turn.
 
 | Configuration | Total input tokens | Reduction vs A |
 |---|---:|---:|
 | A: no optimization | 582,501 | — |
 | B: RTK only | 464,781 | 20.21% |
-| C: layered headroom only | 434,209 | 25.46% |
-| D: RTK + layered headroom | 369,220 | **36.61%** |
+| C: layered headroom only | 391,029 | 32.87% |
+| D: RTK + layered headroom | 338,584 | **41.87%** |
 
-The combined configuration saves another **20.56%** input relative to RTK alone. C/D both retain 3/3 critical constraints and pass 10/10 deterministic answer checks, with natural-question Recall@5 of 10/10. Exact archive recovery is 30/30 in C and 62/62 in D; cross-namespace access, stale-plan application and retrieval recompression violations are all zero. Ordinary context facts remain 102/104 in B/D, reported separately from critical constraints. The query-only run passes all absolute gates.
+The combination saves another **27.15%** input relative to RTK alone. C/D both retain 3/3 critical constraints, pass 10/10 deterministic answer checks and achieve natural-question Recall@5 of 10/10. Exact selected-archive recovery is 34/34 and 66/66, with zero violations across the three safety probes. Ordinary context facts remain 102/104 in B/D, separately from critical constraints.
 
-The separately rerun **eager-recovery** stress policy increases combined input to **467,608** tokens: **19.72%** lower than A, still below the 20% savings gate. Its quality and recovery checks pass. This is offline replay, not new LLM task accuracy or provider billing.
+The retention sweep fixes all other settings. Counts below exclude the always-protected active turn:
 
-A fresh legacy control exactly reproduces the frozen totals, including D at 435,436 tokens. The current combination therefore uses **15.21% less input than the legacy combination**. [Frozen baseline](packages/eval/baseline.json) remains unchanged for regression checks. See the [experiment settings and results](docs/headroom-ablation.md), [query-only data](packages/eval/ablation-layered-query.json), [eager data](packages/eval/ablation-layered-eager.json) and [run manifest](packages/eval/ablation-summary.json).
+| Completed historical turns retained | Combined input tokens | Reduction vs no optimization | Combined visible context facts |
+|---|---:|---:|---:|
+| 4 | 369,220 | 36.61% | 102/104 |
+| 3 | 354,615 | 39.12% | 102/104 |
+| 2 | 345,875 | 40.62% | 102/104 |
+| **1 (selected)** | **338,584** | **41.87%** | **102/104** |
+| 0 | 331,464 | 43.10% | 99/104 |
+
+One turn reduces input another **8.30%** against four without regressing the measured quality checks. Zero saves more tokens but removes three additional visible facts, so one is selected. Cross-checking the 24 dedicated histories finds no additional quality failures and **4.10%** lower estimated cumulative input; six existing first-hit revision-selection failures remain.
+
+With one retained turn, **eager-recovery** stress input is **428,885** tokens, **26.37%** below A. Both formal and stress runs pass the absolute gates. The earlier 19.72% stress saving used four retained turns and remains in the historical report. These are offline replays with no new external LLM calls.
+
+The one-turn combination uses **22.24%** less input than legacy D at 435,436 tokens. See the [retention experiment and decision](docs/headroom-retention.md), [raw-data manifest](packages/eval/retention-results/manifest.json), [one-turn formal data](packages/eval/retention-results/query-only-1.json) and [stress data](packages/eval/retention-results/eager-recovery-1.json). The [original four-turn experiment](docs/headroom-ablation.md) and [frozen baseline](packages/eval/baseline.json) remain separate.
 
 ### Real OpenCode coding tasks: legacy vs layered rules
 
-Twelve small tasks, each repeated twice per strategy, used OpenCode **1.18.23** and Zen **`opencode/mimo-v2.5-free`**. Each task began with 14 synthetic history turns before the model performed real coding work. RTK was off throughout. This pressure configuration used a 40,000-token input window, 2,048 output limit and **128-token memory budget**, not the default 4,096.
+These historical live results retain four turns; this tuning run did not repeat model calls. Twelve small tasks, each repeated twice per strategy, used OpenCode **1.18.23** and Zen **`opencode/mimo-v2.5-free`**. Each task began with 14 synthetic history turns before the model performed real coding work. RTK was off throughout. This pressure configuration used a 40,000-token input window, 2,048 output limit and **128-token memory budget**, not the default 4,096.
 
 | Main-model metric | legacy | layered rules |
 |---|---:|---:|

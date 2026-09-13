@@ -1,0 +1,1684 @@
+{
+  "codeRevision": "08ecb2f420717004d3d6c0b7735d5e724918503f",
+  "timestamp": "2026-09-13T02:24:49.643Z",
+  "externalModelCalls": 0,
+  "fixtureSha256": "0f057f979461dc8f87789102f39e718131c5fba93858ecff05c63e1089f0c9b5",
+  "dedicatedFixtureSha256": "9a99c5ea25f12b950cac2c01f7ac8019dcc6e11c588fc84914b64abb96597560",
+  "retentionOrder": [
+    4,
+    3,
+    2,
+    1,
+    0
+  ],
+  "settings": {
+    "strategy": "layered",
+    "memoryMaxTokens": 4096,
+    "memoryRatio": 0.15,
+    "triggerRatio": 0.7,
+    "targetRatio": 0.55,
+    "summarizerEnabled": false,
+    "contextWindowTokens": 8192,
+    "outputReserve": 1024,
+    "replaySteps": 4,
+    "hostCallsPerStage": 2,
+    "rtkBudgetTokens": 512,
+    "rtkTimeoutMs": 40,
+    "retrievalMaxTokens": 8192,
+    "retrievalMaxBytes": 32768
+  },
+  "reports": [
+    {
+      "file": "query-only-4.json",
+      "sha256": "f7b63c3641e38db4d08a8d189739d564b206b8ffb7ec3c69b8f4b13ee4f8fc1d",
+      "suite": "ablation",
+      "retrievalStrategy": "query-only",
+      "retainRecentTurns": 4,
+      "violations": [],
+      "groups": {
+        "A": {
+          "input": 582501,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 0,
+            "total": 0,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 104,
+              "total": 104,
+              "rate": 1
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "B": {
+          "input": 464781,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 32,
+            "total": 32,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 102,
+              "total": 104,
+              "rate": 0.9807692307692307
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "C": {
+          "input": 434209,
+          "retrieval": 3390,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 30,
+            "total": 30,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 104,
+              "total": 104,
+              "rate": 1
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "D": {
+          "input": 369220,
+          "retrieval": 3487,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 62,
+            "total": 62,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 102,
+              "total": 104,
+              "rate": 0.9807692307692307
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        }
+      }
+    },
+    {
+      "file": "query-only-3.json",
+      "sha256": "f6ad2379eee855b91ae4cd37d5b6ce48526f2aa778b9c2a816be26dbb3067cf6",
+      "suite": "ablation",
+      "retrievalStrategy": "query-only",
+      "retainRecentTurns": 3,
+      "violations": [],
+      "groups": {
+        "A": {
+          "input": 582501,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 0,
+            "total": 0,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 104,
+              "total": 104,
+              "rate": 1
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "B": {
+          "input": 464781,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 32,
+            "total": 32,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 102,
+              "total": 104,
+              "rate": 0.9807692307692307
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "C": {
+          "input": 416563,
+          "retrieval": 3532,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 31,
+            "total": 31,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 104,
+              "total": 104,
+              "rate": 1
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "D": {
+          "input": 354615,
+          "retrieval": 3495,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 63,
+            "total": 63,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 102,
+              "total": 104,
+              "rate": 0.9807692307692307
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        }
+      }
+    },
+    {
+      "file": "query-only-2.json",
+      "sha256": "e583b6fcc2a85e442af26b22563b8a5fad1d2e2f1a6a86ff1f2d9469ce101049",
+      "suite": "ablation",
+      "retrievalStrategy": "query-only",
+      "retainRecentTurns": 2,
+      "violations": [],
+      "groups": {
+        "A": {
+          "input": 582501,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 0,
+            "total": 0,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 104,
+              "total": 104,
+              "rate": 1
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "B": {
+          "input": 464781,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 32,
+            "total": 32,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 102,
+              "total": 104,
+              "rate": 0.9807692307692307
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "C": {
+          "input": 401403,
+          "retrieval": 3188,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 33,
+            "total": 33,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 104,
+              "total": 104,
+              "rate": 1
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "D": {
+          "input": 345875,
+          "retrieval": 3255,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 65,
+            "total": 65,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 102,
+              "total": 104,
+              "rate": 0.9807692307692307
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        }
+      }
+    },
+    {
+      "file": "query-only-1.json",
+      "sha256": "2766127137c9134db75fb7a5d4929c70d8132a0eb2360415133d952008ae2ebe",
+      "suite": "ablation",
+      "retrievalStrategy": "query-only",
+      "retainRecentTurns": 1,
+      "violations": [],
+      "groups": {
+        "A": {
+          "input": 582501,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 0,
+            "total": 0,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 104,
+              "total": 104,
+              "rate": 1
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "B": {
+          "input": 464781,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 32,
+            "total": 32,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 102,
+              "total": 104,
+              "rate": 0.9807692307692307
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "C": {
+          "input": 391029,
+          "retrieval": 3187,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 34,
+            "total": 34,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 104,
+              "total": 104,
+              "rate": 1
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "D": {
+          "input": 338584,
+          "retrieval": 3293,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 66,
+            "total": 66,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 102,
+              "total": 104,
+              "rate": 0.9807692307692307
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        }
+      }
+    },
+    {
+      "file": "query-only-0.json",
+      "sha256": "0149f116652c91367ddda275574520e3feafbe01b17d631d522d7b3ff4e2adde",
+      "suite": "ablation",
+      "retrievalStrategy": "query-only",
+      "retainRecentTurns": 0,
+      "violations": [],
+      "groups": {
+        "A": {
+          "input": 582501,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 0,
+            "total": 0,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 104,
+              "total": 104,
+              "rate": 1
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "B": {
+          "input": 464781,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 32,
+            "total": 32,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 102,
+              "total": 104,
+              "rate": 0.9807692307692307
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "C": {
+          "input": 381406,
+          "retrieval": 3230,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 36,
+            "total": 36,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 101,
+              "total": 104,
+              "rate": 0.9711538461538461
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "D": {
+          "input": 331464,
+          "retrieval": 3322,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 68,
+            "total": 68,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 99,
+              "total": 104,
+              "rate": 0.9519230769230769
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        }
+      }
+    },
+    {
+      "file": "eager-recovery-4.json",
+      "sha256": "efbcc812b3f62dfb04b0f98d312ac8b76876c2a03593275c71362af00ef2ab3a",
+      "suite": "ablation",
+      "retrievalStrategy": "eager-recovery",
+      "retainRecentTurns": 4,
+      "violations": [
+        {
+          "metric": "combinedNetInput",
+          "group": "D",
+          "target": ">=20% reduction against A at the same deterministic task quality",
+          "current": 0.19724086310581446
+        }
+      ],
+      "groups": {
+        "A": {
+          "input": 582501,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 0,
+            "total": 0,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 104,
+              "total": 104,
+              "rate": 1
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "B": {
+          "input": 464781,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 32,
+            "total": 32,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 102,
+              "total": 104,
+              "rate": 0.9807692307692307
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "C": {
+          "input": 531773,
+          "retrieval": 7089,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 30,
+            "total": 30,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 104,
+              "total": 104,
+              "rate": 1
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "D": {
+          "input": 467608,
+          "retrieval": 7186,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 62,
+            "total": 62,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 102,
+              "total": 104,
+              "rate": 0.9807692307692307
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        }
+      }
+    },
+    {
+      "file": "eager-recovery-3.json",
+      "sha256": "c69064dbc2bd55a08bc2c30eb95e8e63d74bcb08031ca321fa6c3e11f9e13da2",
+      "suite": "ablation",
+      "retrievalStrategy": "eager-recovery",
+      "retainRecentTurns": 3,
+      "violations": [],
+      "groups": {
+        "A": {
+          "input": 582501,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 0,
+            "total": 0,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 104,
+              "total": 104,
+              "rate": 1
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "B": {
+          "input": 464781,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 32,
+            "total": 32,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 102,
+              "total": 104,
+              "rate": 0.9807692307692307
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "C": {
+          "input": 512802,
+          "retrieval": 7231,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 31,
+            "total": 31,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 104,
+              "total": 104,
+              "rate": 1
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "D": {
+          "input": 450055,
+          "retrieval": 7194,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 63,
+            "total": 63,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 102,
+              "total": 104,
+              "rate": 0.9807692307692307
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        }
+      }
+    },
+    {
+      "file": "eager-recovery-2.json",
+      "sha256": "91fd073da683ca1e9d45ffa4bc3d728824a4bc8661758b1aefdbb5c6e13fd6c2",
+      "suite": "ablation",
+      "retrievalStrategy": "eager-recovery",
+      "retainRecentTurns": 2,
+      "violations": [],
+      "groups": {
+        "A": {
+          "input": 582501,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 0,
+            "total": 0,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 104,
+              "total": 104,
+              "rate": 1
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "B": {
+          "input": 464781,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 32,
+            "total": 32,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 102,
+              "total": 104,
+              "rate": 0.9807692307692307
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "C": {
+          "input": 492983,
+          "retrieval": 6887,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 33,
+            "total": 33,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 104,
+              "total": 104,
+              "rate": 1
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "D": {
+          "input": 438392,
+          "retrieval": 6954,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 65,
+            "total": 65,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 102,
+              "total": 104,
+              "rate": 0.9807692307692307
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        }
+      }
+    },
+    {
+      "file": "eager-recovery-1.json",
+      "sha256": "6edb30d217d64c1200e44c8299a79b53010f0dec4e4bcee1a35b99bbeb45be89",
+      "suite": "ablation",
+      "retrievalStrategy": "eager-recovery",
+      "retainRecentTurns": 1,
+      "violations": [],
+      "groups": {
+        "A": {
+          "input": 582501,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 0,
+            "total": 0,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 104,
+              "total": 104,
+              "rate": 1
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "B": {
+          "input": 464781,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 32,
+            "total": 32,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 102,
+              "total": 104,
+              "rate": 0.9807692307692307
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "C": {
+          "input": 480076,
+          "retrieval": 6886,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 34,
+            "total": 34,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 104,
+              "total": 104,
+              "rate": 1
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "D": {
+          "input": 428885,
+          "retrieval": 6992,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 66,
+            "total": 66,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 102,
+              "total": 104,
+              "rate": 0.9807692307692307
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        }
+      }
+    },
+    {
+      "file": "eager-recovery-0.json",
+      "sha256": "ec49d92e01c875a5fb68029bfcef4ae5839769bc41e885f3eb7f4e5037d70324",
+      "suite": "ablation",
+      "retrievalStrategy": "eager-recovery",
+      "retainRecentTurns": 0,
+      "violations": [],
+      "groups": {
+        "A": {
+          "input": 582501,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 0,
+            "total": 0,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 104,
+              "total": 104,
+              "rate": 1
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "B": {
+          "input": 464781,
+          "retrieval": 0,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 0,
+            "total": 0,
+            "rate": null
+          },
+          "archive": {
+            "found": 32,
+            "total": 32,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 102,
+              "total": 104,
+              "rate": 0.9807692307692307
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "C": {
+          "input": 468145,
+          "retrieval": 6929,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 36,
+            "total": 36,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 101,
+              "total": 104,
+              "rate": 0.9711538461538461
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        },
+        "D": {
+          "input": 419477,
+          "retrieval": 7021,
+          "tasks": {
+            "passed": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "critical": {
+            "found": 3,
+            "total": 3,
+            "rate": 1
+          },
+          "recall": {
+            "found": 10,
+            "total": 10,
+            "rate": 1
+          },
+          "archive": {
+            "found": 68,
+            "total": 68,
+            "rate": 1
+          },
+          "contextRecall": {
+            "mustHit": {
+              "found": 99,
+              "total": 104,
+              "rate": 0.9519230769230769
+            },
+            "niceToHave": {
+              "found": 21,
+              "total": 23,
+              "rate": 0.9130434782608695
+            }
+          }
+        }
+      }
+    },
+    {
+      "file": "dedicated-4.json",
+      "sha256": "d57836dade154f18a39f1a12007b51127a9cc96174f02a5c3d57c2389fcf977a",
+      "suite": "dedicated",
+      "retainRecentTurns": 4,
+      "summary": {
+        "input": 13321674,
+        "retrieval": 53411,
+        "cpuSeconds": 52.06,
+        "daemonRssPeakBytes": 438665216,
+        "cases": 24,
+        "failed": [
+          "failure-repair-50",
+          "failure-repair-200",
+          "failure-repair-1000",
+          "multi-generation-50",
+          "multi-generation-200",
+          "multi-generation-1000"
+        ]
+      }
+    },
+    {
+      "file": "dedicated-3.json",
+      "sha256": "c635b5b07e56452d383ba00b026cc6b821dba1e2ca932922c5839e8a4601ec30",
+      "suite": "dedicated",
+      "retainRecentTurns": 3,
+      "summary": {
+        "input": 13135733,
+        "retrieval": 53357,
+        "cpuSeconds": 51.79,
+        "daemonRssPeakBytes": 435519488,
+        "cases": 24,
+        "failed": [
+          "failure-repair-50",
+          "failure-repair-200",
+          "failure-repair-1000",
+          "multi-generation-50",
+          "multi-generation-200",
+          "multi-generation-1000"
+        ]
+      }
+    },
+    {
+      "file": "dedicated-2.json",
+      "sha256": "28b63fdeee99cf24aef7c08ae6740d01a96c5f317e8a2a25379de1be11aeadfc",
+      "suite": "dedicated",
+      "retainRecentTurns": 2,
+      "summary": {
+        "input": 12953326,
+        "retrieval": 53375,
+        "cpuSeconds": 52.60000000000001,
+        "daemonRssPeakBytes": 455933952,
+        "cases": 24,
+        "failed": [
+          "failure-repair-50",
+          "failure-repair-200",
+          "failure-repair-1000",
+          "multi-generation-50",
+          "multi-generation-200",
+          "multi-generation-1000"
+        ]
+      }
+    },
+    {
+      "file": "dedicated-1.json",
+      "sha256": "659b616e3c7f33a1894627e424f3738dd0254b10ac358a217cb92f7830291ba7",
+      "suite": "dedicated",
+      "retainRecentTurns": 1,
+      "summary": {
+        "input": 12775758,
+        "retrieval": 53214,
+        "cpuSeconds": 52.35,
+        "daemonRssPeakBytes": 440811520,
+        "cases": 24,
+        "failed": [
+          "failure-repair-50",
+          "failure-repair-200",
+          "failure-repair-1000",
+          "multi-generation-50",
+          "multi-generation-200",
+          "multi-generation-1000"
+        ]
+      }
+    },
+    {
+      "file": "dedicated-0.json",
+      "sha256": "d73a521a7fb6baa5ac3f993aca043789f5468c72f2dfcdd59fa9cc3398130baa",
+      "suite": "dedicated",
+      "retainRecentTurns": 0,
+      "summary": {
+        "input": 12605851,
+        "retrieval": 53230,
+        "cpuSeconds": 54.53,
+        "daemonRssPeakBytes": 450904064,
+        "cases": 24,
+        "failed": [
+          "failure-repair-50",
+          "failure-repair-200",
+          "failure-repair-1000",
+          "multi-generation-50",
+          "multi-generation-200",
+          "multi-generation-1000"
+        ]
+      }
+    }
+  ]
+}
