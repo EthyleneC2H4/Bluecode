@@ -150,8 +150,9 @@ export function createSecurityGuard(input: {
       if (denied && options.security.mode === "enforce") {
         stats.denied++
         pending.delete(JSON.stringify([event.sessionID, event.callID]))
-        const ids = (await strings(event.sessionID, [decision.findings.map(f => f.ruleId).join(", ")]))[0]!
-        throw new SecurityBlockedError(decision.decision === "unavailable" ? "scanner unavailable; retry when ready" : ids.slice(0, 512))
+        const guidance = decision.findings.map(f => `${f.ruleId}: ${f.remediation}`).join("; ").slice(0, 900)
+        const safe = (await strings(event.sessionID, [guidance]))[0]!
+        throw new SecurityBlockedError(decision.decision === "unavailable" ? "scanner unavailable; retry when ready" : safe.slice(0, 900))
       }
       if (decision.decision !== "allow") stats.warned++
     },

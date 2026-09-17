@@ -51,3 +51,15 @@ test("generated security metadata is filtered even with credential-bearing polic
   await security.after(event, output)
   expect(JSON.stringify(output)).not.toContain(secret)
 })
+
+test("denied calls return bounded sanitized remediation without exposing source", async () => {
+  const secret = "ghp_abcdefghijklmnopqrstuvwxyz0123456789AB"
+  await expect(guard().before({ tool: "write", sessionID: "s", callID: "blocked" },
+    { args: { filePath: "/project/a.ts", content: `const key='${secret}'` } })).rejects.toThrow("Use a secret store or environment reference")
+  try { await guard().before({ tool: "write", sessionID: "s", callID: "blocked" }, { args: { filePath: "/project/a.ts", content: secret } }) }
+  catch (error) {
+    const message = (error as Error).message
+    expect(message).not.toContain(secret)
+    expect(Math.ceil(message.length / 4)).toBeLessThanOrEqual(256)
+  }
+})
