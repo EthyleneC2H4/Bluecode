@@ -163,10 +163,15 @@ export function createSecurityGuard(input: {
       const withheld = JSON.stringify(clean).includes(WITHHELD)
       const decision = pending.get(JSON.stringify([event.sessionID, event.callID]))
       pending.delete(JSON.stringify([event.sessionID, event.callID]))
-      if (decision || withheld) output.metadata = { ...output.metadata, vsec: await object(event.sessionID, {
-        decision: decision?.decision ?? "unavailable", coverage: decision?.coverage ?? "unsupported",
-        policyVersion: options.security.policy.version, rules: decision?.findings.map(f => f.ruleId) ?? [], withheld,
-      }) }
+      if (decision || withheld) {
+        const [policyVersion, ...rules] = await strings(event.sessionID, [options.security.policy.version, ...decision?.findings.map(f => f.ruleId) ?? []])
+        // The keys/enums are our schema, not tool evidence. Keep the withheld
+        // bit usable even when scanning configurable string values fails.
+        output.metadata = { ...output.metadata, vsec: {
+          decision: decision?.decision ?? "unavailable", coverage: decision?.coverage ?? "unsupported",
+          policyVersion, rules, withheld,
+        } }
+      }
       if (decision?.findings.length && typeof output.output === "string") {
         const text = decision.findings.map(f => `${f.ruleId}: ${f.remediation}`).join("; ").slice(0, 900)
         output.output += `\n[VSecAgent] ${(await strings(event.sessionID, [text]))[0]}`

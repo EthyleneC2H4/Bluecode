@@ -144,3 +144,16 @@ test("sanitization mutates host-owned arrays even when the host keeps their orig
   expect(context).toEqual(["[REDACTED]"])
   expect(messages[0]!.parts[0]!.text).toBe("[REDACTED]")
 })
+
+test("scanner failure preserves internal withheld metadata and skips active RTK", async () => {
+  let calls = 0
+  const { runtime } = await setup("enforce", { security: null,
+    options: parseOptions({ mode: "on", security: { mode: "enforce" }, rtk: { minBytes: 0 } }),
+    rtk: { async compress() { calls++; return { kind: "unchanged", output: "" } }, async shutdown() {} },
+  })
+  const output: any = { output: SECRET }
+  await runtime.toolAfter({ tool: "read", sessionID: "s", callID: "c", args: {} }, output)
+  expect(output.metadata.vsec.withheld).toBe(true)
+  expect(output.metadata.vsec.decision).toBe("unavailable")
+  expect(calls).toBe(0)
+})
