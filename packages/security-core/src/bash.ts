@@ -1,6 +1,6 @@
 import { Parser, Language, type Node } from "web-tree-sitter"
 import { hit, type Hit, type Scan } from "./model"
-import { normalizePath, sensitivePath } from "./paths"
+import { normalizePath, sensitivePath, within } from "./paths"
 
 let languagePromise: Promise<Language> | undefined
 /** Sole asset-loading boundary: pinned local WASM, never source files or URLs. */
@@ -45,7 +45,7 @@ function unwrap(words: string[]): string[] {
   }
   return words.slice(index)
 }
-export async function scanBash(text: string, root: string, depth = 0): Promise<Scan> {
+export async function scanBash(text: string, root: string, depth = 0, cwd = root): Promise<Scan> {
   const grammar = await language()
   const parser = new Parser()
   parser.setLanguage(grammar)
@@ -54,6 +54,16 @@ export async function scanBash(text: string, root: string, depth = 0): Promise<S
   const hits: Hit[] = []
   let partial = tree.rootNode.hasError
   const add = (node: Node, suffix: string, severity: Hit["severity"] = "critical") => hits.push(hit("dangerous-command", suffix, node.startIndex, node.endIndex, node.text, severity))
+  const inspectPath = (node: Node, value: string) => {
+    if (!value || value === "-" || /[$`*?{}]/.test(value)) { partial = true; return }
+    const resolved = normalizePath(value.startsWith("/") ? value : `${cwd}/${value}`)
+    if (/^\/dev\/(?:null|stdin|stdout|stderr)$/.test(resolved)) return
+    if (sensitivePath(resolved)) hits.push(hit("sensitive-file", "shell-path", node.startIndex, node.endIndex, node.text, "critical"))
+    if (!within(resolved, root)) hits.push(hit("path-traversal", "shell-path", node.startIndex, node.endIndex, node.text, "critical"))
+    // Canonical filesystem evidence is available for direct tools only. Shell
+    // symlinks and preceding cd/assignments cannot be proved by this syntax pass.
+    partial = true
+  }
   const commands = (node: Node): string[] => {
     const name = node.childForFieldName("name")
     const args = node.childrenForFieldName("argument")
@@ -96,6 +106,16 @@ export async function scanBash(text: string, root: string, depth = 0): Promise<S
         const nameNode = node.childForFieldName("name")
         if (nameNode && literal(nameNode) === undefined) partial = true
         const words = unwrap(commands(node)), command = base(words[0] ?? ""), args = words.slice(1)
+        if (/^(?:cat|head|tail|stat|cp|mv|tee|source|\.)$/.test(command) && !args.some(a => a === "--help" || a === "--version")) {
+          for (let i = 0; i < args.length; i++) {
+            const arg = args[i]!
+            if (/^(?:head|tail)$/.test(command) && /^(?:-[nc]|--lines|--bytes)$/.test(arg) ||
+                command === "stat" && /^(?:-f|-c|--format|--printf)$/.test(arg) ||
+                /^(?:cp|mv)$/.test(command) && /^(?:-S|--suffix)$/.test(arg)) { i++; continue }
+            if (/^(?:cp|mv)$/.test(command) && arg.startsWith("--target-directory=")) inspectPath(node, arg.slice("--target-directory=".length))
+            if (!arg.startsWith("-")) inspectPath(node, arg)
+          }
+        }
         if (command === "rm") {
           const recursive = args.some(s => /^-[^-]*[rR]/.test(s) || s === "--recursive")
           const targets = args.filter(s => !s.startsWith("-"))
@@ -111,7 +131,7 @@ export async function scanBash(text: string, root: string, depth = 0): Promise<S
             // The original argument node distinguishes literal code from expansions.
             const code = args[index + 1]
             if (code !== undefined && depth < 2 && node.childrenForFieldName("argument").some(arg => arg !== null && literal(arg) === code)) {
-              const nested = await scanBash(code, root, depth + 1)
+              const nested = await scanBash(code, root, depth + 1, cwd)
               partial ||= nested.partial
               for (const nestedHit of nested.hits) hits.push({ ...nestedHit, start: node.startIndex, end: node.endIndex, identity: node.text })
             } else partial = true
@@ -138,6 +158,11 @@ export async function scanBash(text: string, root: string, depth = 0): Promise<S
         const value = target && literal(target)
         if (value && (sensitivePath(value) || /^\/(?:dev\/(?:sd|nvme)|etc\/)/.test(value))) add(node, "sensitive-overwrite")
         if (!value) partial = true
+      }
+      if (node.type === "file_redirect") {
+        const target = node.childForFieldName("destination")
+        const value = target && literal(target)
+        if (value && value !== "&1" && value !== "&2" && !/^\d+$/.test(value)) inspectPath(node, value)
       }
       nodes.push(...node.namedChildren.filter((n): n is Node => n !== null))
     }

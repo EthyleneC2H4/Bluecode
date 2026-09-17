@@ -15,7 +15,9 @@ export function within(path: string, root: string): boolean {
 }
 export function sensitivePath(path: string): boolean {
   const p = normalizePath(path)
-  if (/\.(?:pub)$|\/\.env\.(?:example|sample|template|dist)$/i.test(p)) return false
+  if (/\/\.env\.(?:example|sample|template|dist)$/i.test(p)) return false
+  if (/\/\.env(?:\.[^/]+)?$/i.test(p)) return true
+  if (/\.pub$/i.test(p)) return false
   return /\/(?:\.env(?:\.[^/]+)?|\.npmrc|\.netrc|\.git-credentials|credentials\.json|[^/]+\.(?:key|p12|pfx))$/i.test(p)
     || /\/\.ssh\/(?:id_[^/.]+|config)$|\/\.aws\/credentials$|\/etc\/(?:shadow|passwd|sudoers)$|\/proc\/(?:self|\d+)\/environ$/.test(p)
 }

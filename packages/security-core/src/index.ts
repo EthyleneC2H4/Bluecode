@@ -58,7 +58,7 @@ export async function evaluateTool(params: SecurityEvaluateParams): Promise<Secu
       const scan = await sourceHits(file.content, file.path, p.root)
       partial ||= scan.partial
       const previous = new Map<string, number>()
-      if (file.before !== undefined) {
+      if (file.before !== undefined && file.complete) {
         const before = await sourceHits(file.before, file.path, p.root)
         partial ||= before.partial
         for (const h of before.hits) { const key = h.ruleId + "\0" + h.identity; previous.set(key, (previous.get(key) ?? 0) + 1) }
@@ -95,7 +95,7 @@ export async function evaluateTool(params: SecurityEvaluateParams): Promise<Secu
       const command = p.args.command ?? p.args.script
       if (typeof command !== "string") partial = true
       else {
-        const scan = await scanBash(command, p.root)
+        const scan = await scanBash(command, p.root, 0, p.cwd)
         partial ||= scan.partial
         for (const h of scan.hits) append(h, command)
       }
