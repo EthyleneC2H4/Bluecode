@@ -1,0 +1,26 @@
+{
+  "reason": "GitHub push protection rejected a deliberately synthetic Slack-format development fixture. Unpublished commits were rewritten to construct the same sample at runtime; no protection exception was used. Recorded execution commit IDs below remain historical aliases. Acceptance labels and input values are unchanged.",
+  "developmentInputsSha256BeforeAndAfter": "f75696d1a73d0d39f8acb9b4e88890e7008f05f5cb2402a1f1c9669881164214",
+  "fixtureFreezeCommit": "5e50e8297d47dd428bef1c71ff725c256cc571f0",
+  "base": "c6d84d895c8369bbc9b79a8f4864f96cc9a7881c",
+  "oldHead": "cbb5582ab5e4fddab387184c0fdd0bc2db7733d3",
+  "newHead": "c694a9025919ae97587bd0a956cdea3e88335dc9",
+  "rewrittenCommits": {
+    "65903c2d2a532aad5862cfb420d18350c4ea9855": "acc2eaed309809fa612cec53dc19a0c2309a29ce",
+    "c5fe329272549f30f1e74fa1b6a16fecc69ee03d": "6b3ed94a13beb454733b41f2882a9df96fefbacb",
+    "ef9845e4f1d3a747876dca9518e177f0012b5f21": "3d96dc03b497b14fa715f06b9a36e3ecda03698d",
+    "467887e2d518048d298122af4fb4f254a825931b": "b0cadfa8a899466bd30a9623be670466d7b5a8a7",
+    "5cb2a23fb0cb5a83ee83cacd91ecbab9fe4c4959": "0acad3230362f1c897d62c2678f9587914d3e6c4",
+    "b354c044b6582a4f1a3c95fbd00a78946d7d0325": "b0fdfdb1ea3add80e4b6b18c8f68532ded712b95",
+    "f976e307a0d086ccb9bbb891ebd62d1e432edfc3": "c23ddcb8a8fcd20b86363bcec8c88f38f2ed2270",
+    "ed8848ba38cb93f3ddd9f3148bfa3d64e3ca54b6": "5e50e8297d47dd428bef1c71ff725c256cc571f0",
+    "7d66ad01d0d159146fc73edc07c4d2495f77a536": "bb62a558e9ccec5b3931c51af59a5b4ae884443c",
+    "b4e0c2dd31a81633aee4171d1100b28240f653b9": "fac0b53e243f00ffae93f85142838884e178e078",
+    "fa8348981fa26f576b14849aa30aecbb4b8a8c60": "fe54735b34798dd7402e35f82e5d9914de65a4bb",
+    "9220ee5383a1be1c9513c937a7a2ec2a62751d94": "b88551c7b6869d925dc679ce1509ceb2d00e337d",
+    "b8b119e29eaf0c2281850d782fa0fc0f05bf6775": "c83e45a3340222739957f987cc24027fe18b1b7e",
+    "6b2e91ef03f030ed712d78406cbec10464eadef0": "870a2a0fa95b96690016b30dde75619e6e05cd6d",
+    "cbb5582ab5e4fddab387184c0fdd0bc2db7733d3": "c694a9025919ae97587bd0a956cdea3e88335dc9"
+  },
+  "changedFixtureBlobs": 14
+}

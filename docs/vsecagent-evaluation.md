@@ -9,7 +9,7 @@
 开发集来自 [`security-core/fixtures/development.ts`](../packages/security-core/fixtures/development.ts)，
 8 类各 10 条风险、10 条正常，共 160 条。验收集来自
 [`security-fixtures.ts`](../packages/eval/src/security-fixtures.ts)，8 类各 20 条风险、20 条正常，共 320 条。
-验收集在运行扫描器之前单独冻结于提交 `ed8848b`；源文件 SHA-256 为
+验收集在运行扫描器之前单独冻结，发布历史中的提交为 `5e50e82`（原执行记录别名 `ed8848b`）；源文件 SHA-256 为
 `ba147421497ce9263d1be3a9da1cb16268a0d191057eedc89b8b30ad0ff32c54`。
 类别、风险标签、结构族 / 模板 ID、支持范围、critical 预期均在冻结文件中；此后没有改标签。
 
@@ -163,3 +163,5 @@ CLI 使用 `import.meta.main`，被测试或其他程序导入不会启动评估
 首次评估时工作区存在并行开发修改，因此其 Git HEAD 不是完整工作区快照；JSON 明确记为 `gitDirty: true`。
 
 本套样本、评估器和报告由 AI 编制，生产修复与结果按仓库自动化测试验证；合成数据和方法边界已在上文披露。
+
+发布时 GitHub 密钥保护将合成 Slack 格式样例误识别为凭证；未设置豁免，改用运行时构造同值样例并仅重写未发布提交。完整 160 例开发输入序列化摘要在改写前后相同，320 例标签文件未变。历史测量的 Git 提交 ID 保留原始值，与发布提交的对应关系见[提交映射](vsecagent-history.json)。

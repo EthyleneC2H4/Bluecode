@@ -152,7 +152,7 @@ export async function securityEnvironment(command: string[]) {
   return { timestamp: new Date().toISOString(), command, host: hostname(), platform: platform(), release: release(), arch: process.arch, bun: Bun.version, node: process.version,
     cpu: cpus()[0]?.model ?? "unavailable", logicalCpus: cpus().length, memoryBytes: totalmem(),
     gitCommit: await git(["rev-parse", "HEAD"]), gitDirty: (await git(["status", "--porcelain"])).length > 0, sourceDigests,
-    fixtureFreezeCommit: "ed8848b", fixtureSha256: createHash("sha256").update(fixtureSource).digest("hex"),
+    fixtureFreezeCommit: "5e50e82", fixtureSha256: createHash("sha256").update(fixtureSource).digest("hex"),
     parser: { typescript: await packageVersion("typescript"), webTreeSitter: await packageVersion("web-tree-sitter"), bashGrammar: await packageVersion("tree-sitter-bash") }, policy: fixturePolicy,
     config: { deadlineMs: 1000, maxPending: 32, maxQueueBytes: 8 * 1024 ** 2, maxFieldBytes: 1024 ** 2, cacheBytes: 16 * 1024 ** 2 },
     fixtureCounts: { development160: developmentFixtures.length, acceptance320: acceptanceFixtures.length },
