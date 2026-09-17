@@ -1,4 +1,5 @@
 import { createEnhancementCoordinator } from "./enhancement-integration"
+import { bindArchiveSecurity, type ArchiveSecurity } from "./security"
 import { storageBytes, collectAbandonedTemps } from "./store/quota"
 import { readHistoryPage } from "./history-reader"
 import { initializeHistoryCursors, loadHistoryCursor, saveHistoryCursor } from "./store/history-cursors"
@@ -76,6 +77,7 @@ import {
 } from "./turns"
 
 export interface EngineOptions {
+  securityPolicy?: import("@bluecode/contracts").SecurityPolicy
   dataDir: string
   maxStorageBytes?: number
   tokenCounter?: TokenCounter
@@ -111,6 +113,7 @@ export async function createEngine(options: EngineOptions): Promise<Engine> {
   const lease = acquireWriterLease(dataDir)
   let store: HeadroomStore | undefined
   try {
+    const security = await bindArchiveSecurity(dataDir, options.securityPolicy)
     await collectAbandonedTemps(dataDir)
     store = openStore(dataDir)
     const openedStore = store
@@ -127,7 +130,7 @@ export async function createEngine(options: EngineOptions): Promise<Engine> {
       !ftsHealthy(store.index) ||
       indexLooksLost(store.index, store.meta)
     ) {
-      const healed = await rebuildFromObjects(dataDir, store.meta, store.index)
+      const healed = await rebuildFromObjects(dataDir, store.meta, store.index, security?.assert)
       // A self-heal is an anomaly signal, not routine housekeeping — surface it
       // so divergence and heal-thrash regressions are diagnosable from logs.
       console.warn(
@@ -141,7 +144,7 @@ export async function createEngine(options: EngineOptions): Promise<Engine> {
     let tail: Promise<unknown> = Promise.resolve()
     const analysisCache = createLayeredCache()
     const tokenCounter = createCachedTokenCounter(options.tokenCounter)
-    const enhancements = createEnhancementCoordinator(openedStore.meta, dataDir, options.summarizer, tokenCounter)
+    const enhancements = createEnhancementCoordinator(openedStore.meta, dataDir, options.summarizer, tokenCounter, security)
     let closed = false
     return {
       dataDir,
@@ -152,16 +155,17 @@ export async function createEngine(options: EngineOptions): Promise<Engine> {
         tail = next.catch(() => {})
         return next
       },
-      setView: (ns, plan) => setView(openedStore.meta, ns, plan),
+      setView: (ns, plan) => { security?.assert(plan); setView(openedStore.meta, ns, plan) },
       clearView: (ns) => { enhancements.invalidate(ns); clearView(openedStore.meta, ns) },
       compress: (params) => {
         if (closed) return Promise.reject(new Error("Engine closed"))
         const queuedAt = performance.now()
         const next = tail.then(async () => {
           const started = performance.now(), cpu = process.cpuUsage()
+          security?.assert(params.messages)
           const result = params.strategy === "layered"
-            ? await compressLayered(openedStore, dataDir, params, maxStorageBytes, analysisCache, tokenCounter)
-            : await compress(openedStore, dataDir, params, maxStorageBytes)
+            ? await compressLayered(openedStore, dataDir, params, maxStorageBytes, analysisCache, tokenCounter, security)
+            : await compress(openedStore, dataDir, params, maxStorageBytes, security)
           if (params.strategy === "layered" && params.enhance !== false) {
             if (params.enhance === true && (!params.summaryProvider || canonicalJSON(params.summaryProvider) !== canonicalJSON(options.summarizer))) {
               result.enhancementReason = "Summary provider configuration differs from daemon; restart headroomd to use the requested model and budgets"
@@ -215,6 +219,7 @@ interface ArchivePlan {
 async function compressLayered(
   store: HeadroomStore, dataDir: string, params: HeadroomCompressParamsParsed,
   maxStorageBytes: number, cache: LayeredCache, tokenCounter: TokenCounter,
+  security?: ArchiveSecurity,
 ): Promise<HeadroomCompressResult> {
   const namespace = { projectId: params.projectId, sessionId: params.sessionId }
   const visibleNodeIds = params.messages.flatMap((message) => [
@@ -247,7 +252,8 @@ async function compressLayered(
     if ((await storageBytes(dataDir)) + reserve > maxStorageBytes) throw new Error("Headroom storage capacity exceeded")
   }
   // CAS and authoritative source ownership precede every node and view reference.
-  await persistArchive(store, dataDir, params.projectId, params.sessionId, archive, result.rawTokens)
+  security?.assert(result)
+  await persistArchive(store, dataDir, params.projectId, params.sessionId, archive, result.rawTokens, security)
   saveNodes(store.meta, namespace, result.nodes)
   saveManifest(store.meta, namespace, result, messages.flatMap((message) => message.archive ? [message.archive.historyHash] : []))
   return result
@@ -257,7 +263,8 @@ async function compress(
   store: HeadroomStore,
   dataDir: string,
   params: HeadroomCompressParamsParsed,
-  maxStorageBytes: number
+  maxStorageBytes: number,
+  security?: ArchiveSecurity,
 ): Promise<HeadroomCompressResult> {
   const { projectId, sessionId, messages, retainRecentTurns } = params
 
@@ -374,8 +381,6 @@ async function compress(
     if ((await storageBytes(dataDir)) + reserve > maxStorageBytes)
       throw new Error("Headroom storage capacity exceeded")
   }
-  await persistArchive(store, dataDir, projectId, sessionId, plan, rawTokens)
-
   const result: HeadroomCompressResult = {
     compacted: true,
     budgetExceeded: finalTokensEst > targetTokens,
@@ -395,6 +400,8 @@ async function compress(
     finalTokensEst,
     freedTokens,
   }
+  security?.assert(result)
+  await persistArchive(store, dataDir, projectId, sessionId, plan, rawTokens, security)
   saveManifest(
     store.meta,
     { projectId, sessionId },
@@ -432,8 +439,11 @@ async function persistArchive(
   projectId: string,
   sessionId: string,
   plan: ArchivePlan,
-  rawTokens: number
+  rawTokens: number,
+  security?: ArchiveSecurity,
 ): Promise<void> {
+  security?.assert(plan)
+  security?.assert(chunkInputs(plan, projectId, sessionId))
   const existing = getHistory(store.index, plan.historyHashValue)
   if (existing !== null) {
     await backfill(store, dataDir, projectId, sessionId, plan)

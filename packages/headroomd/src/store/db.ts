@@ -564,7 +564,8 @@ interface CasMetaRow {
 export async function rebuildFromObjects(
   dataDir: string,
   metaHandle: HeadroomDb,
-  indexHandle: HeadroomDb
+  indexHandle: HeadroomDb,
+  inspect?: (value: unknown) => void,
 ): Promise<{ chunks: number; histories: number; skipped: number }> {
   const metas = metaHandle.db
     .prepare(
@@ -585,6 +586,7 @@ export async function rebuildFromObjects(
         skippedRefs.add(refKey)
         continue
       }
+      inspect?.(projection)
       resolved.push({ meta, message: projection })
     } catch (err) {
       // Corrupt stored object: degrade to "one item lost" instead of aborting
@@ -664,6 +666,8 @@ export async function rebuildFromObjects(
     })
   }
 
+  inspect?.(chunkWrites)
+  inspect?.(historyWrites)
   const expectedChunks = new Set(chunkWrites.map((chunk) => chunk.contentHash)).size
   const apply = indexHandle.db.transaction(() => {
     indexHandle.db.exec(

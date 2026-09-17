@@ -21,7 +21,8 @@
   },
   "dependencies": {
     "@bluecode/contracts": "workspace:^",
-    "@bluecode/shared": "workspace:^"
+    "@bluecode/shared": "workspace:^",
+    "@bluecode/security-core": "workspace:*"
   },
   "exports": {
     ".": "./src/index.ts",

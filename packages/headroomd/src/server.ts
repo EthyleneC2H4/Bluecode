@@ -46,6 +46,7 @@ import { hardenPath } from "./perms"
 import { HeadroomWriterBusyError } from "./store/lease"
 
 export interface HeadroomServerOptions {
+  securityPolicy?: import("@bluecode/contracts").SecurityPolicy
   dataDir: string
   maxStorageBytes?: number
   summarizer?: import("@bluecode/contracts").SummaryProviderConfig
@@ -179,6 +180,7 @@ export async function startHeadroomServer(
   let engine: Engine
   try {
     engine = await createEngine({
+      ...(options.securityPolicy ? { securityPolicy: options.securityPolicy } : {}),
       dataDir: path.join(options.dataDir, "storage-v2", "headroom"),
       ...(options.summarizer ? { summarizer: options.summarizer } : {}),
       ...(options.maxStorageBytes !== undefined

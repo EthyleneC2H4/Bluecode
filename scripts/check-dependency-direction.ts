@@ -24,9 +24,11 @@ const ALLOWED_EDGES: Record<string, readonly string[]> = {
   contracts: [],
   shared: [],
   "rtk-core": ["contracts", "shared"],
-  headroomd: ["contracts", "shared"],
+  headroomd: ["contracts", "shared", "security-core"],
+  "security-core": ["contracts"],
+  vsecagent: ["contracts", "security-core", "shared"],
   rtk: ["rtk-core", "contracts", "shared"],
-  plugin: ["rtk", "headroomd", "contracts", "shared"],
+  plugin: ["rtk", "headroomd", "contracts", "shared", "vsecagent"],
   eval: ["rtk", "headroomd", "contracts", "shared", "plugin"],
 }
 

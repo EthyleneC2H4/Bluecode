@@ -6,7 +6,15 @@
  */
 import { z } from "zod"
 import { defaultDataDir } from "@bluecode/shared"
-import { DEFAULT_RETAIN_RECENT_TURNS, summaryProviderSchema } from "@bluecode/contracts"
+import { DEFAULT_RETAIN_RECENT_TURNS, summaryProviderSchema, securityPolicySchema } from "@bluecode/contracts"
+
+export const SecurityOptionsSchema = z.object({
+  mode: z.enum(["off", "audit", "enforce"]).default("off"),
+  timeoutMs: z.number().int().positive().max(30_000).default(1000),
+  entry: z.string().optional(),
+  policy: securityPolicySchema.default(securityPolicySchema.parse({})),
+})
+export type SecurityOptions = z.infer<typeof SecurityOptionsSchema>
 
 export const RtkOptionsSchema = z.object({
   mode: z.enum(["off", "shadow", "on"]).optional(),
@@ -42,6 +50,7 @@ export type HeadroomOptions = z.infer<typeof HeadroomOptionsSchema>
 export const PluginOptionsSchema = z.object({
   enabled: z.boolean().default(true),
   mode: z.enum(["off", "shadow", "on"]).default("on"),
+  security: SecurityOptionsSchema.default(SecurityOptionsSchema.parse({})),
   maxStorageBytes: z
     .number()
     .int()

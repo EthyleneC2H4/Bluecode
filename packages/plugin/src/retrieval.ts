@@ -96,7 +96,7 @@ export function createRetrieveTool(runtime: PluginRuntime) {
               : { namespace, query: args.query!, limit, style: layered ? "cards" : "segments", ...paging }
             result = await client.retrieve(params)
           }
-          const output = JSON.stringify(result)
+          const output = JSON.stringify(await runtime.sanitizeRetrieval(context.sessionID, result))
           const size = Buffer.byteLength(output)
           if (size <= envelopeBudget)
             return {
@@ -119,7 +119,7 @@ export function createRetrieveTool(runtime: PluginRuntime) {
         return boundedError("Retrieval budget too small for a cursor and evidence.")
       } catch (error) {
         return boundedError(
-          `Archive retrieval failed: ${redactLocalPaths(
+          runtime.securityEnabled() ? "Archive retrieval failed; retry after the service recovers." : `Archive retrieval failed: ${redactLocalPaths(
             error instanceof Error ? error.message : String(error)
           )}`
         )

@@ -25,7 +25,8 @@
     "@bluecode/shared": "workspace:*",
     "@bluecode/rtk": "workspace:*",
     "@bluecode/headroomd": "workspace:*",
-    "zod": "4.1.8"
+    "zod": "4.1.8",
+    "@bluecode/vsecagent": "workspace:*"
   },
   "devDependencies": {
     "@opencode-ai/plugin": "1.18.21",

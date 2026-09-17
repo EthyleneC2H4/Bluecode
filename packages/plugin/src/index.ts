@@ -5,11 +5,13 @@ import path from "node:path"
 import { createHash } from "node:crypto"
 import { RtkClient } from "@bluecode/rtk/client"
 import { HeadroomClient } from "@bluecode/headroomd/client"
+import { VsecClient } from "@bluecode/vsecagent/client"
 import { storageLayout, redactLocalPaths } from "@bluecode/shared"
 import { parseOptions } from "./config"
 import { resolveHeadroomEntry, resolveRtkEntry } from "./sidecar"
 import { createPluginRuntime, type RuntimeInput } from "./runtime"
 import { createRetrieveTool } from "./retrieval"
+import { securityDataDir } from "./security"
 
 export default async function bluecodePlugin(
   input: PluginInput,
@@ -17,8 +19,8 @@ export default async function bluecodePlugin(
   diagnostics?: Pick<RuntimeInput, "trace">
 ): Promise<Hooks> {
   const options = parseOptions(rawOptions ?? {})
-  if (!options.enabled || options.mode === "off") return { dispose: async () => {}, tool: {} }
-  const layout = storageLayout(options.dataDir)
+  if (!options.enabled || options.mode === "off" && options.security.mode === "off") return { dispose: async () => {}, tool: {} }
+  const layout = storageLayout(securityDataDir(options))
   const projectId =
     input.project?.id ||
     createHash("sha256")
@@ -27,10 +29,12 @@ export default async function bluecodePlugin(
   const ports: RuntimeInput = {
     projectId,
     directory: input.directory,
+    worktree: input.worktree || input.directory,
     options,
     sdk: input.client,
     rtk: null,
     headroom: null,
+    security: null,
     ...diagnostics,
   }
   let closed = false,
@@ -44,7 +48,7 @@ export default async function bluecodePlugin(
       // Divide the configured archive payload allowance between the two stores.
       const quota = Math.floor(options.maxStorageBytes / 2)
       const startRtk = async () => {
-        if (ports.rtk || options.rtk.mode === "off") return
+        if (ports.rtk || options.mode === "off" || options.rtk.mode === "off") return
         const entry = resolveRtkEntry(options)
         ports.rtk = await RtkClient.create({
           dataDir: layout.rtk,
@@ -56,8 +60,9 @@ export default async function bluecodePlugin(
         })
       }
       const startHeadroom = async () => {
-        if (ports.headroom || options.headroom.mode === "off") return
-        const socketPath = options.headroom.socketPath ?? layout.socket
+        if (ports.headroom || options.mode === "off" || options.headroom.mode === "off") return
+        // A legacy custom socket cannot prove that its daemon enforces this policy.
+        const socketPath = options.security.mode === "off" ? options.headroom.socketPath ?? layout.socket : layout.socket
         await mkdir(path.dirname(socketPath), { recursive: true, mode: 0o700 })
         if (socketPath === layout.socket) await chmod(layout.runtime, 0o700)
         const args = [
@@ -68,6 +73,7 @@ export default async function bluecodePlugin(
           "--maxStorageBytes",
           String(options.maxStorageBytes - quota),
         ]
+        if (options.security.mode !== "off") args.push("--securityPolicy", JSON.stringify(options.security.policy))
         if (options.headroom.summarizer.enabled)
           args.push("--summarizer", JSON.stringify(options.headroom.summarizer))
         if (options.headroom.idleExitMs !== undefined)
@@ -100,10 +106,16 @@ export default async function bluecodePlugin(
         }
         ports.headroom = adapter
       }
-      const results = await Promise.allSettled([startRtk(), startHeadroom()])
+      const startSecurity = async () => {
+        if (ports.security || options.security.mode === "off") return
+        ports.security = await VsecClient.create({ dataDir: path.join(layout.root, "audit"),
+          timeoutMs: options.security.timeoutMs,
+          ...(options.security.entry ? { entry: options.security.entry } : {}) })
+      }
+      const results = await Promise.allSettled([startRtk(), startHeadroom(), startSecurity()])
       for (const result of results)
         if (result.status === "rejected")
-          console.warn(`[bluecode] sidecar connection: ${redactLocalPaths(String(result.reason))}`)
+          console.warn(options.security.mode !== "off" ? "[bluecode] sidecar connection failed" : `[bluecode] sidecar connection: ${redactLocalPaths(String(result.reason))}`)
     })().finally(() => {
       connecting = null
     })
@@ -128,11 +140,13 @@ export default async function bluecodePlugin(
       runtime.observeModel(event.sessionID, event.model, output.maxOutputTokens)
     },
     "experimental.chat.system.transform": async (event, output) => {
+      await runtime.systemTransform(event.sessionID ?? "unscoped", output)
       if (event.sessionID) runtime.observeSystem(event.sessionID, event.model, output.system)
     },
     "experimental.chat.messages.transform": async (_event, output) => runtime.transform(output),
     "experimental.session.compacting": async (event, output) =>
       runtime.compacting(event.sessionID, output),
+    "tool.execute.before": async (event, output) => runtime.toolBefore(event, output),
     "tool.execute.after": async (event, output) => runtime.toolAfter(event, output),
     tool: { headroom_retrieve: createRetrieveTool(runtime) },
   }

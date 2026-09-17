@@ -23,6 +23,9 @@
       ],
       "@bluecode/rtk/client": [
         "../rtk/src/client.ts"
+      ],
+      "@bluecode/vsecagent/client": [
+        "../vsecagent/src/client.ts"
       ]
     }
   },

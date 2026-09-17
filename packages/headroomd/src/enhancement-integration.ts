@@ -1,5 +1,6 @@
 import type { ChatMessage, GetCandidateParams, GetCandidateResult, HeadroomCompressResult, Namespace, SummaryProviderConfig } from "@bluecode/contracts"
 import { EnhancementManager } from "./enhancement"
+import type { ArchiveSecurity } from "./security"
 import { OpenAICompatibleSummaryProvider } from "./summary-provider"
 import { buildEnhancedCandidate } from "./enhanced-candidate"
 import type { TokenCounter } from "./token-counter"
@@ -10,9 +11,9 @@ import { saveManifest } from "./store/manifests"
 import { saveEnhancementTelemetry, getEnhancementJob, initializeEnhancements, loadSummaryUsage, rejectSessionEnhancements, saveEnhancementJob, saveSummaryUsage, updateEnhancementJob } from "./store/enhancements"
 
 /** The coordinator performs only local work. Provider promises never enter the engine's serial queue. */
-export function createEnhancementCoordinator(meta: HeadroomDb, dataDir: string, config: SummaryProviderConfig | undefined, counter: TokenCounter) {
+export function createEnhancementCoordinator(meta: HeadroomDb, dataDir: string, config: SummaryProviderConfig | undefined, counter: TokenCounter, security?: ArchiveSecurity) {
   initializeEnhancements(meta)
-  const manager = config?.enabled ? new EnhancementManager(new OpenAICompatibleSummaryProvider(config), config, counter) : null
+  const manager = config?.enabled ? new EnhancementManager(new OpenAICompatibleSummaryProvider(config), config, counter, security) : null
   const namespaces = new Map<string, Namespace>()
   for (const usage of loadSummaryUsage(meta)) {
     if (usage.inputTokens === 0 && usage.outputTokens === 0) continue
@@ -93,6 +94,7 @@ export function createEnhancementCoordinator(meta: HeadroomDb, dataDir: string, 
       if (getEnhancementJob(meta, ns, params.jobId)?.status === "rejected") return reject(ns, params.jobId, "Source history invalidated")
       const built = buildEnhancedCandidate(record.base, node, job.entries, messages, config!.model!, counter)
       if (!built) return reject(ns, params.jobId, "Summary did not improve the bounded rule view")
+      try { security?.assert(built) } catch { return reject(ns, params.jobId, "Summary security inspection failed") }
       meta.db.transaction(() => {
         saveNodes(meta, ns, [built.node])
         linkHistoryMeta(meta, ns, record.base.historyHash!, built.plan.historyHash!)

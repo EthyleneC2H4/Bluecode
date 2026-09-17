@@ -13,6 +13,7 @@ import type {
 import type { CompressInput, CompressOutcome, FetchInput, FetchOutcome } from "@bluecode/rtk/client"
 import { estimateTokens, redactLocalPaths } from "@bluecode/shared"
 import type { PluginOptions } from "./config"
+import { createSecurityGuard, type SecurityPort } from "./security"
 import {
   applyHostView,
   projectMessages,
@@ -71,9 +72,11 @@ export interface RuntimeInput {
   trace?: (event: RuntimeTraceEvent) => void | Promise<void>
   projectId: string
   directory: string
+  worktree?: string
   options: PluginOptions
   rtk: RtkPort | null
   headroom: HeadroomPort | null
+  security?: SecurityPort | null
   sdk?: {
     session?: { messages: (input: any) => Promise<any> }
     config?: { providers: () => Promise<any> }
@@ -82,6 +85,8 @@ export interface RuntimeInput {
 
 export function createPluginRuntime(input: RuntimeInput) {
   const { options, projectId } = input
+  const security = createSecurityGuard({ projectId, directory: input.directory,
+    ...(input.worktree ? { root: input.worktree } : {}), options, port: () => input.security })
   let disposed = false
   const sessions = new Map<string, SessionState>()
   const jobs = new Set<Promise<void>>()
@@ -106,6 +111,13 @@ export function createPluginRuntime(input: RuntimeInput) {
       ? "shadow"
       : options[component].mode ?? options.mode
   const namespace = (sessionId: string): Namespace => ({ projectId, sessionId })
+  const safePlan = async (id: string, plan: HeadroomCompressResult): Promise<boolean> => {
+    if (!security.enabled()) return true
+    // Changing text after hashing would invalidate nodes/manifests; reject and
+    // keep the already-sanitized host history instead.
+    const filtered = await security.object(id, plan)
+    return JSON.stringify(filtered) === JSON.stringify(plan)
+  }
   const applyView = (messages: HostMessage[], plan: HeadroomCompressResult) =>
     applyHostView(messages, plan, options.headroom.retainRecentTurns)
   const track = (operation: Promise<void>) => {
@@ -113,7 +125,7 @@ export function createPluginRuntime(input: RuntimeInput) {
       .catch((error: unknown) => {
         metrics.errors++
         console.warn(
-          `[bluecode] ${redactLocalPaths(error instanceof Error ? error.message : String(error))}`
+          security.enabled() ? "[bluecode] background operation failed" : `[bluecode] ${redactLocalPaths(error instanceof Error ? error.message : String(error))}`
         )
       })
       .finally(() => jobs.delete(handled))
@@ -181,6 +193,7 @@ export function createPluginRuntime(input: RuntimeInput) {
     const accepted = enqueue(async () => {
       try {
         const plan = await input.headroom!.getView(namespace(id))
+        if (plan && !await safePlan(id, plan)) { metrics.errors++; return }
         const strategyMismatch = plan && (plan.strategy ?? "legacy") !== options.headroom.strategy
         // Enhanced plans retain model identity but not the provider/config
         // provenance needed to prove restart compatibility. Rebuild from raw
@@ -262,6 +275,7 @@ export function createPluginRuntime(input: RuntimeInput) {
           const result = await input.headroom!.getCandidate!({ namespace: namespace(id), jobId,
             epoch: state.epoch ?? "", sourceDigests: projection.map(contentDigest) })
           if (result.status === "ready" && result.candidate) {
+            if (!await safePlan(id, result.candidate)) { metrics.errors++; return }
             if (disposed || state.paused || state.generation !== generation || state.view?.historyHash !== base.historyHash ||
                 !state.snapshot || applyView(structuredClone(state.snapshot), result.candidate) !== "applied") return
             await input.headroom!.setView(namespace(id), result.candidate)
@@ -328,6 +342,7 @@ export function createPluginRuntime(input: RuntimeInput) {
           trace(id, state, "compress", "returned", { compacted: result.compacted, sourceCount: result.sourceSnapshot?.messageIds.length ?? 0, operations: result.operations?.length ?? 0, plannedGeneration: generation })
           const rejection = disposed ? "disposed" : state.paused ? "paused" : generation !== state.generation ? "generation-changed" : !result.compacted ? "not-compacted" : !result.sourceDigests ? "missing-digests" : null
           if (rejection) { trace(id, state, "publish", rejection, { plannedGeneration: generation }); return }
+          if (!await safePlan(id, result)) { trace(id, state, "publish", "security-rejected"); return }
           // Validate against the freshest raw host snapshot before publishing a durable active view.
           const candidate = structuredClone(state.snapshot ?? raw)
           const status = applyView(candidate, result)
@@ -359,6 +374,13 @@ export function createPluginRuntime(input: RuntimeInput) {
   }
 
   const runtime = {
+    securityEnabled: security.enabled,
+    securityStats: security.stats,
+    sanitizeRetrieval: <T>(id: string, value: T) => security.object(id, value, true),
+    toolBefore: security.before,
+    async systemTransform(id: string, output: { system: string[] }) {
+      output.system = await security.strings(id, output.system)
+    },
     strategy: () => options.headroom.strategy,
     rtk: () => input.rtk,
     headroom: () => input.headroom,
@@ -404,8 +426,10 @@ export function createPluginRuntime(input: RuntimeInput) {
       trace(id, state, "system", "observed", { systemTokens: state.systemTokens })
     },
     async transform(output: { messages: HostMessage[] }) {
-      if (disposed || mode("headroom") === "off") return
+      if (disposed) return
       const id = sessionOf(output.messages)
+      output.messages = await security.messages(id ?? "unscoped", output.messages)
+      if (mode("headroom") === "off") return
       if (!id) return
       const state = stateFor(id)
       if (!state) return
@@ -429,22 +453,26 @@ export function createPluginRuntime(input: RuntimeInput) {
         if (status === "applied") metrics.applied++
         else if (status !== "already-compacted") clearView(id, state)
       }
+      output.messages = await security.messages(id, output.messages)
       schedule(id, state)
     },
     async toolAfter(
       event: { tool: string; sessionID: string; callID: string; args: unknown },
       output: { output?: unknown; content?: any[]; title?: string; metadata?: any }
     ) {
-      if (disposed || mode("rtk") === "off") return
+      if (disposed) return
+      await security.after(event, output)
+      if (mode("rtk") === "off" || output.metadata?.vsec?.withheld === true) return
       if (event.tool === "headroom_retrieve" || output.metadata?.bluecode?.retrieved === true) {
         metrics.retrievalBypasses++
         return
       }
       if (!input.rtk) return
+      const safeArgs = await security.object(event.sessionID, event.args)
       const toolArgs =
-        typeof event.args === "object" && event.args !== null
+        typeof safeArgs === "object" && safeArgs !== null
           ? (Object.fromEntries(
-              Object.entries(event.args).filter(
+              Object.entries(safeArgs).filter(
                 ([, value]) =>
                   value === null || ["string", "number", "boolean"].includes(typeof value)
               )
@@ -492,8 +520,9 @@ export function createPluginRuntime(input: RuntimeInput) {
         }
       } catch (error) {
         metrics.errors++
-        console.warn(`[bluecode] tool compression: ${redactLocalPaths(String(error))}`)
+        console.warn(security.enabled() ? "[bluecode] tool compression failed" : `[bluecode] tool compression: ${redactLocalPaths(String(error))}`)
       }
+      await security.after(event, output)
     },
     async idle(id: string) {
       if (disposed || mode("headroom") === "off") return
@@ -539,7 +568,7 @@ export function createPluginRuntime(input: RuntimeInput) {
           if (before && after && contentDigest(before) === contentDigest(after) &&
               upstreamEpoch([previous]) === upstreamEpoch([updated]) &&
               JSON.stringify(previous.info.error) === JSON.stringify(info.error)) {
-            previous.info = structuredClone(info)
+            previous.info = (await security.messages(id, [{ info, parts: [] }]))[0]!.info
             trace(id, state, "event", "metadata-only", { type: event.type })
             if (info.time.completed) schedule(id, state)
             return
@@ -581,6 +610,7 @@ export function createPluginRuntime(input: RuntimeInput) {
         return
       }
       if (event.type === "session.deleted") {
+        security.clearSession(id)
         clearView(id, state)
         sessions.delete(id)
         return
@@ -594,7 +624,9 @@ export function createPluginRuntime(input: RuntimeInput) {
       } else if (event.type === "message.updated" && event.properties?.info?.time?.completed)
         schedule(id, state)
     },
-    async compacting(id: string, output: { context: string[] }) {
+    async compacting(id: string, output: { context: string[]; prompt?: string }) {
+      output.context = await security.strings(id, output.context)
+      if (output.prompt !== undefined) output.prompt = (await security.strings(id, [output.prompt]))[0]!
       const state = stateFor(id)
       if (!state || mode("headroom") === "off") return
       state.paused = true
@@ -610,6 +642,7 @@ export function createPluginRuntime(input: RuntimeInput) {
         output.context.push(
           `[bluecode headroom] Archived memory:\n${state.view.summary}\nRetrieve original evidence with headroom_retrieve(historyHash="${state.view.historyHash}"); follow nextCursor.`
         )
+        output.context = await security.strings(id, output.context)
       }
     },
     async drain() {
@@ -622,7 +655,7 @@ export function createPluginRuntime(input: RuntimeInput) {
       queuedBytes = 0
       for (const state of sessions.values()) state.generation++
       await Promise.all([...jobs])
-      await Promise.allSettled([input.rtk?.shutdown(), input.headroom?.close()])
+      await Promise.allSettled([input.rtk?.shutdown(), input.headroom?.close(), input.security?.shutdown()])
       sessions.clear()
       models.clear()
     },

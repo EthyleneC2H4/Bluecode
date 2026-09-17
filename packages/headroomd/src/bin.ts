@@ -11,7 +11,7 @@ process.stderr.on("error", () => {})
  * start yield `already-running`, which exits 0 quietly: spawn callers then
  * simply connect to the winner.
  */
-import { HEADROOM_PROTOCOL_VERSION, summaryProviderSchema, type SummaryProviderConfig } from "@bluecode/contracts"
+import { HEADROOM_PROTOCOL_VERSION, securityPolicySchema, type SecurityPolicy, summaryProviderSchema, type SummaryProviderConfig } from "@bluecode/contracts"
 import { encodeFrame } from "@bluecode/shared"
 import { startHeadroomServer } from "./server"
 import { VERSION } from "./version"
@@ -23,6 +23,7 @@ interface CliArgs {
   idleExitMs?: number
   version: boolean
   summarizer?: SummaryProviderConfig
+  securityPolicy?: SecurityPolicy
 }
 
 /** Next argv item as the flag's value, or die with a usage error. */
@@ -71,6 +72,11 @@ function parseArgs(argv: string[]): CliArgs {
         catch { throw new Error("Invalid summarizer config; use baseURL/model/apiKeyEnv, never a literal key") }
         i++
         break
+      case "--securityPolicy":
+        try { args.securityPolicy = securityPolicySchema.parse(JSON.parse(takeValue(argv, i, arg))) }
+        catch { throw new Error("Invalid security policy") }
+        i++
+        break
       case "--version":
         args.version = true
         break
@@ -102,6 +108,7 @@ if (dataDir === undefined || dataDir.length === 0) {
 
 const started = await startHeadroomServer({
   dataDir,
+  ...(args.securityPolicy ? { securityPolicy: args.securityPolicy } : {}),
   ...(args.summarizer ? { summarizer: args.summarizer } : {}),
   ...(args.maxStorageBytes !== undefined ? { maxStorageBytes: args.maxStorageBytes } : {}),
   // exactOptionalPropertyTypes: absent flags stay absent rather than undefined.

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
+import type { ArchiveSecurity } from "./security"
 import { memoryEntrySchema, summaryProviderSchema, type MemoryEntry, type Namespace, type SummaryProviderConfig } from "@bluecode/contracts"
 import { estimatedTokenCounter, type TokenCounter } from "./token-counter"
 import { SummaryProviderError, type SummaryProvider, type SummaryRequest, type SummaryResult, type SummaryUsage } from "./summary-provider"
@@ -45,7 +46,7 @@ export class EnhancementManager {
   private readonly idleWaiters: Array<() => void> = []
   private running = 0
   private disposed = false
-  constructor(private readonly provider: SummaryProvider, config: SummaryProviderConfig, private readonly counter: TokenCounter = estimatedTokenCounter) {
+  constructor(private readonly provider: SummaryProvider, config: SummaryProviderConfig, private readonly counter: TokenCounter = estimatedTokenCounter, private readonly security?: ArchiveSecurity) {
     this.config = summaryProviderSchema.parse(config)
   }
   private count(text: string): number {
@@ -60,9 +61,11 @@ export class EnhancementManager {
     if (!input.sourceKey || input.sourceKey.length > 256 || !input.namespace.projectId || !input.namespace.sessionId || input.namespace.projectId.length > 4096 || input.namespace.sessionId.length > 4096 || !input.sourceIds.length || input.sourceIds.length > 4096 || input.sourceIds.some(id => !id || id.length > 4096) || new Set(input.sourceIds).size !== input.sourceIds.length) return reject("invalid-source")
     let messages: SummaryRequest["messages"], cacheKey: string, materialTokens: number
     try {
+      this.security?.assert(input)
       const content = JSON.stringify({ sourceIds: input.sourceIds, material: input.material, state: input.state ?? null, pinned: input.pinned ?? [] })
       messages = [{ role: "system", content: SYSTEM }, { role: "user", content }]
       const envelope = JSON.stringify({ model: this.provider.model, messages, stream: false, max_tokens: this.config.maxOutputTokens })
+      this.security?.assert(envelope)
       if (Buffer.byteLength(envelope) > 131072 || this.count(envelope) > this.config.maxInputTokens) return reject("input-budget")
       materialTokens = this.count(input.material)
       cacheKey = digest(JSON.stringify([input.namespace, input.sourceKey, SUMMARY_PROMPT_VERSION, this.provider.model, this.counter.id, this.config.maxInputTokens, this.config.maxOutputTokens, envelope]))
@@ -196,6 +199,8 @@ export class EnhancementManager {
         }
       }
       if (!reason) {
+        if (this.security) result.entries = result.entries.map(entry => ({ ...entry, text: this.security!.sanitize(entry.text) }))
+        this.security?.assert(result.entries)
         const serialized = JSON.stringify(result.entries)
         if (Buffer.byteLength(serialized) > 32768 || this.count(serialized) > this.config.maxOutputTokens || this.count(serialized) >= work.materialTokens) reason = "result-inflation"
       }
