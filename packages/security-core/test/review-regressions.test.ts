@@ -103,3 +103,11 @@ test("exhausted transparent expression depth reports partial coverage", async ()
   const result = await evaluateTool({ ...base(), files: [{ path: "/project/a.ts", content, complete: true }] })
   expect(result.coverage).toBe("partial")
 })
+
+test("parentheses inside unquoted configuration passwords are still redacted", () => {
+  const result = sanitizeFields({ namespace: base().namespace, policy: defaultSecurityPolicy(), fields: ["PASSWORD=CorrectHorse(BatteryStaple912!)"] })
+  expect(result.fields).toEqual(["PASSWORD=[REDACTED]"])
+})
+test("CRLF is not a POSIX shell escaped newline", async () => {
+  expect((await shell("r\\\r\nm -rf /")).decision).toBe("allow")
+})

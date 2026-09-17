@@ -61,7 +61,8 @@ export function secretSpans(text: string): SecretSpan[] {
     const value = text.slice(start, end)
     const sourceAssignment = /(?:const|let|var)\s+$/.test(text.slice(Math.max(0, match.index - 16), match.index))
     if (!quoted && sourceAssignment && /^[A-Za-z_$][\w$]*(?:\.|\(|$)/.test(value)) continue
-    if (!quoted && /^(?:[A-Za-z_$][\w$]*\.)*[A-Za-z_$][\w$]*\(/.test(value)) continue
+    const objectSource = /(?:(?:const|let|var)\s+[\w$]+\s*=|export\s+default)\s*\{[^{}]*$/.test(text.slice(Math.max(0, match.index - 1024), match.index))
+    if (!quoted && objectSource && /^(?:[A-Za-z_$][\w$]*\.)*[A-Za-z_$][\w$]*\(/.test(value)) continue
     add(start, value, "assignment", strongLiteral(value))
   }
   for (const match of text.matchAll(/\b(?:Bearer|Basic)\s+([A-Za-z0-9_+/.=-]{16,})/g)) add(match.index! + match[0].length - match[1]!.length, match[1]!, "authorization", true)

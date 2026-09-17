@@ -27,7 +27,7 @@ function literal(node: Node): string | undefined {
     })
     return supported ? value.split("\0")[0] : undefined
   }
-  if (node.type === "word" || node.type === "number") return node.text.replace(/\\\r?\n/g, "").replace(/\\(.)/g, "$1")
+  if (node.type === "word" || node.type === "number") return node.text.replace(/\\\n/g, "").replace(/\\(.)/g, "$1")
   if (node.type === "string" && node.namedChildren.every(c => c?.type === "string_content")) return node.text.slice(1, -1).replace(/\\(["\\$`])/g, "$1")
   if (node.type === "command_name" && node.namedChildren[0]) return literal(node.namedChildren[0])
   if (node.type === "concatenation") {
@@ -89,7 +89,7 @@ export async function scanBash(text: string, root: string, depth = 0, cwd = root
       if (value === undefined) partial = true
       // The pinned grammar splits unquoted line continuations into words.
       const previous = parts[index - 1]
-      if (previous && /^(?:\\\r?\n)+$/.test(text.slice(previous.endIndex, n.startIndex))) words[words.length - 1] += value ?? n.text
+      if (previous && /^(?:\\\n)+$/.test(text.slice(previous.endIndex, n.startIndex))) words[words.length - 1] += value ?? n.text
       else words.push(value ?? n.text)
     }
     return words
