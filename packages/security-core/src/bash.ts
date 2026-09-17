@@ -13,7 +13,21 @@ async function language(): Promise<Language> {
 }
 function literal(node: Node): string | undefined {
   if (node.type === "raw_string") return node.text.slice(1, -1)
-  if (node.type === "word" || node.type === "number") return node.text.replace(/\\(.)/g, "$1")
+  if (node.type === "ansi_c_string") {
+    let supported = true
+    const value = node.text.slice(2, -1).replace(/\\(x[\da-fA-F]{1,2}|u[\da-fA-F]{1,4}|U[\da-fA-F]{1,8}|[0-7]{1,3}|[\s\S])/g, (_, escape: string) => {
+      const simple: Record<string, string> = { a: "\x07", b: "\b", e: "\x1b", E: "\x1b", f: "\f", n: "\n", r: "\r", t: "\t", v: "\v", "\\": "\\", "'": "'", '"': '"' }
+      if (simple[escape] !== undefined) return simple[escape]!
+      if (/^[xuU][\da-fA-F]+$|^[0-7]+$/.test(escape)) {
+        const point = Number.parseInt(/^[xuU]/.test(escape) ? escape.slice(1) : escape, /^[xuU]/.test(escape) ? 16 : 8)
+        if (point <= 0x10ffff) return String.fromCodePoint(/^[0-7]/.test(escape) ? point & 255 : point)
+      }
+      supported = false
+      return ""
+    })
+    return supported ? value.split("\0")[0] : undefined
+  }
+  if (node.type === "word" || node.type === "number") return node.text.replace(/\\\r?\n/g, "").replace(/\\(.)/g, "$1")
   if (node.type === "string" && node.namedChildren.every(c => c?.type === "string_content")) return node.text.slice(1, -1).replace(/\\(["\\$`])/g, "$1")
   if (node.type === "command_name" && node.namedChildren[0]) return literal(node.namedChildren[0])
   if (node.type === "concatenation") {
@@ -67,7 +81,18 @@ export async function scanBash(text: string, root: string, depth = 0, cwd = root
   const commands = (node: Node): string[] => {
     const name = node.childForFieldName("name")
     const args = node.childrenForFieldName("argument")
-    return [name, ...args].filter((n): n is Node => n !== null).map(n => literal(n) ?? n.text)
+    const parts = [name, ...args].filter((n): n is Node => n !== null)
+    const words: string[] = []
+    for (let index = 0; index < parts.length; index++) {
+      const n = parts[index]!
+      const value = literal(n)
+      if (value === undefined) partial = true
+      // The pinned grammar splits unquoted line continuations into words.
+      const previous = parts[index - 1]
+      if (previous && /^(?:\\\r?\n)+$/.test(text.slice(previous.endIndex, n.startIndex))) words[words.length - 1] += value ?? n.text
+      else words.push(value ?? n.text)
+    }
+    return words
   }
   const stageWords = (node: Node): string[] | undefined => {
     if (node.type === "command") return unwrap(commands(node))
@@ -106,9 +131,13 @@ export async function scanBash(text: string, root: string, depth = 0, cwd = root
         const nameNode = node.childForFieldName("name")
         if (nameNode && literal(nameNode) === undefined) partial = true
         const words = unwrap(commands(node)), command = base(words[0] ?? ""), args = words.slice(1)
-        if (/^(?:cat|head|tail|stat|cp|mv|tee|source|\.)$/.test(command) && !args.some(a => a === "--help" || a === "--version")) {
+        const optionsEnd = args.indexOf("--")
+        const help = args.slice(0, optionsEnd < 0 ? args.length : optionsEnd).some(a => a === "--help" || a === "--version")
+        if (/^(?:cat|head|tail|stat|cp|mv|tee|source|\.)$/.test(command) && !help) {
           for (let i = 0; i < args.length; i++) {
             const arg = args[i]!
+            if (arg === "--" && i === optionsEnd) continue
+            if (optionsEnd >= 0 && i > optionsEnd) { inspectPath(node, arg); continue }
             if (/^(?:head|tail)$/.test(command) && /^(?:-[nc]|--lines|--bytes)$/.test(arg) ||
                 command === "stat" && /^(?:-f|-c|--format|--printf)$/.test(arg) ||
                 /^(?:cp|mv)$/.test(command) && /^(?:-S|--suffix)$/.test(arg)) { i++; continue }

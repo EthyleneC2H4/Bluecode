@@ -76,7 +76,7 @@ export async function prepareTool(input: {
     if (typeof args.oldString === "string" && old === "") complete = true
     else if (before !== undefined && old !== "" && before.includes(old) &&
       (args.replaceAll === true || before.indexOf(old) === before.lastIndexOf(old))) {
-      candidate = args.replaceAll === true ? before.replaceAll(old, args.newString) : before.replace(old, args.newString)
+      candidate = args.replaceAll === true ? before.replaceAll(old, args.newString) : before.replace(old, () => args.newString as string)
       complete = true
     }
     files.push({ path: file, content: candidate, complete, ...(before !== undefined ? { before } : {}) })
@@ -114,7 +114,7 @@ export async function prepareTool(input: {
           const old = hunk.filter(line => line[0] !== "+").map(line => line.slice(1)).join("\n")
           const next = hunk.filter(line => line[0] !== "-").map(line => line.slice(1)).join("\n")
           if (!old || candidate.indexOf(old) < 0 || candidate.indexOf(old) !== candidate.lastIndexOf(old)) { good = false; break }
-          candidate = candidate.replace(old, next)
+          candidate = candidate.replace(old, () => next)
         }
         if (good && hunks.some(h => h.length)) { content = candidate; complete = true }
       }

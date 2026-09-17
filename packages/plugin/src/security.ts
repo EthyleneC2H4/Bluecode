@@ -65,7 +65,7 @@ export function createSecurityGuard(input: {
     }
     return result
   }
-  async function object<T>(sessionId: string, value: T, preserveCursor = false, hostMessages = false): Promise<T> {
+  async function object<T>(sessionId: string, value: T, preserveCursor = false, hostMessages = false, toolOutput = false): Promise<T> {
     if (!enabled()) return value
     const clone = structuredClone(value)
     const leaves: Array<{ parent: any; key: string | number; text: string; contextual?: boolean }> = []
@@ -86,11 +86,11 @@ export function createSecurityGuard(input: {
       } else if (item && typeof item === "object") {
         if (depth > 64 || leaves.length > 20_000) { parent[key] = WITHHELD; stats.withheld++; return }
         // Binary/unknown host parts retain their shape; count the coverage gap.
-        if (typeof item.type === "string" && (["image", "file", "audio", "resource_link"].includes(item.type) ||
-            context === "part" && !["text", "tool", "reasoning", "step-start", "step-finish", "compaction"].includes(item.type))) { stats.opaqueParts++; return }
+        if (context === "part" && typeof item.type === "string" && !["text", "tool", "reasoning", "step-start", "step-finish", "compaction"].includes(item.type)) { stats.opaqueParts++; return }
         for (const child of Object.keys(item)) {
           if (!Array.isArray(item)) keys.push({ parent: item, key: child })
           const childContext = context === "messages" ? "message" : context === "parts" ? "part" :
+            context === "tool-output" && ["content", "attachments"].includes(child) && Array.isArray(item[child]) ? "parts" :
             context === "message" && child === "info" ? "info" : context === "message" && child === "parts" ? "parts" :
             context === "part" && child === "state" ? "state" :
             ["info", "part", "state"].includes(context) && typeof item[child] === "string" ? context : "generic"
@@ -98,7 +98,7 @@ export function createSecurityGuard(input: {
         }
       }
     }
-    walk(wrapper, "value", 0, hostMessages ? "messages" : "generic")
+    walk(wrapper, "value", 0, hostMessages ? "messages" : toolOutput ? "tool-output" : "generic")
     const filtered = await strings(sessionId, leaves.map(leaf => leaf.text))
     leaves.forEach((leaf, i) => {
       let text = filtered[i]!
@@ -150,23 +150,23 @@ export function createSecurityGuard(input: {
       if (denied && options.security.mode === "enforce") {
         stats.denied++
         pending.delete(JSON.stringify([event.sessionID, event.callID]))
-        const ids = decision.findings.map(f => f.ruleId).join(", ")
+        const ids = (await strings(event.sessionID, [decision.findings.map(f => f.ruleId).join(", ")]))[0]!
         throw new SecurityBlockedError(decision.decision === "unavailable" ? "scanner unavailable; retry when ready" : ids.slice(0, 512))
       }
       if (decision.decision !== "allow") stats.warned++
     },
     async after(event: { sessionID: string; callID: string }, output: Record<string, any>) {
       if (!enabled()) return
-      const clean = await object(event.sessionID, output)
+      const clean = await object(event.sessionID, output, false, false, true)
       for (const key of Object.keys(output)) delete output[key]
       Object.assign(output, clean)
       const withheld = JSON.stringify(clean).includes(WITHHELD)
       const decision = pending.get(JSON.stringify([event.sessionID, event.callID]))
       pending.delete(JSON.stringify([event.sessionID, event.callID]))
-      if (decision || withheld) output.metadata = { ...output.metadata, vsec: {
+      if (decision || withheld) output.metadata = { ...output.metadata, vsec: await object(event.sessionID, {
         decision: decision?.decision ?? "unavailable", coverage: decision?.coverage ?? "unsupported",
         policyVersion: options.security.policy.version, rules: decision?.findings.map(f => f.ruleId) ?? [], withheld,
-      } }
+      }) }
       if (decision?.findings.length && typeof output.output === "string") {
         const text = decision.findings.map(f => `${f.ruleId}: ${f.remediation}`).join("; ").slice(0, 900)
         output.output += `\n[VSecAgent] ${(await strings(event.sessionID, [text]))[0]}`

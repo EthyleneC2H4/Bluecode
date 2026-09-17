@@ -5,6 +5,18 @@ const placeholders = /^(?:\[REDACTED\]|\*+|x+|your[_ -].*|<[^>]+>|\$\{[^}]+\}|(?
 function real(value: string): boolean {
   return value.length >= 8 && !/^(.)\1{7,}$/.test(value) && !placeholders.test(value) && !value.startsWith("[REDACTED") && !value.startsWith("${") && !/^process\.env\.|^os\.environ|^env\./.test(value)
 }
+// Only explicit sensitive assignments with long, diverse literal values receive
+// critical severity. Entropy is evidence of a secret, not proof of validity.
+function strongLiteral(value: string): boolean {
+  if (value.length < 20 || /\s/.test(value)) return false
+  const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter(re => re.test(value)).length
+  if (classes < 3) return false
+  const counts = new Map<string, number>()
+  for (const character of value) counts.set(character, (counts.get(character) ?? 0) + 1)
+  let entropy = 0
+  for (const count of counts.values()) { const p = count / value.length; entropy -= p * Math.log2(p) }
+  return counts.size >= 12 && entropy >= 3.5
+}
 /** Exact token formats and contextual assignments; no remote credential validation. */
 export function secretSpans(text: string): SecretSpan[] {
   const spans: SecretSpan[] = []
@@ -28,12 +40,29 @@ export function secretSpans(text: string): SecretSpan[] {
     const value = match[1]!
     add(match.index! + match[0].lastIndexOf(value + "@"), value, "connection-password", true)
   }
-  for (const match of text.matchAll(/\b(?:api[_-]?key|api[_-]?token|access[_-]?token|auth[_-]?token|client[_-]?secret|secret[_-]?key|password|passwd|token|secret|aws_secret_access_key)\b["']?\s*[:=]\s*(?:"((?:\\[^\r\n]|[^"\\\r\n])+)"|'((?:\\[^\r\n]|[^'\\\r\n])+)'|([^\s,;\]}]+))/gi)) {
-    const value = match[1] ?? match[2] ?? match[3]!
-    const sourceAssignment = /(?:const|let|var)\s+$/.test(text.slice(Math.max(0, match.index! - 16), match.index!))
-    if (match[3] !== undefined && sourceAssignment && /^[A-Za-z_$][\w$]*(?:\.|\(|$)/.test(value)) continue
-    const offset = match[0].indexOf(value, match[0].search(/[:=]/) + 1)
-    add(match.index! + offset, value, "assignment", false)
+  // Scan values linearly: nested escaped-string regexes can silently stop matching
+  // on large valid fields near the 1 MiB boundary in JavaScriptCore.
+  const assignment = /\b(?:api[_-]?key|api[_-]?token|access[_-]?token|auth[_-]?token|client[_-]?secret|secret[_-]?key|password|passwd|token|secret|aws_secret_access_key)\b["']?\s*[:=]\s*/gi
+  let match: RegExpExecArray | null
+  while ((match = assignment.exec(text))) {
+    const quote = text[assignment.lastIndex]
+    const quoted = quote === '"' || quote === "'"
+    const start = assignment.lastIndex + (quoted ? 1 : 0)
+    let end = start
+    while (end < text.length) {
+      const ch = text[end]!
+      if (quoted) {
+        if (ch === quote || ch === "\r" || ch === "\n") break
+        if (ch === "\\" && end + 1 < text.length && !/[\r\n]/.test(text[end + 1]!)) { end += 2; continue }
+      } else if (/[\s,;\]}]/.test(ch)) break
+      end++
+    }
+    assignment.lastIndex = Math.max(assignment.lastIndex, end + (quoted && text[end] === quote ? 1 : 0))
+    const value = text.slice(start, end)
+    const sourceAssignment = /(?:const|let|var)\s+$/.test(text.slice(Math.max(0, match.index - 16), match.index))
+    if (!quoted && sourceAssignment && /^[A-Za-z_$][\w$]*(?:\.|\(|$)/.test(value)) continue
+    if (!quoted && /^(?:[A-Za-z_$][\w$]*\.)*[A-Za-z_$][\w$]*\(/.test(value)) continue
+    add(start, value, "assignment", strongLiteral(value))
   }
   for (const match of text.matchAll(/\b(?:Bearer|Basic)\s+([A-Za-z0-9_+/.=-]{16,})/g)) add(match.index! + match[0].length - match[1]!.length, match[1]!, "authorization", true)
   spans.sort((a, b) => a.start - b.start || b.end - a.end)

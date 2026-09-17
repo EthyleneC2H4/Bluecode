@@ -132,3 +132,15 @@ test("oversized evidence is withheld whole and bypasses RTK instead of reporting
   expect(output.metadata.vsec.withheld).toBe(true)
   expect(calls).toBe(0)
 })
+
+test("sanitization mutates host-owned arrays even when the host keeps their original references", async () => {
+  const { runtime } = await setup()
+  const system = [SECRET], context = [SECRET]
+  const messages = [{ info: { id: "u", role: "user", sessionID: "s" }, parts: [{ type: "text", text: SECRET }] }]
+  await runtime.systemTransform("s", { system })
+  await runtime.transform({ messages })
+  await runtime.compacting("s", { context })
+  expect(system).toEqual(["[REDACTED]"])
+  expect(context).toEqual(["[REDACTED]"])
+  expect(messages[0]!.parts[0]!.text).toBe("[REDACTED]")
+})

@@ -57,3 +57,49 @@ test("shell file option arity and standard stream devices do not produce bypasse
   for (const command of ["cat -n .env", "head --lines=5 .env", "cp -t /project .env"]) expect((await shell(command)).decision).toBe("deny")
   for (const command of ["echo safe >/dev/null", "cat /dev/null", "stat --format=.env README.md", "cat --help .env"]) expect((await shell(command)).decision).toBe("allow")
 })
+
+test("literal ANSI-C shell escapes are decoded before checking destructive targets", async () => {
+  for (const command of ["rm -rf $'/'", "rm -rf $'\\x2f'", "rm -rf $'\\057'", "rm -rf $'\\u002f'", "$'r\\x6d' -rf /"]) expect((await shell(command)).decision).toBe("deny")
+  expect((await shell("printf '%s' $'\\n'")).decision).toBe("allow")
+})
+test("transparent TypeScript wrappers do not hide supported risks or safe values", async () => {
+  const scan = (content: string) => evaluateTool({ ...base(), files: [{ path: "/project/input.ts", content, complete: true }] })
+  for (const content of ['db.query((("SELECT " + input) as string)!)', 'db.query(("SELECT " + input) satisfies string)', 'crypto.createHash(("md5" as const))']) expect((await scan(content)).decision).toBe("warn")
+  for (const content of ['db.query(("SELECT " + "1") as string)', 'crypto.createHash(("sha256" as const))', 'el.innerHTML=(DOMPurify.sanitize(input) as string)', '(eval as Function)("1+2")']) expect((await scan(content)).decision).toBe("allow")
+})
+test("explicit high-entropy credential literals deny while ambiguous assignments only warn", async () => {
+  const scan = (content: string) => evaluateTool({ ...base(), files: [{ path: "/project/config.txt", content, complete: true }] })
+  for (const content of ['password="M6qJ8zT1wX4nP9bR2hF5sL7kC0vD3gE!"', 'api_key="N8vT3qJ7mC4xB9hR2pL5sF1wK6zD0eG"']) expect((await scan(content)).decision).toBe("deny")
+  for (const content of ['token="some-ambiguous-value"', 'password="ordinary password prose"']) expect((await scan(content)).decision).toBe("warn")
+  for (const content of ['password="YOUR_PASSWORD_REPLACE_THIS"', 'token="<supply-your-long-token-here>"', 'const password = options.credentials.password']) expect((await scan(content)).decision).toBe("allow")
+})
+
+test("computed credential values are not treated as embedded secret literals", async () => {
+  for (const content of ['const config = { token: crypto.randomBytes(32).toString("hex") }', 'export default { password: getSecurePassword() }']) {
+    const result = await evaluateTool({ ...base(), files: [{ path: "/project/config.ts", content, complete: true }] })
+    expect(result.decision).toBe("allow")
+  }
+})
+test("Bash byte escapes and option terminators retain the actual operand meanings", async () => {
+  for (const command of ["rm -rf $'\\457'", "cat -- .env --help", "head -- .env --version", "cat -- .env -n", "r\\\nm -rf /"]) expect((await shell(command)).decision).toBe("deny")
+  for (const command of ["cat --help .env", "cat -- README.md --help", "head --version .env"]) expect((await shell(command)).decision).toBe("allow")
+})
+test("TypeScript wrappers around IVs and option objects preserve weak-crypto checks", async () => {
+  for (const content of ['const iv=Buffer.alloc(16); crypto.createCipheriv("aes-256-cbc",key,(iv as Buffer))', 'crypto.generateKeyPairSync("rsa", ({modulusLength:1024} as any))']) {
+    const result = await evaluateTool({ ...base(), files: [{ path: "/project/crypto.ts", content, complete: true }] })
+    expect(result.findings.some(f => f.category === "weak-crypto")).toBe(true)
+  }
+})
+
+test("large quoted credential fields are filtered across the full supported byte range", () => {
+  const secret = "aB3dE6gH9jK2mN5pQ8sT1vW4yZ7".repeat(30000)
+  const fields = [`password="${secret}"`, `client_secret='${secret}'`]
+  const result = sanitizeFields({ namespace: base().namespace, policy: defaultSecurityPolicy(), fields })
+  expect(result.coverage).toBe("complete")
+  expect(result.fields).toEqual(['password="[REDACTED]"', "client_secret='[REDACTED]'"])
+})
+test("exhausted transparent expression depth reports partial coverage", async () => {
+  const content = `db.query(${"(".repeat(65)}"SELECT " + input${")".repeat(65)})`
+  const result = await evaluateTool({ ...base(), files: [{ path: "/project/a.ts", content, complete: true }] })
+  expect(result.coverage).toBe("partial")
+})

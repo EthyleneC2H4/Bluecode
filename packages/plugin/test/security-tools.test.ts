@@ -66,3 +66,13 @@ test("empty-oldString edit represents the host whole-file overwrite", async () =
   const result = await run("edit", { filePath: "a.ts", oldString: "", newString: "const next = 2\n" })
   expect(result.files[0]).toMatchObject({ before: "const old = 1\n", content: "const next = 2\n", complete: true })
 })
+
+test("single edits and patches preserve literal replacement metacharacters in the preview", async () => {
+  const { dir, run } = await fixture()
+  const before = 'echo safe\n#"', replacement = 'printf "$\'"; rm -rf /'
+  await writeFile(path.join(dir, "target.sh"), before)
+  const edit = await run("edit", { filePath: "target.sh", oldString: "echo safe", newString: replacement })
+  expect(edit.files[0]!.content).toBe(replacement + '\n#"')
+  const patch = await run("apply_patch", { patchText: `*** Begin Patch\n*** Update File: target.sh\n@@\n-echo safe\n+${replacement}\n*** End Patch` })
+  expect(patch.files[0]!.content).toBe(replacement + '\n#"')
+})

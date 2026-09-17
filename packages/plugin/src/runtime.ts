@@ -379,7 +379,7 @@ export function createPluginRuntime(input: RuntimeInput) {
     sanitizeRetrieval: <T>(id: string, value: T) => security.object(id, value, true),
     toolBefore: security.before,
     async systemTransform(id: string, output: { system: string[] }) {
-      output.system = await security.strings(id, output.system)
+      output.system.splice(0, output.system.length, ...await security.strings(id, output.system))
     },
     strategy: () => options.headroom.strategy,
     rtk: () => input.rtk,
@@ -428,7 +428,7 @@ export function createPluginRuntime(input: RuntimeInput) {
     async transform(output: { messages: HostMessage[] }) {
       if (disposed) return
       const id = sessionOf(output.messages)
-      output.messages = await security.messages(id ?? "unscoped", output.messages)
+      output.messages.splice(0, output.messages.length, ...await security.messages(id ?? "unscoped", output.messages))
       if (mode("headroom") === "off") return
       if (!id) return
       const state = stateFor(id)
@@ -453,7 +453,7 @@ export function createPluginRuntime(input: RuntimeInput) {
         if (status === "applied") metrics.applied++
         else if (status !== "already-compacted") clearView(id, state)
       }
-      output.messages = await security.messages(id, output.messages)
+      output.messages.splice(0, output.messages.length, ...await security.messages(id, output.messages))
       schedule(id, state)
     },
     async toolAfter(
@@ -625,7 +625,7 @@ export function createPluginRuntime(input: RuntimeInput) {
         schedule(id, state)
     },
     async compacting(id: string, output: { context: string[]; prompt?: string }) {
-      output.context = await security.strings(id, output.context)
+      output.context.splice(0, output.context.length, ...await security.strings(id, output.context))
       if (output.prompt !== undefined) output.prompt = (await security.strings(id, [output.prompt]))[0]!
       const state = stateFor(id)
       if (!state || mode("headroom") === "off") return
@@ -642,7 +642,7 @@ export function createPluginRuntime(input: RuntimeInput) {
         output.context.push(
           `[bluecode headroom] Archived memory:\n${state.view.summary}\nRetrieve original evidence with headroom_retrieve(historyHash="${state.view.historyHash}"); follow nextCursor.`
         )
-        output.context = await security.strings(id, output.context)
+        output.context.splice(0, output.context.length, ...await security.strings(id, output.context))
       }
     },
     async drain() {
