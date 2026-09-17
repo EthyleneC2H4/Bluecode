@@ -31,6 +31,8 @@ function unwrap(words: string[]): string[] {
     index++
     while (index < words.length) {
       const word = words[index]!
+      if (word === "--help" || word === "--version" || wrapper === "command" && /^-[^-]*[vV]/.test(word) ||
+          wrapper === "sudo" && (word === "--list" || /^-[^-]*l/.test(word))) return []
       if (wrapper === "env" && /^[A-Za-z_]\w*=/.test(word)) { index++; continue }
       if (word === "--") { index++; break }
       if (!word.startsWith("-")) break
@@ -56,6 +58,34 @@ export async function scanBash(text: string, root: string, depth = 0): Promise<S
     const name = node.childForFieldName("name")
     const args = node.childrenForFieldName("argument")
     return [name, ...args].filter((n): n is Node => n !== null).map(n => literal(n) ?? n.text)
+  }
+  const stageWords = (node: Node): string[] | undefined => {
+    if (node.type === "command") return unwrap(commands(node))
+    if (["subshell", "compound_statement"].includes(node.type)) {
+      const children = node.namedChildren.filter((n): n is Node => n !== null && n.type !== "comment")
+      if (children.length === 1) return stageWords(children[0]!)
+    }
+    partial = true
+    return undefined
+  }
+  const consumesCode = (words: string[]): boolean => {
+    const command = base(words[0] ?? ""), args = words.slice(1)
+    if (!/^(?:bash|sh|zsh|dash|ksh|python\d*|node|perl|ruby)$/.test(command)) return false
+    if (/^(?:bash|sh|zsh|dash|ksh)$/.test(command)) {
+      let stdin = false
+      for (let i = 0; i < args.length; i++) {
+        const arg = args[i]!
+        if (/^-[^-]*c/.test(arg)) return false
+        if (/^-[^-]*s/.test(arg)) stdin = true
+        if (/^(?:[-+]o|[-+]O|--rcfile|--init-file)$/.test(arg)) { i++; continue }
+        if (arg === "--") return stdin || i === args.length - 1
+        if (arg !== "-" && !/^[-+]/.test(arg)) return stdin
+      }
+      return true
+    }
+    // Explicit programs/files are independent of the pipe's code stream.
+    if (args.some(a => /^-[^-]*[ce]/.test(a) || /^(?:--eval|--print)(?:=|$)/.test(a))) return false
+    return !args.some(a => a !== "-" && !a.startsWith("-"))
   }
   try {
     const nodes = [tree.rootNode]
@@ -90,8 +120,18 @@ export async function scanBash(text: string, root: string, depth = 0): Promise<S
         if (command === "eval" || command === "source" || command === ".") partial = true
       }
       if (node.type === "pipeline") {
-        const cmds = node.namedChildren.filter((n): n is Node => n?.type === "command").map(n => unwrap(commands(n)))
-        if (cmds.some(c => /^(?:curl|wget)$/.test(base(c[0] ?? ""))) && cmds.some(c => /^(?:bash|sh|zsh|dash|python\d*|node|perl|ruby)$/.test(base(c[0] ?? "")))) add(node, "download-execute")
+        let downloaded = false
+        for (const stage of node.namedChildren.filter((n): n is Node => n !== null)) {
+          const words = stageWords(stage)
+          if (!words) { downloaded = false; continue }
+          if (downloaded && consumesCode(words)) { add(node, "download-execute"); break }
+          const command = base(words[0] ?? ""), args = words.slice(1)
+          if (command === "curl") downloaded = !args.some((a, i) => /^(?:-o|--output)$/.test(a) && args[i + 1] !== "-" || /^--output=(?!-$)/.test(a) || /^-o[^-]/.test(a) || a === "-O" || a === "--remote-name")
+          else if (command === "wget") downloaded = args.some((a, i) => /^(?:-O|--output-document)$/.test(a) && args[i + 1] === "-" || /^-[^-]*O-$/.test(a) || a === "--output-document=-")
+          else if (command === "cat") downloaded &&= args.length === 0 || args.includes("-")
+          else if (/^(?:tee|sed|awk|grep|tr|head|tail)$/.test(command)) { /* Supported stream processors preserve dependency. */ }
+          else downloaded = false
+        }
       }
       if (node.type === "file_redirect" && /^\s*(?:\d+)?(?:>|>>|&>)/.test(node.text)) {
         const target = node.childForFieldName("destination")

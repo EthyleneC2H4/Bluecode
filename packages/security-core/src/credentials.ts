@@ -30,8 +30,8 @@ export function secretSpans(text: string): SecretSpan[] {
   }
   for (const match of text.matchAll(/\b(?:api[_-]?key|api[_-]?token|access[_-]?token|auth[_-]?token|client[_-]?secret|secret[_-]?key|password|passwd|token|secret|aws_secret_access_key)\b["']?\s*[:=]\s*(?:"((?:\\[^\r\n]|[^"\\\r\n])+)"|'((?:\\[^\r\n]|[^'\\\r\n])+)'|([^\s,;\]}]+))/gi)) {
     const value = match[1] ?? match[2] ?? match[3]!
-    if (match[3] !== undefined && (/^[A-Za-z_$][\w$]*(?:\.|\()/.test(value)
-      || /^[A-Za-z_$][\w$]*$/.test(value) && /(?:const|let|var)\s+$/.test(text.slice(Math.max(0, match.index! - 10), match.index!)))) continue
+    const sourceAssignment = /(?:const|let|var)\s+$/.test(text.slice(Math.max(0, match.index! - 16), match.index!))
+    if (match[3] !== undefined && sourceAssignment && /^[A-Za-z_$][\w$]*(?:\.|\(|$)/.test(value)) continue
     const offset = match[0].indexOf(value, match[0].search(/[:=]/) + 1)
     add(match.index! + offset, value, "assignment", false)
   }

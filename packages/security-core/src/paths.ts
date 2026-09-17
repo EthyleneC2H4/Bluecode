@@ -1,6 +1,6 @@
 /** Lexical normalization only. Realpath/nearest-existing-parent belongs to adapters. */
 export function normalizePath(path: string): string {
-  const absolute = path.replaceAll("\\", "/")
+  const absolute = path
   const parts: string[] = []
   for (const part of absolute.split("/")) {
     if (!part || part === ".") continue

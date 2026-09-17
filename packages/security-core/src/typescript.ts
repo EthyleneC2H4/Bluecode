@@ -22,8 +22,9 @@ function sanitized(node: ts.Node | undefined): boolean {
   return !!node && ts.isCallExpression(node) && /^(?:DOMPurify\.sanitize|sanitizeHtml|escapeHtml|escapeHTML)$/.test(name(node.expression))
 }
 function dynamic(node: ts.Node | undefined): boolean {
-  return !!node && staticValue(node) === undefined && !sanitized(node)
+  return !!node && staticValue(node) === undefined
 }
+function dynamicHtml(node: ts.Node | undefined): boolean { return dynamic(node) && !sanitized(node) }
 function concatenated(node: ts.Node | undefined): boolean {
   return !!node && dynamic(node) && (ts.isTemplateExpression(node) || (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) || (ts.isCallExpression(node) && /\.concat$/.test(name(node.expression))))
 }
@@ -59,10 +60,10 @@ export function scanTypeScript(text: string, path: string): Scan {
       if (/^(?:(?:child_process|cp)\.)?(?:exec|execSync)$/.test(callee) && dynamic(args[0])) add(node, "dynamic-execution", "shell-string")
       if (/^(?:(?:window|globalThis)\.)?set(?:Timeout|Interval)$/.test(callee) && args[0] && !ts.isArrowFunction(args[0]) && !ts.isFunctionExpression(args[0]) && dynamic(args[0])) add(node, "dynamic-execution", "timer-string", "medium")
       if (/^(?:query|execute|exec|raw)$/.test(method) && concatenated(args[0])) add(node, "sql-injection", "constructed-query")
-      if ((/^(?:document\.write|document\.writeln)$/.test(callee) && args.some(dynamic)) || (method === "insertAdjacentHTML" && dynamic(args[1]))) add(node, "xss", "html-call")
+      if ((/^(?:document\.write|document\.writeln)$/.test(callee) && args.some(dynamicHtml)) || (method === "insertAdjacentHTML" && dynamicHtml(args[1]))) add(node, "xss", "html-call")
       // jQuery roots are call expressions and intentionally do not share the generic name helper.
       if (ts.isPropertyAccessExpression(node.expression) && /^(?:html|append|prepend)$/.test(node.expression.name.text)
-        && ts.isCallExpression(node.expression.expression) && /^(?:\$|jQuery)$/.test(name(node.expression.expression.expression)) && dynamic(args[0])) add(node, "xss", "jquery-html")
+        && ts.isCallExpression(node.expression.expression) && /^(?:\$|jQuery)$/.test(name(node.expression.expression.expression)) && dynamicHtml(args[0])) add(node, "xss", "jquery-html")
       const algorithm = staticValue(args[0])?.toLowerCase().replaceAll("-", "")
       if (/^(?:createHash|createHmac)$/.test(method) && algorithm && /^(?:md4|md5|sha1)$/.test(algorithm)) add(node, "weak-crypto", "weak-digest", "medium")
       if (/^(?:createCipher|createDecipher|createCipheriv|createDecipheriv)$/.test(method) && algorithm && /^(?:des|3des|rc2|rc4|bf|aes.*ecb)/.test(algorithm)) add(node, "weak-crypto", "weak-cipher")
@@ -87,13 +88,13 @@ export function scanTypeScript(text: string, path: string): Scan {
         }
       }
     }
-    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && /\.(?:innerHTML|outerHTML|srcdoc)$/.test(name(node.left)) && dynamic(node.right)) add(node, "xss", "html-assignment")
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && /\.(?:innerHTML|outerHTML|srcdoc)$/.test(name(node.left)) && dynamicHtml(node.right)) add(node, "xss", "html-assignment")
     if (ts.isJsxAttribute(node) && node.name.getText(source) === "dangerouslySetInnerHTML" && node.initializer && ts.isJsxExpression(node.initializer)) {
       const expr = node.initializer.expression
       if (expr && ts.isObjectLiteralExpression(expr)) {
         const prop = expr.properties.find(p => ts.isPropertyAssignment(p) && name(p.name) === "__html")
-        if (prop && ts.isPropertyAssignment(prop) && dynamic(prop.initializer)) add(node, "xss", "react-html")
-      } else if (dynamic(expr)) add(node, "xss", "react-html")
+        if (prop && ts.isPropertyAssignment(prop) && dynamicHtml(prop.initializer)) add(node, "xss", "react-html")
+      } else if (dynamicHtml(expr)) add(node, "xss", "react-html")
     }
     ts.forEachChild(node, child => { nodes.push(child) })
   }
