@@ -37,7 +37,7 @@ SIGKILL 当前子进程，以中断同步解析；该代未完成请求失败，
 超大 finding 列表只记录前 16 项。审计写入失败会令本次请求失败。
 
 `adapters` 导出相互独立的 `FirewallAdapter` 与 `RedactionAdapter`，通过
-`VsecEngine.create` 可选注入（自定义 child entry）。它们是 SDK 抽象，未猜测
+`@bluecode/vsecagent/engine` 的 `VsecEngine.create` 可选注入（自定义 child entry）。它们是 SDK 抽象，未猜测
 企业 HTTP/鉴权格式。适配器使用 AbortSignal 和默认 250ms 超时，异常及格式
 错误映射为固定类别。防火墙失败返回 unavailable；脱敏适配器失败或覆盖不全
 时替换全部字段，成功结果再经本地脱敏。服务端若同步阻塞，仍受父进程强制

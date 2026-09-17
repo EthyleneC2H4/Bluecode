@@ -53,3 +53,9 @@ test("32 concurrent calls preserve request identity and report queue and service
   expect(health.rssBytes).toBeGreaterThan(0)
   expect(health.cacheBytes).toBeGreaterThan(0)
 })
+
+test("custom child entries can import the engine through the public package export", async () => {
+  const moduleName = "@bluecode/vsecagent/engine"
+  const entry = await import(moduleName).catch(() => undefined)
+  expect(entry?.VsecEngine).toBeFunction()
+})
