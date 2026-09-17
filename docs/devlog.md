@@ -1,5 +1,9 @@
 # BlueCode 开发日志 —— 困难、错误与解决记录
 
+## 2026-09-17 · Linux CI 功能回放与生产期限分离
+
+首次发布的 macOS CI 通过，Ubuntu 在既有 runner smoke 的“首个 headroom 输入已有 RTK 压缩标记”断言失败。向真实 RTK 注入 60 ms 响应延迟时，40 ms 期限稳定复现同样结果（timeout、标记缺失），2000 ms 下压缩与归档均正常。功能 smoke 改用显式 2000 ms 检查成功 IPC/组合，并在失败时显示期限、降级原因和调用次数；RTK 生产 40 ms、专门的超时/迟到帧测试、CLI 消融期限及算法均保持原值。
+
 ## 2026-09-17 · VSecAgent 本地工具安全链路
 
 新增独立扫描进程与纯规则包，经插件编排执行前检查、输出/消息脱敏、RTK、headroom安全归档和检索复查。依据[批准设计](superpowers/specs/2026-09-17-vsecagent-design.md)，默认安全关闭，安全示例 enforce；不修改压缩算法，不修改 vendored OpenCode，不调用外部 LLM。

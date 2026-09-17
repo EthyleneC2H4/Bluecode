@@ -17,6 +17,10 @@ import type { EvaluationObservation } from "../src/runner"
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "bluecode-eval-smoke-"))
 const headroomEntry = path.resolve(import.meta.dir, "../../headroomd/src/bin.ts")
+// This suite checks successful IPC/composition, not the production 40 ms SLO.
+// Deadline/late-frame behavior is covered in rtk/test/faults.test.ts; the full
+// evaluation CLI still uses the unchanged production deadline.
+const rtkTimeoutMs = 2000
 
 afterAll(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true })
@@ -33,6 +37,7 @@ describe("runner: quick-mode smoke across all four groups", () => {
     const result = await runEvaluation({
       quick: true,
       headroomEntry,
+      rtkTimeoutMs,
       observe: (event) => observations.push(event),
     })
 
@@ -88,7 +93,10 @@ describe("runner: quick-mode smoke across all four groups", () => {
     const dToolOutputs = dInput.messages.flatMap((message) =>
       message.parts.flatMap((part) => (part.type === "tool" ? [part.state.output ?? ""] : []))
     )
-    expect(dToolOutputs.some((output) => output.includes("[bluecode rtk] compressed:"))).toBe(true)
+    const recordD = result.perFixture.find(item => item.group === "D" && item.fixture === "long-session")!
+    expect(dToolOutputs.some((output) => output.includes("[bluecode rtk] compressed:")),
+      `RTK composition: deadline=${rtkTimeoutMs}, degraded=${recordD.degradedReason}, calls=${recordD.replay!.runtime.rtkCalls}`
+    ).toBe(true)
 
     for (const group of ["C", "D"] as const) {
       const final = observations.find(
@@ -112,8 +120,8 @@ describe("runner: quick-mode smoke across all four groups", () => {
   }, 120_000)
 
   test("group B traffic really goes through rtk IPC (not the trivial passthrough path)", async () => {
-    const first = await runEvaluation({ quick: true, headroomEntry })
-    const result = await runEvaluation({ quick: true, headroomEntry })
+    const first = await runEvaluation({ quick: true, headroomEntry, rtkTimeoutMs })
+    const result = await runEvaluation({ quick: true, headroomEntry, rtkTimeoutMs })
 
     expect(result.dataDir).not.toBe(first.dataDir)
     expect(fs.existsSync(first.dataDir)).toBe(false)
@@ -127,7 +135,7 @@ describe("runner: quick-mode smoke across all four groups", () => {
   }, 120_000)
 
   test("an explicit dataDir is never deleted", async () => {
-    const result = await runEvaluation({ quick: true, dataDir: tmpDir, headroomEntry })
+    const result = await runEvaluation({ quick: true, dataDir: tmpDir, headroomEntry, rtkTimeoutMs })
     expect(result.temporaryDataDir).toBe(false)
     expect(result.dataDir).toBe(tmpDir)
     expect(fs.existsSync(tmpDir)).toBe(true)
