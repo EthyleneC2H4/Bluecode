@@ -1,0 +1,13 @@
+{
+  "name": "@bluecode/vsecagent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "@bluecode/contracts": "workspace:^",
+    "@bluecode/security-core": "workspace:^",
+    "@bluecode/shared": "workspace:^"
+  },
+  "exports": { ".": "./src/index.ts", "./client": "./src/client.ts", "./adapters": "./src/adapters.ts" }
+}

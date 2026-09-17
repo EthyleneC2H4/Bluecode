@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@bluecode/contracts": ["../contracts/src/index.ts"],
+      "@bluecode/shared": ["../shared/src/index.ts"],
+      "@bluecode/security-core": ["../security-core/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

@@ -33,6 +33,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@bluecode/contracts": "workspace:^",
+        "@bluecode/security-core": "workspace:*",
         "@bluecode/shared": "workspace:^",
       },
     },
@@ -44,6 +45,7 @@
         "@bluecode/headroomd": "workspace:*",
         "@bluecode/rtk": "workspace:*",
         "@bluecode/shared": "workspace:*",
+        "@bluecode/vsecagent": "workspace:*",
         "zod": "4.1.8",
       },
       "devDependencies": {
@@ -85,6 +87,15 @@
         "js-tiktoken": "1.0.21",
       },
     },
+    "packages/vsecagent": {
+      "name": "@bluecode/vsecagent",
+      "version": "0.1.0",
+      "dependencies": {
+        "@bluecode/contracts": "workspace:^",
+        "@bluecode/security-core": "workspace:^",
+        "@bluecode/shared": "workspace:^",
+      },
+    },
   },
   "packages": {
     "@ai-sdk/provider": ["@ai-sdk/provider@3.0.8", "", { "dependencies": { "json-schema": "^0.4.0" } }, "sha512-oGMAgGoQdBXbZqNG0Ze56CHjDZ1IDYOwGYxYjO5KLSlz5HiNQ9udIXsPZ61VWaHGZ5XW/jyjmr6t2xz2jGVwbQ=="],
@@ -104,6 +115,8 @@
     "@bluecode/security-core": ["@bluecode/security-core@workspace:packages/security-core"],
 
     "@bluecode/shared": ["@bluecode/shared@workspace:packages/shared"],
+
+    "@bluecode/vsecagent": ["@bluecode/vsecagent@workspace:packages/vsecagent"],
 
     "@msgpackr-extract/msgpackr-extract-darwin-arm64": ["@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.4", "", { "os": "darwin", "cpu": "arm64" }, "sha512-LCkGo6JDfaBhgST7UpPWgNgLINpcpabaHfyz5OBx75nUYxBsaEPxjnyNjWpeb/xBup/682QnBfRBy2/LvPutZQ=="],
 
