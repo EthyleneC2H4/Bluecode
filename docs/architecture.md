@@ -6,17 +6,19 @@
 
 | 包/入口 | 责任 |
 | --- | --- |
-| `contracts` | RTK v3 / headroom v3 wire schema 与消息投影 |
+| `contracts` | RTK v3 / headroom v3 / security v1 schema 与消息投影 |
 | `shared` | 每帧 UTF-8 JSONL、经校验 CAS、分页、路径、文件计量 |
+| `security-core` | 八类本地规则、有限 AST 与幂等文本脱敏；不写归档 |
+| `vsecagent` | JSONL 扫描子进程、期限、重启、缓存、审计与企业 SDK 适配接口 |
 | `rtk-core` | 分类、来源行、保护块、预算选择；不访问持久层 |
 | `rtk/client` | 预热、带排队时间的 deadline、重启 generation、过载旁路 |
 | `headroomd/client` / `headroomd/pure` | 宿主可加载的通信/投影计算入口 |
 | `headroomd` | 原文归档、预算规划、分层节点、任务状态、索引、持久活动视图与可选后台摘要 |
 | `plugin/runtime` / `plugin/host-adapter` | 实例状态、真实 namespace、宿主消息保护与视图重放 |
 | `plugin/retrieval` | 项目隔离、检索路由、最终 JSON 预算、禁止检索结果再压缩 |
-| `eval` | 原有四组回放、24 组专用历史与显式预算的真实 OpenCode 对照 |
+| `eval` | 压缩回放、160/320 安全样例、性能及本地模拟模型宿主验收 |
 
-`eval → plugin → client/pure`；服务端不依赖插件。`bun run check:deps` 验证声明依赖；`bun run check:host` 打包实际插件工厂，拒绝 SQLite 进入宿主 bundle。实现见 [工厂](../packages/plugin/src/index.ts)、[运行时](../packages/plugin/src/runtime.ts) 与 [入口检查](../scripts/check-host-imports.ts)。
+`eval → plugin → client/pure`；服务端不依赖插件。`bun run check:deps` 验证声明依赖；`bun run check:host` 打包实际插件工厂，拒绝 SQLite 与安全 AST 解析器进入宿主 bundle。实现见 [工厂](../packages/plugin/src/index.ts)、[运行时](../packages/plugin/src/runtime.ts) 与 [入口检查](../scripts/check-host-imports.ts)。
 
 ```mermaid
 flowchart LR
@@ -52,7 +54,7 @@ CAS 对存在的对象逐字节校验；新对象写临时文件、fsync、独�
 
 计划来自真实 `messages.transform` 的原始可见快照；是否触发按应用旧视图后的有效上下文估算。SDK 的未过滤 `session.messages` 不参与自动规划，以免上游已隐藏历史重新进入模型。压缩期间暂停 headroom 应用；向上游 compacting 注入记忆前再次验证当前可见源。[宿主适配](../packages/plugin/src/host-adapter.ts)、[上游记录](integration-notes.md)。
 
-模型窗口来自当前 provider/model 的真实 `limit.context/input/output` 与输出预留；未知窗口暂停。默认在可用输入预算的 70% 触发，目标 55%，保护最近 4 个已完成轮次和最后一轮。未知 part、附件、正在运行或状态未确认的工具保持保护。`legacy` 选择正收益安全前缀，`layered` 通过互不重叠的区间／工具输出／明确材料范围操作继续处理保护内容之外的历史；不能达到目标时报告预算状态。
+模型窗口来自当前 provider/model 的真实 `limit.context/input/output` 与输出预留；未知窗口暂停。默认在可用输入预算的 70% 触发，目标 55%，`legacy` 默认保护最近 4 个已完成轮次，`layered` 默认保护最近 1 个；两者均另保护当前活动轮次。未知 part、附件、正在运行或状态未确认的工具保持保护。`legacy` 选择正收益安全前缀，`layered` 通过互不重叠的区间／工具输出／明确材料范围操作继续处理保护内容之外的历史；不能达到目标时报告预算状态。
 
 `legacy` 证据记忆按约束、决定、变更、验证、失败、待办归类，工具 input/output/error 参与记忆和估算，新一代归档合并已有结构化记忆。`layered` 保留用户要求原文，将较早材料归档为不可变叶子与父节点，按独立预算选择任务状态和历史证据；不无限拼接旧记忆。可选 LLM 只生成后台候选，规则路径不等待网络。history 检索沿 namespace 内 lineage 展开原始消息；测试覆盖 2/5/20 代。[旧版记忆](../packages/headroomd/src/memory.ts)、[分层规划](../packages/headroomd/src/layered.ts)、[逐项恢复测试](../packages/headroomd/test/layered-generations.test.ts)。
 
@@ -65,3 +67,7 @@ CAS 对存在的对象逐字节校验；新对象写临时文件、fsync、独�
 默认每页 2048 tokens / 32KiB，硬上限 8192 / 128KiB，取先到者。legacy 检索以 UTF-8 bytes 作为保守 token 上界，layered 按明确字符估算与字节双预算；原有基线与专用回放的 tokenizer 口径分别标注。history 可以在同一消息内部翻页，分层节点支持摘要、子节点和原文展开。生产工具还将 JSON envelope、引用和 cursor 计入输出预算；如果预算容不下 envelope，会返回有界错误而不截断后跳过尾部。[分页](../packages/shared/src/paging.ts)、[检索](../packages/plugin/src/retrieval.ts)。
 
 默认 dataDir 为系统应用数据目录，socket 位于短路径的用户私有 runtime 目录；显式 dataDir 保持有效。插件默认将 1GiB allowance 分配给两个组件各 512MiB；headroom 包含文件/SQLite 开销并保守预留，RTK 按规范化 payload reservation 计量，因此它不是操作系统硬磁盘配额。已有引用不自动驱逐，GC 只收集超过 24 小时的临时发布文件。[运维说明](operations.md)。
+
+## 可选安全链路
+
+执行前 Hook 调用独立扫描子进程，执行后先脱敏再进入 RTK。历史／系统提示和 compaction 文本也经过过滤。headroom 的纯脱敏校验在持久化、FTS 重建、模型摘要输出缓存之前执行，不调用其他 sidecar，不改变压缩算法。安全关闭保留历史行为；开启后使用策略绑定的独立归档。具体配置、故障矩阵与 Hook 覆盖限制见 [VSecAgent 指南](vsecagent.md)。

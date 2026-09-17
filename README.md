@@ -1,8 +1,8 @@
 # BlueCode
 
-Context engineering for [OpenCode](https://github.com/anomalyco/opencode): one plugin connects an RTK subprocess for tool-output compression and a headroomd daemon for budgeted, layered conversation memory and on-demand evidence recovery.
+Context engineering and optional tool safety for [OpenCode](https://github.com/anomalyco/opencode): one plugin connects an RTK subprocess for tool-output compression and a headroomd daemon for budgeted, layered conversation memory and on-demand evidence recovery. An independent VSecAgent subprocess checks tool requests and sanitizes evidence before archival.
 
-[简体中文](README.zh-CN.md) · [Architecture](docs/architecture.md) · [Headroom guide](docs/headroom-layered.md) · [Headroom ablation](docs/headroom-retention.md) · [Operations](docs/operations.md)
+[简体中文](README.zh-CN.md) · [Architecture](docs/architecture.md) · [Headroom guide](docs/headroom-layered.md) · [Headroom ablation](docs/headroom-retention.md) · [VSecAgent guide](docs/vsecagent.md) · [Operations](docs/operations.md)
 
 This is an independent learning implementation, not vivo's private BlueCode source. Evaluation includes deterministic synthetic replays and small coding tasks executed by a real LLM through OpenCode; their metrics are reported separately.
 
@@ -12,16 +12,25 @@ This is an independent learning implementation, not vivo's private BlueCode sour
 |---|---|
 | RTK | Condenses recognized command output, preserving code, changed diff lines and complete failure diagnostics. The 512-token target is soft; protected content can exceed it. |
 | headroomd | Archives older tool observations and explicitly marked materials; maintains task state and budgeted hierarchical memory; reuses unchanged analysis and applies safe local replacements across protected content. User requirements, corrections, recent turns, active tools and unsupported content remain protected. |
+| VSecAgent | Eight local rule families and limited JS/TS and Bash syntax analysis; high-confidence critical risks are blocked and tool/model/archive text is sanitized. Off by default; the security example uses enforce. |
 | Plugin | Owns clients and state per instance; binds retrieval to actual project/session IDs; coordinates model limits and upstream compaction. |
 | Retrieval | Returns FTS5/BM25 match snippets first, then expands original text, archive history or summary nodes through bounded cursors. Retrieval output bypasses RTK. |
 
 The new headroom strategy is enabled with `headroom.strategy: "layered"`. The default remains `legacy` while rollout acceptance is incomplete. Both rule paths work offline; the optional background LLM summarizer is disabled by default. See the [configuration and acceptance decision](docs/headroom-layered-acceptance.md#默认策略决定).
 
-RTK uses protocol v3 over stdio; headroomd uses protocol v3 over a Unix socket. Durable data lives outside temporary runtime sockets. Errors preserve host-visible content or pause planning; retrieval reports missing or corrupt archives explicitly. RTK stores the sanitized text it receives, which may already have been truncated by the host.
+RTK uses protocol v3 over stdio; headroomd uses protocol v3 over a Unix socket. Durable data lives outside temporary runtime sockets. Compression errors preserve filtered host-visible content or pause planning; retrieval reports missing or corrupt archives explicitly. RTK stores the sanitized text it receives, which may already have been truncated by the host.
+
+`security.mode: "enforce"` operates independently of compression switches. Scanner failures block writes, execution and unknown side effects; failed sanitization withholds the affected text. Secure archives are policy-bound and recover complete sanitized evidence. Manual shell, command-template shell, later plugin mutation, filesystem races and non-text attachments are declared coverage limits. See the [secure example](examples/opencode-security.json) and [implementation guide](docs/vsecagent.md).
+
+## VSecAgent local acceptance
+
+After fixes, the frozen 320-case suite detects **160/160** risk cases and blocks **78/78** prelabelled critical cases, with **0/160** false blocks or warnings on benign cases. The first failed run is preserved; retests are not unseen holdout evidence. Coverage remains limited to the declared syntax and rules. [Quality and performance report](docs/vsecagent-evaluation.md)
+
+Actual **OpenCode 1.18.23**, driven by a local mock model, validates built-ins, multi-file patches, MCP, subagents, code-mode and scanner failure with **zero external LLM calls**. Security-off legacy and layered compression replays retain identical token totals. CI includes an offline security quality gate; withholding evidence never counts as compression savings. [Host and compatibility evidence](docs/vsecagent-integration.md)
 
 ## Implementation architecture
 
-RTK condenses individual tool results; headroomd controls how older evidence stays in the context. These three diagrams describe this repository's Bun / TypeScript implementation. The sidecars do not call each other: the host plugin owns orchestration and retrieval routing.
+RTK condenses individual tool results; headroomd controls how older evidence stays in the context. These three diagrams describe the compression subsystem. With security enabled, VSecAgent checks and sanitization precede these compression inputs. The sidecars do not call each other: the host plugin owns orchestration and retrieval routing.
 
 ### Overview: two compression stages and a retrieval loop
 
@@ -199,6 +208,7 @@ Mount the checkout through OpenCode's tuple-form configuration. This example exp
 {
   "plugin": [["file:///absolute/path/Bluecode/packages/plugin/src/index.ts", {
     "mode": "on",
+    "security": {"mode": "enforce", "timeoutMs": 1000},
     "rtk": {"budgetTokens": 512, "timeoutMs": 40, "minBytes": 512},
     "headroom": {
       "strategy": "layered",

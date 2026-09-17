@@ -7,9 +7,13 @@
  *
  * The graph (see CONTRIBUTING.md):
  *   contracts, shared   ← leaves, import nothing internal
- *   rtk-core, headroomd → contracts + shared
+ *   rtk-core            → contracts + shared
+ *   security-core       → contracts
+ *   vsecagent           → security-core + contracts + shared
+ *   headroomd           → contracts + shared + security-core (pure sanitizer)
  *   rtk                 → rtk-core + contracts + shared
- *   plugin, eval        → rtk + headroomd + contracts + shared
+ *   plugin              → rtk + headroomd + vsecagent + contracts + shared
+ *   eval                → plugin + sidecars + contracts + shared
  *
  * Anything not listed is forbidden: notably plugin/eval must never be
  * imported by a sidecar, and sidecar internals (rtk vs headroomd) must stay
@@ -29,7 +33,7 @@ const ALLOWED_EDGES: Record<string, readonly string[]> = {
   vsecagent: ["contracts", "security-core", "shared"],
   rtk: ["rtk-core", "contracts", "shared"],
   plugin: ["rtk", "headroomd", "contracts", "shared", "vsecagent"],
-  eval: ["rtk", "headroomd", "contracts", "shared", "plugin"],
+  eval: ["rtk", "headroomd", "contracts", "shared", "plugin", "vsecagent"],
 }
 
 interface Violation {

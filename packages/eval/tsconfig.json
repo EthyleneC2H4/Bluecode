@@ -26,6 +26,9 @@
       ],
       "@bluecode/plugin/*": [
         "../plugin/src/*.ts"
+      ],
+      "@bluecode/vsecagent/*": [
+        "../vsecagent/src/*.ts"
       ]
     }
   },

@@ -1,5 +1,5 @@
 {
-  "//": "Dependency direction: eval -> plugin public runtime/retrieval adapter, rtk + headroomd real clients, contracts + shared. No custom view materializer.",
+  "//": "Eval depends on production plugin runtime and RTK/headroom/VSec clients plus contracts/shared. Synthetic fixtures never execute dangerous inputs.",
   "name": "@bluecode/eval",
   "description": "A/B/C/D evaluation harness with exact token accounting and frozen-baseline regression gates",
   "keywords": [
@@ -24,6 +24,7 @@
     "@bluecode/shared": "workspace:^",
     "@bluecode/rtk": "workspace:^",
     "@bluecode/headroomd": "workspace:^",
-    "@bluecode/plugin": "workspace:^"
+    "@bluecode/plugin": "workspace:^",
+    "@bluecode/vsecagent": "workspace:^"
   }
 }

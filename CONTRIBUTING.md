@@ -10,7 +10,7 @@ pieces fit.
 git clone git@github.com:EthyleneC2H4/Bluecode.git
 cd Bluecode
 bun install --frozen-lockfile  # Bun 1.4.0
-bun run verify                # types, tests, dependency and host-import gates
+bun run verify                # types, tests, dependency, host-import and security gates
 ```
 
 ## Before you open a PR
@@ -33,22 +33,21 @@ bun run verify                # types, tests, dependency and host-import gates
    [`scripts/check-dependency-direction.ts`](scripts/check-dependency-direction.ts)
    (also part of `bun run verify`):
 
-   ```
-   contracts   shared          ← leaves; import nothing internal
-      ↑  ↑        ↑  ↑
-      │  └────────┘  │
-   rtk-core    headroomd     ← sidecar cores: contracts + shared only
-      ↑                          (headroomd never sees rtk-core)
-      ├── rtk                   ← rtk builds on rtk-core
-      │      ↑
-   plugin                      ← host: rtk + headroomd + contracts + shared
-      ↑
-     eval                      ← production runtime + clients + contracts/shared
-   ```
+   | Package | Internal dependencies |
+   |---|---|
+   | contracts / shared | none |
+   | rtk-core | contracts, shared |
+   | rtk | rtk-core, contracts, shared |
+   | security-core | contracts |
+   | vsecagent | security-core, contracts, shared |
+   | headroomd | contracts, shared, security-core (pure archive guard) |
+   | plugin | clients for rtk, headroomd, vsecagent; contracts, shared |
+   | eval | production runtime and clients; declared evaluation dependencies |
 
-   The two sidecars must stay mutually unaware — the retrieval bridge that
-   lets them share hashes lives in the plugin's tool layer, not in either
-   daemon.
+   The sidecars do not call one another. The plugin orchestrates tool checks,
+   redaction, compression and retrieval. SQLite and TS/Bash parsers must remain
+   outside the host factory bundle. Security tests use synthetic canaries and
+   local mock services, never real credentials or destructive execution.
 4. **Add tests for behavior fixes.** A fix without a test that would have caught
    the bug tends to come back.
 5. **Notable changes get a devlog entry** ([`docs/devlog.md`](docs/devlog.md)):

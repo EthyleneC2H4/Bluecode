@@ -62,3 +62,21 @@ JSONL 一行一帧，限制单帧 UTF-8 字节数为 8MiB。多帧粘包不会�
 ## 持久版本与升级
 
 新存储分别在 `storage-v2/rtk` 与 `storage-v2/headroom`。headroom 保留旧 hash 的校验读法，RTK 提供只读 legacy reader；项目 ownership 迁移需要显式映射，绝无跨项目 fallback。离线迁移保留源，复制/校验/重建/配额检查完成后才切换目录。[迁移说明](operations.md)。
+
+## VSecAgent 独立协议 v1
+
+不修改 RTK/headroom 的 v3。安全 [schema](../packages/contracts/src/security.ts) 定义决策和字段；
+[传输](../packages/vsecagent/src/protocol.ts)使用 `protocol:1`（不是压缩协议的 `v`）、UUID `id`、`op`、`params`、`queueMs`。
+客户端公开方法 `evaluateTool` 对应 wire `op: evaluate`，另有 `sanitize`、`health`。
+
+| 方法 | 请求 / 返回 |
+| --- | --- |
+| evaluateTool | namespace、tool、args、cwd/root、files候选/原文/完整性、canonical paths、policy → decision、coverage、findings、diagnostics |
+| sanitize | namespace、fields、policy → 同顺序fields、redactions、coverage |
+| health | PID、协议版本、运行时间、缓存大小/命中、服务时间及RSS |
+
+成功结果携带 requestId、policyVersion、queueMs、serviceMs。决策为 allow/warn/deny/unavailable，覆盖为 complete/partial/unsupported；二者独立。
+发现项只提供规则、级别、置信、脱敏位置、固定说明及修复建议，不返回原始凭证片段。
+请求含排队默认 1 秒；单字段 1 MiB，待处理 32 个/8 MiB，单帧 8 MiB。超时终止整个进程代次、拒绝迟到响应；故障策略由插件执行。
+企业 SDK 使用 [独立适配接口](../packages/vsecagent/src/adapters.ts)，不假设私有网络协议。
+安全存储与恢复语义见 [VSecAgent 指南](vsecagent.md)。

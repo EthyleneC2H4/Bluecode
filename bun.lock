@@ -26,6 +26,7 @@
         "@bluecode/plugin": "workspace:^",
         "@bluecode/rtk": "workspace:^",
         "@bluecode/shared": "workspace:^",
+        "@bluecode/vsecagent": "workspace:^",
       },
     },
     "packages/headroomd": {

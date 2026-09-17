@@ -1,8 +1,8 @@
 # BlueCode
 
-为 [OpenCode](https://github.com/anomalyco/opencode) 提供上下文优化：通过一个插件连接 RTK 子进程与 headroomd 守护进程，分别负责工具输出压缩，以及有预算的分层会话记忆与证据按需恢复。
+为 [OpenCode](https://github.com/anomalyco/opencode) 提供上下文优化和可选的工具安全检查：通过一个插件连接 RTK 子进程与 headroomd 守护进程，分别负责工具输出压缩，以及有预算的分层会话记忆与证据按需恢复。VSecAgent 独立子进程提供执行前风险检查和归档前脱敏。
 
-[English](README.md) · [架构](docs/architecture.md) · [Headroom 使用指南](docs/headroom-layered.md) · [Headroom 消融结果](docs/headroom-retention.md) · [操作手册](docs/operations.md)
+[English](README.md) · [架构](docs/architecture.md) · [Headroom 使用指南](docs/headroom-layered.md) · [Headroom 消融结果](docs/headroom-retention.md) · [VSecAgent 指南](docs/vsecagent.md) · [操作手册](docs/operations.md)
 
 本仓库是独立学习实现，不是 vivo 的 BlueCode 私有源码。评测包括确定性合成历史回放，以及通过真实 OpenCode 调用 LLM 完成的小型编码任务，两者分别报告。
 
@@ -12,16 +12,25 @@
 |---|---|
 | RTK | 保守压缩已识别的命令输出，保护代码、diff 变更行和完整失败诊断。512 token 是软目标，保护内容允许超额。 |
 | headroomd | 归档较早的工具观察和明确标注的材料，维护任务状态与有预算的分层记忆，复用未变内容的分析，并跨过保护内容进行安全局部替换；保护用户需求、修正、近期轮次、活动工具及未知内容。 |
+| VSecAgent | 本地八类规则与有限 JS/TS、Bash 语法分析；高置信严重风险阻断；工具、模型文本与归档证据脱敏。默认关闭，安全示例使用 enforce。 |
 | 插件 | 每实例拥有客户端与状态，以真实 project/session 隔离检索；根据模型窗口规划，与上游 compaction 协调。 |
 | 检索 | FTS5/BM25 先返回命中片段，再按需分页展开原文、归档历史或摘要节点；返回内容绕过 RTK。 |
 
 通过 `headroom.strategy: "layered"` 启用新策略。默认仍为 `legacy`，等待完整切换验收；两种规则路径均可离线运行，可选的后台 LLM 摘要默认关闭。详见[配置与默认策略决定](docs/headroom-layered-acceptance.md#默认策略决定)。
 
-RTK 使用 stdio 协议 v3，headroomd 使用 Unix socket 协议 v3。持久数据与临时 socket 分离。故障保留宿主可见内容或暂停规划；归档缺失、损坏会显式报告。RTK 保存实际收到文本的 sanitized 版本，无法恢复进入 hook 前已被宿主截去的内容。
+RTK 使用 stdio 协议 v3，headroomd 使用 Unix socket 协议 v3。持久数据与临时 socket 分离。压缩故障保留已过滤的宿主内容或暂停规划；归档缺失、损坏会显式报告。RTK 保存实际收到文本的 sanitized 版本，无法恢复进入 hook 前已被宿主截去的内容。
+
+`security.mode: "enforce"` 独立于压缩开关：关闭 RTK／headroom 后安全检查仍生效。扫描故障拒绝写入、执行及未知副作用；脱敏失败以暂不可用提示替代对应文本。安全开启后使用独立的策略绑定归档，恢复对象是脱敏后的完整证据。手工 shell、模板提前执行、后续插件修改、文件竞态和非文本附件属于已声明的覆盖限制。见[安全配置](examples/opencode-security.json)及[实现与边界](docs/vsecagent.md)。
+
+## VSecAgent 本地验收
+
+冻结的 320 例样例在修复后复测：风险检出 **160/160**，预标注严重风险阻断 **78/78**，正常样例误阻断／误告警均为 **0/160**。首次验收失败与修复记录保留，复测不冒充盲评；八类规则仍有明确的部分覆盖范围。[规则与性能报告](docs/vsecagent-evaluation.md)
+
+真实 **OpenCode 1.18.23** 使用本地模拟模型验证普通工具、多文件补丁、MCP、子 Agent、code-mode 及扫描故障，外部 LLM 调用为 **0**。安全关闭后，legacy 与 layered 的四组压缩输入与已有记录逐项一致。CI 新增离线安全质量门禁；安全遮蔽不计为压缩收益。[宿主与兼容性证据](docs/vsecagent-integration.md)
 
 ## 实现架构
 
-RTK 压缩单次工具返回，headroomd 管理较早证据在上下文中的保留方式。下面三张图对应本仓库当前的 Bun / TypeScript 实现；两个 sidecar 互不调用，由宿主插件负责调度和检索路由。
+RTK 压缩单次工具返回，headroomd 管理较早证据在上下文中的保留方式。下面三张图说明压缩子系统。启用安全后，在这些压缩入口之前执行 VSecAgent 检查与脱敏；三个 sidecar 互不调用，由宿主插件负责调度和检索路由。
 
 ### 总体架构：两层压缩与检索闭环
 
@@ -199,6 +208,7 @@ verify 包含全工作区 strict 类型检查、测试、依赖方向，以及�
 {
   "plugin": [["file:///absolute/path/Bluecode/packages/plugin/src/index.ts", {
     "mode": "on",
+    "security": {"mode": "enforce", "timeoutMs": 1000},
     "rtk": {"budgetTokens": 512, "timeoutMs": 40, "minBytes": 512},
     "headroom": {
       "strategy": "layered",
@@ -281,7 +291,7 @@ verify 包含全工作区 strict 类型检查、测试、依赖方向，以及�
 
 ## 开发
 
-七个工作区包分离协议、基础原语、RTK 纯策略、RTK 传输与存储、headroomd、插件及评测。评测直接依赖生产 runtime，两个 sidecar 互不依赖。旧插件 helper 保留用于兼容测试，不在生产工厂导入链路内。
+九个工作区包分离协议、基础原语、RTK 纯策略、RTK 传输与存储、headroomd、安全纯规则、VSecAgent 扫描进程、插件及评测。评测直接依赖生产 runtime，三个 sidecar 不互相调用；headroomd 的持久化校验只依赖纯脱敏库。旧插件 helper 保留用于兼容测试，不在生产工厂导入链路内。
 
 参见[贡献指南](CONTRIBUTING.md)、[协议](docs/protocol.md)、[分层设计](docs/superpowers/specs/2026-09-11-headroom-layered-design.md)、[实施计划](docs/superpowers/plans/2026-09-11-headroom-layered.md)。
 

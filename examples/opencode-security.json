@@ -1,0 +1,8 @@
+{
+  "plugin": [["file:///absolute/path/Bluecode/packages/plugin/src/index.ts", {
+    "mode": "on",
+    "security": { "mode": "enforce", "timeoutMs": 1000 },
+    "rtk": { "budgetTokens": 512, "timeoutMs": 40, "minBytes": 512 },
+    "headroom": { "strategy": "layered", "retainRecentTurns": 1, "summarizer": { "enabled": false } }
+  }]]
+}

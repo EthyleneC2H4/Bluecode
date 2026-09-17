@@ -88,3 +88,11 @@ bun run eval:live --model opencode/mimo-v2.5-free \
 提交结果的 72 次主任务全部通过。分层规则版相对旧版累计完整输入降低 **36.71%**，缓存外输入增加 **29.62%**，输出增加 **13.58%**。因此不能把总输入缩减直接当作付费账单同比下降。可选摘要共尝试 32 次，31 次收到 Zen 的 `MissingSessionID`、1 次传输失败，**没有增强候选实际应用**；增强对照保留 `incomplete: true`，CLI 按设计退出 2。主任务完成与增强效果验收是两项独立结果。[实机原始记录](headroom-live-results.json)
 
 历史实机入口显式固定 `retainRecentTurns=4` 并记录在报告中，避免新默认值改变旧对照；本轮轮数实验没有真实模型调用。当前默认策略仍为 `legacy`，LLM 增强继续关闭；配置、候选校验和回退方式见[使用指南](../../docs/headroom-layered.md)。
+
+## VSecAgent 安全验收
+
+`bun run check:security` 在隔离目录执行 160 个开发样例、320 个冻结验收样例及生产运行时文本脱敏检查，不调用 LLM。CI 可用 `SECURITY_REPORT_PATH` 指定产物。
+
+`bun run eval:security --performance --output /tmp/vsec-performance.json` 另外测量真实扫描子进程和完整 before Hook 的冷启动、1/8/32 并发及缓存命中/未命中。共享 CI 不执行机器相关性能门槛。`bun run eval:security:host /tmp/vsec-host.json` 要求已安装 OpenCode 1.18.23，以 loopback 模拟模型验证普通工具、多文件补丁、MCP、子 Agent、code-mode 和扫描故障；所有副作用仅在临时目录，外部 LLM 调用为零。
+
+验收标签首次执行前单独提交；修复后重测保留首轮失败，不将重测称为未见过的留出结果。安全脱敏和内容暂不可用造成的 token 变化独立记账，不能计入 RTK/headroom 压缩收益。见[安全验收报告](../../docs/vsecagent-evaluation.md)、[原始样例结果](security-results.json)和[实际宿主记录](security-host-results.json)。

@@ -46,7 +46,12 @@ jobs:
       - name: Dependency direction
         run: bun scripts/check-dependency-direction.ts
 
-      - name: Host bundle excludes SQLite
+      - name: Offline security quality and redaction gate
+        env:
+          SECURITY_REPORT_PATH: ${{ runner.temp }}/security-report.json
+        run: bun run check:security
+
+      - name: Host bundle excludes SQLite and security parsers
         run: bun run check:host
 
       # One fresh full replay gates absolute reliability and relative regression.
@@ -62,5 +67,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: evaluation-${{ matrix.os }}
-          path: ${{ runner.temp }}/eval-report.json
+          path: |
+            ${{ runner.temp }}/eval-report.json
+            ${{ runner.temp }}/security-report.json
           if-no-files-found: warn

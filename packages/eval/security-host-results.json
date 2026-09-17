@@ -1,0 +1,753 @@
+{
+  "protocol": 1,
+  "meta": {
+    "timestamp": "2026-09-17T06:36:57.239Z",
+    "command": [
+      "bun",
+      "packages/eval/src/security-host.ts",
+      "packages/eval/security-host-results.json"
+    ],
+    "host": "c2h4-3.local",
+    "platform": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64",
+    "bun": "1.4.0",
+    "node": "v26.3.0",
+    "cpu": "Apple M2",
+    "logicalCpus": 8,
+    "memoryBytes": 17179869184,
+    "gitCommit": "b8b119e29eaf0c2281850d782fa0fc0f05bf6775",
+    "gitDirty": true,
+    "sourceDigests": {
+      "packages/contracts/src/security.ts": "f29315fb90341c3ef070f28679a05b7a967c83a68aaed928f7b3427ac3182d42",
+      "packages/plugin/src/runtime.ts": "0ef8aea2bdd267923b1707df7b6efe47dcf9308b25dbbddd61f740855de79965",
+      "packages/plugin/src/config.ts": "975b2c47a76360f7b1ab0711e37e915a27a77717c2ce9acbd0d8c555fdb35711",
+      "packages/plugin/src/security.ts": "90cd9bf79bf2f2b3cecfa0a91d53036b2a1b2d67c4e3a30a0fbac9701d3d3c55",
+      "packages/plugin/src/security-tools.ts": "1a72802a90881fa1fd462ebf8590e29dc59a3125e4c608749e548dd6bfc92e2c",
+      "packages/security-core/src/index.ts": "84cca963447868cf607a4ffe8394b3116e68627e76ea2e10286730ea7c8d1750",
+      "packages/security-core/src/typescript.ts": "c1ab2c2366ed412c0dbe75558c639336936f49b1d666d273f30cfd823cede6fe",
+      "packages/security-core/src/credentials.ts": "3e40644a522b8688626e86af6bd5a767f281a30ea0ba5100b460e6f0c0e99121",
+      "packages/security-core/src/bash.ts": "f22a7470197b587c3b69cb30c8fcd54095fe3465b7aa85ff30ecfbfdf936d857",
+      "packages/security-core/src/bounds.ts": "f298668304d3ab6f9aa8f9e2b54e89673f615faf1747b8fec0afa14ba4f48f37",
+      "packages/security-core/src/paths.ts": "a807a28d27bdf319aa4df62b3aa95a4695eaa3e84b4df03d299ba3c2477d50b9",
+      "packages/security-core/src/sanitize.ts": "d1e50f4d9348761b8ee2fea39078c48d24ac4ada06e61eddad533577223c72b2",
+      "packages/vsecagent/src/client.ts": "302c001dc84b0f2235bd82fb43f93c1635a588b30e83c5865cfd2ef604b74004",
+      "packages/vsecagent/src/protocol.ts": "d79a9203a7b3cbb117ea731c97e9b5dcb2cefb3aba4f0811bd38019e4f9e129f",
+      "packages/vsecagent/src/engine.ts": "ea6abb75ff2b4f8842125a1e2061883e9fb7203fd6f8bd0b3d99da3ce24be460",
+      "packages/vsecagent/src/cache.ts": "638594b610e6813dd7b3404fcea3ca08384b346b7216473c446f13763aa8c95d",
+      "packages/vsecagent/src/bin.ts": "4c77c2a37f48a96d4130efee7eb7ef7019381822c3f3db3bcc74334b6c3c14de",
+      "packages/vsecagent/src/audit.ts": "6e1c4ec6f703d3440f5f30564b51cfe4d4ec83d8c13acb2ed6ac61a19a491c09"
+    },
+    "fixtureFreezeCommit": "ed8848b",
+    "fixtureSha256": "ba147421497ce9263d1be3a9da1cb16268a0d191057eedc89b8b30ad0ff32c54",
+    "parser": {
+      "typescript": "5.9.3",
+      "webTreeSitter": "0.25.10",
+      "bashGrammar": "0.25.0"
+    },
+    "policy": {
+      "version": "vsec-1",
+      "exceptions": [],
+      "deniedPaths": [],
+      "mcpTools": {}
+    },
+    "config": {
+      "deadlineMs": 1000,
+      "maxPending": 32,
+      "maxQueueBytes": 8388608,
+      "maxFieldBytes": 1048576,
+      "cacheBytes": 16777216
+    },
+    "fixtureCounts": {
+      "development160": 160,
+      "acceptance320": 320
+    },
+    "driverDigests": {
+      "security-host": "f46d887e3ee04cd8df854700a58236b3aa010d206f0a6ebe20ec17b91bf892fd",
+      "security-host-plugin": "928576111c081f24fa9471f982a6ce36715883c03349394e49e48bc7bf874dfb",
+      "security-host-mcp": "50c7fa296ae3e3da156e25c7f14c354a62424adde353e7228d67fc7eda85e673"
+    }
+  },
+  "hostVersion": "1.18.23",
+  "bun": "1.4.0",
+  "actualLLMCalls": 0,
+  "provider": "loopback scripted OpenAI-compatible SSE",
+  "compressionMode": "off",
+  "securityMode": "enforce",
+  "passed": true,
+  "records": [
+    {
+      "scenario": "standard",
+      "passed": true,
+      "checks": {
+        "completed": true,
+        "blockedFileAbsent": true,
+        "childBlockedFileAbsent": true,
+        "noAtomicPartialWrite": true,
+        "sensitiveFileAbsent": true,
+        "unknownSideEffectAbsent": true,
+        "modelCanaryAbsent": true,
+        "hooksObserved": true,
+        "parentConstraintsRetained": true,
+        "safeEditExecuted": true,
+        "childHookObserved": true,
+        "mcpReadExecuted": true
+      },
+      "durationMs": 6164.964667,
+      "requests": [
+        {
+          "child": false,
+          "index": 0,
+          "tools": [
+            "bash",
+            "edit",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "probe_read",
+            "probe_save",
+            "read",
+            "skill",
+            "task",
+            "todowrite",
+            "webfetch",
+            "write"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": true,
+          "withheld": false
+        },
+        {
+          "child": false,
+          "index": 1,
+          "tools": [
+            "bash",
+            "edit",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "probe_read",
+            "probe_save",
+            "read",
+            "skill",
+            "task",
+            "todowrite",
+            "webfetch",
+            "write"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": true,
+          "withheld": false
+        },
+        {
+          "child": false,
+          "index": 2,
+          "tools": [
+            "bash",
+            "edit",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "probe_read",
+            "probe_save",
+            "read",
+            "skill",
+            "task",
+            "todowrite",
+            "webfetch",
+            "write"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": true,
+          "withheld": false
+        },
+        {
+          "child": false,
+          "index": 3,
+          "tools": [
+            "bash",
+            "edit",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "probe_read",
+            "probe_save",
+            "read",
+            "skill",
+            "task",
+            "todowrite",
+            "webfetch",
+            "write"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": true,
+          "withheld": false
+        },
+        {
+          "child": false,
+          "index": 4,
+          "tools": [
+            "bash",
+            "edit",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "probe_read",
+            "probe_save",
+            "read",
+            "skill",
+            "task",
+            "todowrite",
+            "webfetch",
+            "write"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": true,
+          "withheld": false
+        },
+        {
+          "child": false,
+          "index": 5,
+          "tools": [
+            "bash",
+            "edit",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "probe_read",
+            "probe_save",
+            "read",
+            "skill",
+            "task",
+            "todowrite",
+            "webfetch",
+            "write"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": true,
+          "withheld": false
+        },
+        {
+          "child": false,
+          "index": 6,
+          "tools": [
+            "bash",
+            "edit",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "probe_read",
+            "probe_save",
+            "read",
+            "skill",
+            "task",
+            "todowrite",
+            "webfetch",
+            "write"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": true,
+          "withheld": false
+        },
+        {
+          "child": false,
+          "index": 7,
+          "tools": [
+            "bash",
+            "edit",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "probe_read",
+            "probe_save",
+            "read",
+            "skill",
+            "task",
+            "todowrite",
+            "webfetch",
+            "write"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": true,
+          "withheld": false
+        },
+        {
+          "child": true,
+          "index": 0,
+          "tools": [
+            "bash",
+            "edit",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "probe_read",
+            "probe_save",
+            "read",
+            "skill",
+            "todowrite",
+            "webfetch",
+            "write"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": false,
+          "withheld": false
+        },
+        {
+          "child": true,
+          "index": 1,
+          "tools": [
+            "bash",
+            "edit",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "probe_read",
+            "probe_save",
+            "read",
+            "skill",
+            "todowrite",
+            "webfetch",
+            "write"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": false,
+          "withheld": false
+        },
+        {
+          "child": false,
+          "index": 8,
+          "tools": [
+            "bash",
+            "edit",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "probe_read",
+            "probe_save",
+            "read",
+            "skill",
+            "task",
+            "todowrite",
+            "webfetch",
+            "write"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": true,
+          "withheld": false
+        }
+      ],
+      "trace": [
+        {
+          "stage": "before",
+          "tool": "write",
+          "session": "ses_f51eac609ffeNTg67nV75J13po",
+          "decision": "blocked"
+        },
+        {
+          "stage": "before",
+          "tool": "write",
+          "session": "ses_f51eac609ffeNTg67nV75J13po",
+          "decision": "allowed"
+        },
+        {
+          "stage": "before",
+          "tool": "read",
+          "session": "ses_f51eac609ffeNTg67nV75J13po",
+          "decision": "allowed"
+        },
+        {
+          "stage": "before",
+          "tool": "edit",
+          "session": "ses_f51eac609ffeNTg67nV75J13po",
+          "decision": "allowed"
+        },
+        {
+          "stage": "before",
+          "tool": "bash",
+          "session": "ses_f51eac609ffeNTg67nV75J13po",
+          "decision": "allowed"
+        },
+        {
+          "stage": "before",
+          "tool": "probe_save",
+          "session": "ses_f51eac609ffeNTg67nV75J13po",
+          "decision": "blocked"
+        },
+        {
+          "stage": "before",
+          "tool": "probe_read",
+          "session": "ses_f51eac609ffeNTg67nV75J13po",
+          "decision": "allowed"
+        },
+        {
+          "stage": "before",
+          "tool": "task",
+          "session": "ses_f51eac609ffeNTg67nV75J13po",
+          "decision": "allowed"
+        },
+        {
+          "stage": "before",
+          "tool": "write",
+          "session": "ses_f51eabee5ffevv9a40O6K3xmK5",
+          "decision": "blocked"
+        }
+      ],
+      "mcp": [
+        {
+          "name": "read"
+        }
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "stderr": "[bluecode] execPath \"/opt/homebrew/Cellar/opencode/1.18.23/bin/opencode\" is not a bun runtime; spawning entry via \"bun\" from PATH\n"
+    },
+    {
+      "scenario": "patch",
+      "passed": true,
+      "checks": {
+        "completed": true,
+        "blockedFileAbsent": true,
+        "childBlockedFileAbsent": true,
+        "noAtomicPartialWrite": true,
+        "sensitiveFileAbsent": true,
+        "unknownSideEffectAbsent": true,
+        "modelCanaryAbsent": true,
+        "hooksObserved": true,
+        "parentConstraintsRetained": true,
+        "safePatchExecuted": true
+      },
+      "durationMs": 6930.051332999999,
+      "requests": [
+        {
+          "child": false,
+          "index": 0,
+          "tools": [
+            "apply_patch",
+            "bash",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "probe_read",
+            "probe_save",
+            "read",
+            "skill",
+            "task",
+            "todowrite",
+            "webfetch"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": true,
+          "withheld": false
+        },
+        {
+          "child": false,
+          "index": 1,
+          "tools": [
+            "apply_patch",
+            "bash",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "probe_read",
+            "probe_save",
+            "read",
+            "skill",
+            "task",
+            "todowrite",
+            "webfetch"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": true,
+          "withheld": false
+        },
+        {
+          "child": false,
+          "index": 2,
+          "tools": [
+            "apply_patch",
+            "bash",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "probe_read",
+            "probe_save",
+            "read",
+            "skill",
+            "task",
+            "todowrite",
+            "webfetch"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": true,
+          "withheld": false
+        }
+      ],
+      "trace": [
+        {
+          "stage": "before",
+          "tool": "apply_patch",
+          "session": "ses_f51eaa7b2ffebe9Lc0dpWbvxTY",
+          "decision": "blocked"
+        },
+        {
+          "stage": "before",
+          "tool": "apply_patch",
+          "session": "ses_f51eaa7b2ffebe9Lc0dpWbvxTY",
+          "decision": "allowed"
+        }
+      ],
+      "mcp": [],
+      "exitCode": 0,
+      "timedOut": false,
+      "stderr": "[bluecode] execPath \"/opt/homebrew/Cellar/opencode/1.18.23/bin/opencode\" is not a bun runtime; spawning entry via \"bun\" from PATH\n"
+    },
+    {
+      "scenario": "code-mode",
+      "passed": true,
+      "checks": {
+        "completed": true,
+        "blockedFileAbsent": true,
+        "childBlockedFileAbsent": true,
+        "noAtomicPartialWrite": true,
+        "sensitiveFileAbsent": true,
+        "unknownSideEffectAbsent": true,
+        "modelCanaryAbsent": true,
+        "hooksObserved": true,
+        "parentConstraintsRetained": true,
+        "nestedMcpBlocked": true,
+        "nestedMcpReadExecuted": true
+      },
+      "durationMs": 7216.489833999998,
+      "requests": [
+        {
+          "child": false,
+          "index": 0,
+          "tools": [
+            "bash",
+            "edit",
+            "execute",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "read",
+            "skill",
+            "task",
+            "todowrite",
+            "webfetch",
+            "write"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": true,
+          "withheld": false
+        },
+        {
+          "child": false,
+          "index": 1,
+          "tools": [
+            "bash",
+            "edit",
+            "execute",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "read",
+            "skill",
+            "task",
+            "todowrite",
+            "webfetch",
+            "write"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": true,
+          "withheld": false
+        },
+        {
+          "child": false,
+          "index": 2,
+          "tools": [
+            "bash",
+            "edit",
+            "execute",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "read",
+            "skill",
+            "task",
+            "todowrite",
+            "webfetch",
+            "write"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": true,
+          "withheld": false
+        }
+      ],
+      "trace": [
+        {
+          "stage": "before",
+          "tool": "execute",
+          "session": "ses_f51ea8c92ffeQfUMYDDxaVOpty",
+          "decision": "allowed"
+        },
+        {
+          "stage": "before",
+          "tool": "probe_save",
+          "session": "ses_f51ea8c92ffeQfUMYDDxaVOpty",
+          "decision": "blocked"
+        },
+        {
+          "stage": "before",
+          "tool": "execute",
+          "session": "ses_f51ea8c92ffeQfUMYDDxaVOpty",
+          "decision": "allowed"
+        },
+        {
+          "stage": "before",
+          "tool": "probe_read",
+          "session": "ses_f51ea8c92ffeQfUMYDDxaVOpty",
+          "decision": "allowed"
+        }
+      ],
+      "mcp": [
+        {
+          "name": "read"
+        }
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "stderr": "[bluecode] execPath \"/opt/homebrew/Cellar/opencode/1.18.23/bin/opencode\" is not a bun runtime; spawning entry via \"bun\" from PATH\n"
+    },
+    {
+      "scenario": "scanner-failure",
+      "passed": true,
+      "checks": {
+        "completed": true,
+        "blockedFileAbsent": true,
+        "childBlockedFileAbsent": true,
+        "noAtomicPartialWrite": true,
+        "sensitiveFileAbsent": true,
+        "unknownSideEffectAbsent": true,
+        "modelCanaryAbsent": true,
+        "hooksObserved": true,
+        "failedEvidenceWithheld": true,
+        "noMcpSideEffect": true
+      },
+      "durationMs": 5414.608292000001,
+      "requests": [
+        {
+          "child": false,
+          "index": 0,
+          "tools": [
+            "bash",
+            "edit",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "probe_read",
+            "probe_save",
+            "read",
+            "skill",
+            "task",
+            "todowrite",
+            "webfetch",
+            "write"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": false,
+          "withheld": true
+        },
+        {
+          "child": false,
+          "index": 1,
+          "tools": [
+            "bash",
+            "edit",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "probe_read",
+            "probe_save",
+            "read",
+            "skill",
+            "task",
+            "todowrite",
+            "webfetch",
+            "write"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": false,
+          "withheld": true
+        },
+        {
+          "child": false,
+          "index": 2,
+          "tools": [
+            "bash",
+            "edit",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "probe_read",
+            "probe_save",
+            "read",
+            "skill",
+            "task",
+            "todowrite",
+            "webfetch",
+            "write"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": false,
+          "withheld": true
+        },
+        {
+          "child": false,
+          "index": 3,
+          "tools": [
+            "bash",
+            "edit",
+            "glob",
+            "grep",
+            "headroom_retrieve",
+            "probe_read",
+            "probe_save",
+            "read",
+            "skill",
+            "task",
+            "todowrite",
+            "webfetch",
+            "write"
+          ],
+          "canaryLeaked": false,
+          "retainedConstraint": false,
+          "withheld": true
+        }
+      ],
+      "trace": [
+        {
+          "stage": "before",
+          "tool": "write",
+          "session": "ses_f51ea765dffelMlLvNvZRdsOWa",
+          "decision": "blocked"
+        },
+        {
+          "stage": "before",
+          "tool": "probe_save",
+          "session": "ses_f51ea765dffelMlLvNvZRdsOWa",
+          "decision": "blocked"
+        },
+        {
+          "stage": "before",
+          "tool": "read",
+          "session": "ses_f51ea765dffelMlLvNvZRdsOWa",
+          "decision": "allowed"
+        }
+      ],
+      "mcp": [],
+      "exitCode": 0,
+      "timedOut": false,
+      "stderr": "[bluecode] execPath \"/opt/homebrew/Cellar/opencode/1.18.23/bin/opencode\" is not a bun runtime; spawning entry via \"bun\" from PATH\n[bluecode] sidecar connection failed\n"
+    }
+  ]
+}
