@@ -25,12 +25,12 @@
     "@bluecode/shared": "workspace:*",
     "@bluecode/rtk": "workspace:*",
     "@bluecode/headroomd": "workspace:*",
-    "zod": "4.1.8",
+    "zod": "4.6.5",
     "@bluecode/vsecagent": "workspace:*"
   },
   "devDependencies": {
-    "@opencode-ai/plugin": "1.18.21",
-    "@opencode-ai/sdk": "1.18.21"
+    "@opencode-ai/plugin": "1.18.31",
+    "@opencode-ai/sdk": "1.18.31"
   },
   "exports": {
     ".": "./src/index.ts",

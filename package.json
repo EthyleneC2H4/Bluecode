@@ -31,8 +31,8 @@
     "check:security": "bun scripts/check-security.ts"
   },
   "devDependencies": {
-    "@types/bun": "1.4.0",
-    "bun-types": "1.4.0",
+    "@types/bun": "1.4.2",
+    "bun-types": "1.4.2",
     "typescript": "5.9.3"
   }
 }
