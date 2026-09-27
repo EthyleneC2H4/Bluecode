@@ -11,7 +11,7 @@
 | 时间 | 操作 | 应说明的证据 |
 | --- | --- | --- |
 | 0:00–1:00 | 打开 [`T3/TASK.md`](../packages/eval/fixtures/order-after-sales/tasks/T3/TASK.md)，指出累计数量、金额、状态与幂等规则 | 金额为整数分，无优惠和真实支付 |
-| 1:00–2:00 | 展示 [`business-acceptance.ts`](../packages/eval/src/business-acceptance.ts)与[验收有效性记录](../packages/eval/evidence/order-after-sales/acceptance-validity.json) | 参考修复通过，九种错误实现被拒绝；验收在 Agent 外部 |
+| 1:00–2:00 | 展示 [`business-acceptance.ts`](../packages/eval/src/business-acceptance.ts)与[验收有效性记录](../packages/eval/evidence/order-after-sales/acceptance-validity.json) | 参考修复通过，十四种错误实现被拒绝；验收在 Agent 外部 |
 | 2:00–3:00 | 展示 [`business-config.ts`](../packages/eval/src/business-config.ts)和[`business-proxy.ts`](../packages/eval/src/business-proxy.ts) | 两组安全策略相同；令牌只用于本次运行，实际密钥留在宿主 |
 | 3:00–4:00 | 展示[离线压力结果](../packages/eval/evidence/order-after-sales/offline-pressure/result.json)与[轨迹](../packages/eval/evidence/order-after-sales/offline-pressure/trace.jsonl) | RTK 确实压缩、Headroom 视图确实被后续请求消费；假模型未交付业务修复 |
 | 4:00–5:00 | 展示[16 项待运行账本](../packages/eval/evidence/order-after-sales/online-pending.json)和[复现命令](order-after-sales-evaluation.md#复现) | 缺免费模型凭据时停在离线闭环，在线结果不预填 |
@@ -32,7 +32,7 @@
 
 ## 案例与简历候选文案
 
-- **成功侧证据：**参考修复分别通过 T1/T2/T3 外部验收；验收器还拒绝九份错误实现。这证明评测题和判定器的基本有效性，不是 Agent 成功案例。
+- **成功侧证据：**参考修复分别通过 T1/T2/T3 外部验收；验收器还拒绝十四份错误实现。这证明评测题和判定器的基本有效性，不是 Agent 成功案例。
 - **失败复盘：**离线假模型运行 T3 压力任务，真实宿主工具与压缩链路完成，但未改动业务代码，四项退款验收均失败；失败类型为 `business_error`，实际 provider usage 缺失。这是 Harness 演示，不用于推断免费模型能力。
 - **待补案例：**正式 16 次运行后，从完整账本选择一条真实通过和一条真实失败的 run，按“业务约束 → Agent 行为 → 压缩轨迹 → 外部验收 → 解释”展示，不挑样本替换失败。
 

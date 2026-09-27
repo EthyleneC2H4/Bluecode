@@ -4,10 +4,11 @@ import { createLiveBudget, providerObservation } from "./live-observation"
 const UPSTREAM = "https://opencode.ai/zen/v1/chat/completions"
 const MAX_BODY = 1024 * 1024
 const MAX_RESPONSE = 8 * 1024 * 1024
-interface Session { token: string; model: string; expiresAt: number; budget: ReturnType<typeof createLiveBudget>; active: Set<AbortController>; overWindow: boolean }
+interface Session { token: string; traceToken: string; trace: Record<string, unknown>[]; sequence: number; model: string; expiresAt: number;
+  budget: ReturnType<typeof createLiveBudget>; active: Set<AbortController>; overWindow: boolean }
 export interface BusinessProxyRecord {
-  runId: string; status: number | "transport-error"; durationMs: number
-  headroomMarkers: number
+  runId: string; sequence: number; status: number | "transport-error"; durationMs: number
+  headroomMarkers: number; headroomNodeIds: string[]
   estimatedInput: number; actualWindowExceeded: boolean
   inputReservation: number; outputReservation: number
   actualInput: number | null; actualOutput: number | null
@@ -64,7 +65,23 @@ export function createBusinessProxy(options: { upstreamKey: string; upstreamFetc
   const observations: BusinessProxyRecord[] = []
   const upstreamFetch = options.upstreamFetch ?? fetch
   const server = Bun.serve({ hostname: "0.0.0.0", port: 0, idleTimeout: 120, async fetch(request) {
-    const match = new URL(request.url).pathname.match(/^\/([a-zA-Z0-9-]+)\/main\/chat\/completions$/)
+    const path = new URL(request.url).pathname
+    const traceMatch = path.match(/^\/([a-zA-Z0-9-]+)\/trace$/)
+    if (traceMatch) {
+      const session = sessions.get(traceMatch[1]!)
+      if (!session || Date.now() >= session.expiresAt || !authenticated(request.headers.get("authorization"), session.traceToken))
+        return new Response("Unauthorized", { status: 401 })
+      if (request.method !== "POST" || session.trace.length >= 10000) return new Response("Trace unavailable", { status: 405 })
+      const bytes = await readBounded(request, 32 * 1024)
+      if (!bytes) return new Response("Trace too large", { status: 413 })
+      try {
+        const event = JSON.parse(new TextDecoder().decode(bytes))
+        if (!event || typeof event !== "object" || Array.isArray(event) || typeof event.type !== "string") throw Error("Invalid trace")
+        session.trace.push({ ...event, runId: traceMatch[1]!, sequence: ++session.sequence })
+        return new Response(null, { status: 204 })
+      } catch { return new Response("Invalid trace", { status: 400 }) }
+    }
+    const match = path.match(/^\/([a-zA-Z0-9-]+)\/main\/chat\/completions$/)
     if (!match || request.method !== "POST") return new Response("Unknown route", { status: 404 })
     const runId = match[1]!, session = sessions.get(runId)
     if (!session || Date.now() >= session.expiresAt || !authenticated(request.headers.get("authorization"), session.token)) return new Response("Unauthorized", { status: 401 })
@@ -77,12 +94,18 @@ export function createBusinessProxy(options: { upstreamKey: string; upstreamFetc
     if (body.model !== session.model) return new Response("Model outside free allowlist", { status: 403 })
     const estimatedInput = Math.ceil(JSON.stringify(body).length / 4) + 4096
     if (estimatedInput > 40000) return new Response("Input window estimate exceeded", { status: 413 })
-    const output = Number.isSafeInteger(body.max_tokens) && body.max_tokens > 0 ? Math.min(body.max_tokens, 2048) : 2048
+    const requested = [body.max_tokens, body.max_completion_tokens].filter((value): value is number => Number.isSafeInteger(value) && value > 0)
+    const output = Math.min(2048, ...requested)
     body.max_tokens = output
+    if (body.max_completion_tokens !== undefined) body.max_completion_tokens = output
+    body.n = 1
+    if (body.best_of !== undefined) body.best_of = 1
     const reservation = session.budget.reserve(body, output)
     if (!reservation) return new Response("Run request budget exhausted", { status: 402 })
     const encoded = JSON.stringify(body)
-    const record: BusinessProxyRecord = { runId, status: "transport-error", durationMs: 0, headroomMarkers: (encoded.match(/\[headroom node:[0-9a-f]{64}\]/g) ?? []).length,
+    const headroomNodeIds = [...encoded.matchAll(/\[headroom node:([0-9a-f]{64})\]/g)].map(match => match[1]!)
+    const record: BusinessProxyRecord = { runId, sequence: ++session.sequence, status: "transport-error", durationMs: 0,
+      headroomMarkers: headroomNodeIds.length, headroomNodeIds,
       estimatedInput, actualWindowExceeded: false,
       inputReservation: reservation.inputReservation, outputReservation: reservation.outputReservation,
       actualInput: null, actualOutput: null, cacheRead: null, cacheWrite: null, errorCode: null, usageSource: "provider-response" }
@@ -114,9 +137,12 @@ export function createBusinessProxy(options: { upstreamKey: string; upstreamFetc
     register(runId: string, model: string, expiresAt: number): string {
       if (!/^[a-zA-Z0-9-]+$/.test(runId) || sessions.has(runId) || expiresAt <= Date.now()) throw Error("Invalid or duplicate run")
       const token = randomBytes(32).toString("base64url")
-      sessions.set(runId, { token, model, expiresAt, budget: createLiveBudget({ maxRequests: 8, maxInputTokens: 8 * 160000, maxOutputTokens: 8 * 2048 }), active: new Set(), overWindow: false })
+      sessions.set(runId, { token, traceToken: randomBytes(32).toString("base64url"), trace: [], sequence: 0, model, expiresAt,
+        budget: createLiveBudget({ maxRequests: 8, maxInputTokens: 8 * 160000, maxOutputTokens: 8 * 2048 }), active: new Set(), overWindow: false })
       return token
     },
+    traceToken(runId: string) { const session = sessions.get(runId); if (!session) throw Error("Unknown trace run"); return session.traceToken },
+    trace(runId: string) { return sessions.get(runId)?.trace.map(event => ({ ...event })) ?? [] },
     revoke(runId: string) { const session = sessions.get(runId); for (const controller of session?.active ?? []) controller.abort(); sessions.delete(runId) },
     records(runId?: string) { return observations.filter(record => runId === undefined || record.runId === runId).map(record => ({ ...record })) },
     budget(runId: string) { return sessions.get(runId)?.budget.snapshot() ?? null },

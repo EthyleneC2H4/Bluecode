@@ -14,7 +14,24 @@ const deadlineMs = 600_000
 const json = (value: unknown) => JSON.stringify(value, null, 2) + "\n"
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex")
 const redact = (text: string, secrets: string[]) => secrets.reduce((value, secret) => secret ? value.replaceAll(secret, "[redacted]") : value, text).replace(/sk-[A-Za-z0-9_-]{16,}/g, "[redacted]")
-const safeRead = async (path: string) => readFile(path, "utf8").catch(() => "")
+
+export function consumedHeadroom(trace: any[], requests: Array<{ sequence: number; headroomNodeIds: string[] }>) {
+  return trace.some(applied => applied.type === "runtime" && applied.stage === "transform" && applied.reason === "view"
+    && applied.details?.status === "applied" && trace.some(view => view.type === "transform" && view.sequence > applied.sequence
+      && Array.isArray(view.nodeIds) && view.nodeIds.length > 0 && requests.some(request => request.sequence > view.sequence
+        && request.headroomNodeIds.some(id => view.nodeIds.includes(id)))))
+}
+
+export function classifyBusinessFailure(input: { timedOut: boolean; aborted: boolean; budgetExhausted: boolean;
+  modelStatuses: Array<number | "transport-error">; pluginLoaded: boolean; exitCode: number; outputTruncated: boolean;
+  serviceStarted: boolean; acceptancePassed: boolean }) {
+  if (input.timedOut) return "timeout"
+  if (input.aborted) return "canceled"
+  if (input.budgetExhausted) return "budget_exhausted"
+  if (input.modelStatuses.some(status => status === "transport-error" || status >= 400)) return "model_or_proxy_error"
+  if (!input.pluginLoaded || input.exitCode !== 0 || input.outputTruncated || input.modelStatuses.length === 0 || !input.serviceStarted) return "environment_error"
+  return input.acceptancePassed ? null : "business_error"
+}
 
 function offlineResponse(action: "history" | "test" | null = null) {
   const base = { id: "chatcmpl-business-offline", object: "chat.completion.chunk", created: 1, model: BUSINESS_UPSTREAM_MODEL }
@@ -97,7 +114,7 @@ async function runOne(run: PlannedBusinessRun, options: BusinessRunOptions, imag
   await writeFile(join(artifacts, "entrypoint.sh"), entrypoint())
   const token = proxy.register(run.id, BUSINESS_UPSTREAM_MODEL, Date.now() + deadlineMs)
   const tokenFile = join(root, ".run-token.env")
-  await writeFile(tokenFile, `BLUECODE_RUN_TOKEN=${token}\n`, { mode: 0o600 })
+  await writeFile(tokenFile, `BLUECODE_RUN_TOKEN=${token}\nBLUECODE_BUSINESS_TRACE_TOKEN=${proxy.traceToken(run.id)}\n`, { mode: 0o600 })
   const name = `bluecode-run-${randomUUID().replaceAll("-", "").slice(0, 20)}`
   const prompt = run.kind === "pressure"
     ? "请先运行 bun run inspect:history，阅读 TASK.md，严格保留累计退款、状态和幂等约束，完成 T3 后运行 bun test。"
@@ -107,7 +124,8 @@ async function runOne(run: PlannedBusinessRun, options: BusinessRunOptions, imag
     "OPENCODE_DISABLE_MODELS_FETCH=true", "OPENCODE_DISABLE_DEFAULT_PLUGINS=true", "OPENCODE_DISABLE_AUTOUPDATE=true",
     "OPENCODE_DISABLE_EXTERNAL_SKILLS=true", "OPENCODE_DISABLE_CLAUDE_CODE=true", "OPENCODE_DISABLE_LSP_DOWNLOAD=true",
     "DO_NOT_TRACK=1", "HOME=/artifacts/home", "XDG_CONFIG_HOME=/artifacts/config", "XDG_DATA_HOME=/artifacts/data",
-    "XDG_STATE_HOME=/artifacts/state", "XDG_CACHE_HOME=/artifacts/cache", "BLUECODE_BUSINESS_TRACE=/artifacts/trace.jsonl",
+    "XDG_STATE_HOME=/artifacts/state", "XDG_CACHE_HOME=/artifacts/cache",
+    `BLUECODE_BUSINESS_TRACE_URL=http://host.docker.internal:${proxy.port}/${run.id}/trace`,
     `BUSINESS_RUN_ID=${run.id}`, `BUSINESS_SESSION_ID=${sessionId}`, `BUSINESS_PROMPT=${prompt}`,
   ]
   const argv = ["docker", "run", "--rm", "--name", name, "--init", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
@@ -116,18 +134,20 @@ async function runOne(run: PlannedBusinessRun, options: BusinessRunOptions, imag
     ...env.flatMap(value => ["-e", value]), options.image, "sh", "/artifacts/entrypoint.sh"]
   let execution: Awaited<ReturnType<typeof command>> | null = null
   let budgetSnapshot: ReturnType<typeof proxy.budget> = null
+  let traceSnapshot: ReturnType<typeof proxy.trace> = []
   const start = performance.now()
   try { execution = await command(argv, repository, {}, deadlineMs) }
   finally {
     await command(["docker", "rm", "-f", name], repository, {}, 10000).catch(() => undefined)
     budgetSnapshot = proxy.budget(run.id)
+    traceSnapshot = proxy.trace(run.id)
     proxy.revoke(run.id)
     await rm(tokenFile, { force: true })
   }
   const durationMs = performance.now() - start
   const requests = proxy.records(run.id)
-  const traceText = await safeRead(join(artifacts, "trace.jsonl"))
-  const trace = traceText.split("\n").flatMap(line => { try { return [JSON.parse(line)] } catch { return [] } }) as any[]
+  const trace = traceSnapshot as any[]
+  await writeFile(join(root, "trace.jsonl"), trace.map(event => JSON.stringify(event)).join("\n") + (trace.length ? "\n" : ""))
   const patch = await command(["diff", "-ruN", "--exclude=data", source, work], repository, {}, 10000)
   await writeFile(join(root, "patch.diff"), redact(patch.stdout, [token, upstreamKey]))
   await writeFile(join(root, "events.jsonl"), redact(execution.stdout, [token, upstreamKey]))
@@ -144,16 +164,16 @@ async function runOne(run: PlannedBusinessRun, options: BusinessRunOptions, imag
   const securityWithheld = trace.filter(event => event.type === "tool" && event.securityWithheld === true)
   const headroomGenerated = trace.some(event => event.type === "runtime" && event.stage === "publish" && event.reason === "ready")
   const headroomApplied = trace.some(event => event.type === "runtime" && event.stage === "transform" && event.reason === "view" && event.details?.status === "applied")
-  const headroomConsumed = headroomApplied && requests.some(request => request.headroomMarkers > 0)
+  const headroomConsumed = consumedHeadroom(trace, requests)
   const compressionExercised = rtkCompressed.length > 0 || headroomConsumed
   const pluginLoaded = trace.some(event => event.type === "factory")
   const harnessPassed = execution.code === 0 && !execution.timedOut && !execution.outputTruncated && requests.length > 0 && pluginLoaded
-  const failureType = execution.timedOut ? "timeout" : execution.aborted ? "canceled"
-    : budgetSnapshot?.exhausted ? "budget_exhausted"
-    : requests.some(request => request.status === 502 || request.status === "transport-error") ? "model_or_proxy_error"
-    : !pluginLoaded || execution.code !== 0 || acceptance.checks.some(check => check.name === "service-start") ? "environment_error"
-    : acceptance.passed ? null : "business_error"
-  const record = { ...run, mode: options.mode, passed: acceptance.passed, failureType, durationMs, actualInput: sum("actualInput"), actualOutput: sum("actualOutput"),
+  const failureType = classifyBusinessFailure({ timedOut: execution.timedOut, aborted: execution.aborted,
+    budgetExhausted: budgetSnapshot?.exhausted === true, modelStatuses: requests.map(request => request.status), pluginLoaded,
+    exitCode: execution.code, outputTruncated: execution.outputTruncated,
+    serviceStarted: !acceptance.checks.some(check => check.name === "service-start"), acceptancePassed: acceptance.passed })
+  const record = { ...run, mode: options.mode, passed: harnessPassed && failureType === null, failureType, durationMs,
+    actualInput: sum("actualInput"), actualOutput: sum("actualOutput"),
     cacheRead: sum("cacheRead"), cacheWrite: sum("cacheWrite"), compressionExercised,
     flags: run.arm === "combo" && !compressionExercised ? ["compression_not_exercised"] : [],
     exitCode: execution.code, timedOut: execution.timedOut, outputTruncated: execution.outputTruncated, harnessPassed, pluginLoaded,
@@ -173,7 +193,10 @@ export async function runBusinessEvaluation(options: BusinessRunOptions) {
   if (options.mode === "online" && !/^\d{4}-\d{2}-\d{2}$/.test(options.freeModelCheckedAt ?? "")) throw Error("Online runs require a fresh official free-model pricing check date")
   const runs = options.runs ?? (options.mode === "offline" ? plannedBusinessRuns().slice(0, 2) : plannedBusinessRuns())
   if (runs.some(run => !plannedBusinessRuns().some(frozen => JSON.stringify(frozen) === JSON.stringify(run)))) throw Error("Run outside frozen matrix")
-  await mkdir(join(resolve(options.outputDir), "runs"), { recursive: true })
+  await mkdir(resolve(options.outputDir), { recursive: true })
+  try { await mkdir(join(resolve(options.outputDir), "runs")) }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "EEXIST") throw Error("Business output already contains runs; choose a new output directory")
+    throw error }
   const image = await imageMetadata(options.image)
   let activeRun: PlannedBusinessRun | null = null, offlineCalls = 0
   const proxy = createBusinessProxy({ upstreamKey: key, ...(options.mode === "offline" ? { upstreamFetch: async () => {

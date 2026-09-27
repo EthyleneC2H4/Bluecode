@@ -67,3 +67,36 @@ test("Expired tokens and observed provider window overflow stop forwarding", asy
     expect(forwarded).toBe(1)
   } finally { proxy.stop() }
 })
+
+test("Alternate completion limits cannot exceed the per-request output budget", async () => {
+  let forwarded: any
+  const proxy = createBusinessProxy({ upstreamKey: "fixture", upstreamFetch: async (_url, init) => {
+    forwarded = JSON.parse(String(init?.body))
+    return Response.json({ choices: [] })
+  } })
+  const token = proxy.register("limits", "mimo-v2.5-free", Date.now() + 60000)
+  try {
+    const result = await fetch(`${proxy.url}/limits/main/chat/completions`, { method: "POST", headers: { authorization: `Bearer ${token}` },
+      body: JSON.stringify({ model: "mimo-v2.5-free", messages: [], max_tokens: 1024, max_completion_tokens: 9000, n: 4 }) })
+    expect(result.status).toBe(200)
+    expect(forwarded.max_tokens).toBeLessThanOrEqual(2048)
+    expect(forwarded.max_completion_tokens ?? 0).toBeLessThanOrEqual(2048)
+    expect(forwarded.n ?? 1).toBe(1)
+    expect(proxy.records()[0]?.outputReservation).toBeGreaterThanOrEqual(1024)
+  } finally { proxy.stop() }
+})
+
+test("Plugin trace uses a separate secret and stays on the host", async () => {
+  const proxy = createBusinessProxy({ upstreamKey: "fixture", upstreamFetch: async () => Response.json({ choices: [] }) })
+  const modelToken = proxy.register("trace", "mimo-v2.5-free", Date.now() + 60000)
+  const traceToken = proxy.traceToken("trace")
+  const send = (token: string) => fetch(`${proxy.url}/trace/trace`, { method: "POST", headers: { authorization: `Bearer ${token}` },
+    body: JSON.stringify({ type: "factory", securityMode: "enforce" }) })
+  try {
+    expect((await send(modelToken)).status).toBe(401)
+    expect((await send(traceToken)).status).toBe(204)
+    expect(proxy.trace("trace")).toMatchObject([{ type: "factory", securityMode: "enforce", sequence: 1 }])
+    proxy.revoke("trace")
+    expect((await send(traceToken)).status).toBe(401)
+  } finally { proxy.stop() }
+})

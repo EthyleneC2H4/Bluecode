@@ -62,12 +62,13 @@ export async function checkBusinessTask(task: BusinessTaskId, workdir: string, s
         const retry = await request(base, "/orders", { sku: "SKU-1", quantity: 1 }, "same")
         const conflict = await request(base, "/orders", { sku: "SKU-1", quantity: 2 }, "same")
         const state = (await request(base, "/state")).body
-        insist(first.status === 201 && retry.status === 201 && first.body.id === retry.body.id && conflict.status === 409, "Retry or conflict semantics failed")
+        insist(first.status === 201 && retry.status === 201 && JSON.stringify(first.body) === JSON.stringify(retry.body) && conflict.status === 409, "Retry or conflict semantics failed")
         insist(state.stock["SKU-1"] === 1 && Object.keys(state.orders).length === 1, "Retry changed business state")
       })
       await scenario("invalid-and-insufficient", async () => {
         const cases = [[{ sku: "SKU-1", quantity: 0 }, 400], [{ sku: "MISSING", quantity: 1 }, 404], [{ sku: "SKU-1", quantity: 3 }, 409]] as const
         for (const [body, status] of cases) insist((await request(base, "/orders", body, crypto.randomUUID())).status === status, `Expected ${status} for invalid purchase`)
+        insist((await request(base, "/orders", { sku: "SKU-1", quantity: 1 })).status === 400, "Missing order idempotency key was accepted")
         insist((await request(base, "/state")).body.stock["SKU-1"] === 2, "Failure changed stock")
       })
       await scenario("concurrent-stock", async () => {
@@ -105,17 +106,20 @@ export async function checkBusinessTask(task: BusinessTaskId, workdir: string, s
         const retry = await request(base, "/orders/o-paid/refunds", { quantity: 1, amountCents: 1250 }, "same")
         const conflict = await request(base, "/orders/o-paid/refunds", { quantity: 2, amountCents: 2500 }, "same")
         const state = (await request(base, "/state")).body
-        insist(first.status === 201 && retry.status === 201 && first.body.id === retry.body.id && conflict.status === 409, "Refund retry or conflict failed")
+        insist(first.status === 201 && retry.status === 201 && JSON.stringify(first.body) === JSON.stringify(retry.body) && conflict.status === 409, "Refund retry or conflict failed")
         insist(state.orders["o-paid"].refundedQuantity === 1 && Object.keys(state.refunds).length === 1, "Refund retry changed state")
       })
       await scenario("amount-and-input-boundaries", async () => {
         for (const body of [{ quantity: 1, amountCents: 1249 }, { quantity: 1, amountCents: 0 }, { quantity: 0, amountCents: 0 }, { quantity: 1.5, amountCents: 1875 }]) insist((await request(base, "/orders/o-paid/refunds", body, crypto.randomUUID())).status === 400, "Invalid amount or quantity accepted")
+        insist((await request(base, "/orders/o-paid/refunds", { quantity: 1, amountCents: 1250 })).status === 400, "Missing refund idempotency key was accepted")
         const state = (await request(base, "/state")).body
         insist(state.orders["o-paid"].refundedCents === 0 && Object.keys(state.refunds).length === 0, "Invalid refund changed state")
       })
       await scenario("illegal-status-and-unknown", async () => {
-        for (const id of ["o-pending", "o-shipped"]) insist((await request(base, `/orders/${id}/refunds`, { quantity: 1, amountCents: 1250 }, id)).status === 409, `${id} was refunded`)
+        for (const id of ["o-pending", "o-canceled", "o-shipped"]) insist((await request(base, `/orders/${id}/refunds`, { quantity: 1, amountCents: 1250 }, id)).status === 409, `${id} was refunded`)
         insist((await request(base, "/orders/missing/refunds", { quantity: 1, amountCents: 1250 }, "missing")).status === 404, "Missing order was refunded")
+        const state = (await request(base, "/state")).body
+        insist(state.orders["o-canceled"].status === "CANCELED" && Object.keys(state.refunds).length === 0, "Rejected refund changed state")
       })
     }
   } finally { await service.close() }
@@ -126,6 +130,8 @@ const mutants: Record<BusinessTaskId, Array<{ name: string; from: string; to: st
   T1: [
     { name: "client-price", from: "totalCents: price * data.quantity", to: "totalCents: Number(data.clientTotalCents ?? price * data.quantity)" },
     { name: "duplicate-retry", from: "if (previous) return previous.fingerprint === fingerprint ? { status: 201, body: previous.result } : { status: 409, body: { error: \"Idempotency key conflict\" } }", to: "void previous" },
+    { name: "missing-order-key", from: "typeof data.sku !== \"string\" || !positiveInteger(data.quantity) || !idempotencyKey", to: "typeof data.sku !== \"string\" || !positiveInteger(data.quantity)" },
+    { name: "order-retry-response-drift", from: "const previous = state.orderKeys[idempotencyKey]\n  if (previous) return previous.fingerprint === fingerprint ? { status: 201, body: previous.result }", to: "const previous = state.orderKeys[idempotencyKey]\n  if (previous) return previous.fingerprint === fingerprint ? { status: 201, body: { ...previous.result, totalCents: 1 } }" },
     { name: "oversell", from: "(state.stock[data.sku] ?? 0) < data.quantity", to: "(state.stock[data.sku] ?? 0) < 0" },
   ],
   T2: [
@@ -134,9 +140,12 @@ const mutants: Record<BusinessTaskId, Array<{ name: string; from: string; to: st
   ],
   T3: [
     { name: "refund-retry", from: "const previous = state.refundKeys[key]\n  if (previous) return previous.fingerprint === fingerprint ? { status: 201, body: previous.result } : { status: 409, body: { error: \"Idempotency key conflict\" } }", to: "const previous = state.refundKeys[key]\n  void previous" },
+    { name: "missing-refund-key", from: "!positiveInteger(data.quantity) || !positiveInteger(data.amountCents) || !idempotencyKey", to: "!positiveInteger(data.quantity) || !positiveInteger(data.amountCents)" },
+    { name: "refund-retry-response-drift", from: "const previous = state.refundKeys[key]\n  if (previous) return previous.fingerprint === fingerprint ? { status: 201, body: previous.result }", to: "const previous = state.refundKeys[key]\n  if (previous) return previous.fingerprint === fingerprint ? { status: 201, body: { ...previous.result, amountCents: 1 } }" },
     { name: "single-refund-only", from: "order.refundedQuantity + data.quantity > order.quantity || order.refundedCents + data.amountCents > order.totalCents", to: "data.quantity > order.quantity || data.amountCents > order.totalCents" },
     { name: "amount-mismatch", from: "data.amountCents !== order.unitPriceCents * data.quantity", to: "false" },
     { name: "pending-refund", from: "order.status !== \"PAID\"", to: "order.status === \"SHIPPED\"" },
+    { name: "canceled-refund", from: "order.status !== \"PAID\"", to: "order.status === \"PENDING\" || order.status === \"SHIPPED\"" },
   ],
 }
 

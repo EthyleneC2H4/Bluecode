@@ -46,5 +46,5 @@ else if (action === "pending") {
   console.log(JSON.stringify(summarizeBusinessRuns(ledger.records), null, 2))
 } else if (action === "cleanup") {
   await cleanupBusinessRun(required("--output"), required("--single"))
-  console.log(JSON.stringify({ cleaned: required("--single"), retained: ["manifest.json", "result.json", "acceptance.json", "request-usage.json", "patch.diff", "events.jsonl"] }))
+  console.log(JSON.stringify({ cleaned: required("--single"), retained: ["manifest.json", "result.json", "acceptance.json", "request-usage.json", "patch.diff", "events.jsonl", "trace.jsonl"] }))
 } else throw Error(`Unknown business command: ${action}`)
