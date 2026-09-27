@@ -26,6 +26,8 @@
     "eval:headroom": "bun packages/eval/src/headroom-cli.ts",
     "eval:retention": "bun scripts/eval-headroom-retention.ts",
     "eval:live": "bun packages/eval/src/live-cli.ts",
+    "eval:business": "bun packages/eval/src/business-cli.ts",
+    "eval:business:build": "docker build -f packages/eval/docker/order-after-sales.Dockerfile -t bluecode-business:offline .",
     "eval:security": "bun packages/eval/src/security-cli.ts",
     "eval:security:host": "bun packages/eval/src/security-host.ts",
     "check:security": "bun scripts/check-security.ts"

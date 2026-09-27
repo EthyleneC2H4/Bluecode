@@ -1,0 +1,345 @@
+{
+  "schema": 1,
+  "checker": "external-http",
+  "result": [
+    {
+      "task": "T1",
+      "reference": {
+        "task": "T1",
+        "passed": true,
+        "checks": [
+          {
+            "name": "server-price",
+            "passed": true,
+            "reason": null
+          },
+          {
+            "name": "idempotency-and-conflict",
+            "passed": true,
+            "reason": null
+          },
+          {
+            "name": "invalid-and-insufficient",
+            "passed": true,
+            "reason": null
+          },
+          {
+            "name": "concurrent-stock",
+            "passed": true,
+            "reason": null
+          }
+        ]
+      },
+      "mutants": [
+        {
+          "name": "client-price",
+          "result": {
+            "task": "T1",
+            "passed": false,
+            "checks": [
+              {
+                "name": "server-price",
+                "passed": false,
+                "reason": "Server price was not used"
+              },
+              {
+                "name": "idempotency-and-conflict",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "invalid-and-insufficient",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "concurrent-stock",
+                "passed": true,
+                "reason": null
+              }
+            ]
+          }
+        },
+        {
+          "name": "duplicate-retry",
+          "result": {
+            "task": "T1",
+            "passed": false,
+            "checks": [
+              {
+                "name": "server-price",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "idempotency-and-conflict",
+                "passed": false,
+                "reason": "Retry or conflict semantics failed"
+              },
+              {
+                "name": "invalid-and-insufficient",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "concurrent-stock",
+                "passed": true,
+                "reason": null
+              }
+            ]
+          }
+        },
+        {
+          "name": "oversell",
+          "result": {
+            "task": "T1",
+            "passed": false,
+            "checks": [
+              {
+                "name": "server-price",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "idempotency-and-conflict",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "invalid-and-insufficient",
+                "passed": false,
+                "reason": "Expected 409 for invalid purchase"
+              },
+              {
+                "name": "concurrent-stock",
+                "passed": false,
+                "reason": "Concurrent orders oversold or rejected valid stock"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "task": "T2",
+      "reference": {
+        "task": "T2",
+        "passed": true,
+        "checks": [
+          {
+            "name": "cancel-once",
+            "passed": true,
+            "reason": null
+          },
+          {
+            "name": "paid-and-shipped-unchanged",
+            "passed": true,
+            "reason": null
+          },
+          {
+            "name": "unknown-order",
+            "passed": true,
+            "reason": null
+          }
+        ]
+      },
+      "mutants": [
+        {
+          "name": "paid-cancel",
+          "result": {
+            "task": "T2",
+            "passed": false,
+            "checks": [
+              {
+                "name": "cancel-once",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "paid-and-shipped-unchanged",
+                "passed": false,
+                "reason": "o-paid was cancellable"
+              },
+              {
+                "name": "unknown-order",
+                "passed": true,
+                "reason": null
+              }
+            ]
+          }
+        },
+        {
+          "name": "duplicate-release",
+          "result": {
+            "task": "T2",
+            "passed": false,
+            "checks": [
+              {
+                "name": "cancel-once",
+                "passed": false,
+                "reason": "Stock release or order state is wrong"
+              },
+              {
+                "name": "paid-and-shipped-unchanged",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "unknown-order",
+                "passed": true,
+                "reason": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "task": "T3",
+      "reference": {
+        "task": "T3",
+        "passed": true,
+        "checks": [
+          {
+            "name": "partial-and-cumulative",
+            "passed": true,
+            "reason": null
+          },
+          {
+            "name": "refund-idempotency",
+            "passed": true,
+            "reason": null
+          },
+          {
+            "name": "amount-and-input-boundaries",
+            "passed": true,
+            "reason": null
+          },
+          {
+            "name": "illegal-status-and-unknown",
+            "passed": true,
+            "reason": null
+          }
+        ]
+      },
+      "mutants": [
+        {
+          "name": "refund-retry",
+          "result": {
+            "task": "T3",
+            "passed": false,
+            "checks": [
+              {
+                "name": "partial-and-cumulative",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "refund-idempotency",
+                "passed": false,
+                "reason": "Refund retry or conflict failed"
+              },
+              {
+                "name": "amount-and-input-boundaries",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "illegal-status-and-unknown",
+                "passed": true,
+                "reason": null
+              }
+            ]
+          }
+        },
+        {
+          "name": "single-refund-only",
+          "result": {
+            "task": "T3",
+            "passed": false,
+            "checks": [
+              {
+                "name": "partial-and-cumulative",
+                "passed": false,
+                "reason": "Cumulative quantity or amount exceeded paid order"
+              },
+              {
+                "name": "refund-idempotency",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "amount-and-input-boundaries",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "illegal-status-and-unknown",
+                "passed": true,
+                "reason": null
+              }
+            ]
+          }
+        },
+        {
+          "name": "amount-mismatch",
+          "result": {
+            "task": "T3",
+            "passed": false,
+            "checks": [
+              {
+                "name": "partial-and-cumulative",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "refund-idempotency",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "amount-and-input-boundaries",
+                "passed": false,
+                "reason": "Invalid amount or quantity accepted"
+              },
+              {
+                "name": "illegal-status-and-unknown",
+                "passed": true,
+                "reason": null
+              }
+            ]
+          }
+        },
+        {
+          "name": "pending-refund",
+          "result": {
+            "task": "T3",
+            "passed": false,
+            "checks": [
+              {
+                "name": "partial-and-cumulative",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "refund-idempotency",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "amount-and-input-boundaries",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "illegal-status-and-unknown",
+                "passed": false,
+                "reason": "o-pending was refunded"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

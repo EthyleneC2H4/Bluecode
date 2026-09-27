@@ -1,0 +1,64 @@
+{
+  "id": "T3-pressure-combo-0",
+  "task": "T3",
+  "kind": "pressure",
+  "arm": "combo",
+  "repeat": 0,
+  "order": 8,
+  "mode": "offline",
+  "passed": false,
+  "failureType": "business_error",
+  "durationMs": 94997.70150000001,
+  "actualInput": null,
+  "actualOutput": null,
+  "cacheRead": null,
+  "cacheWrite": null,
+  "compressionExercised": true,
+  "flags": [],
+  "exitCode": 0,
+  "timedOut": false,
+  "outputTruncated": false,
+  "harnessPassed": true,
+  "pluginLoaded": true,
+  "modelRequests": 3,
+  "modelRetries": null,
+  "toolCounts": {
+    "bash": 2
+  },
+  "budget": {
+    "maxRequests": 8,
+    "maxInputTokens": 1280000,
+    "maxOutputTokens": 16384,
+    "reservedInput": 343645,
+    "reservedOutput": 6144,
+    "debitedInput": 343645,
+    "debitedOutput": 6144,
+    "actualInput": null,
+    "actualOutput": null,
+    "usageComplete": false,
+    "exhausted": false,
+    "violation": false,
+    "inputReservationMode": "UTF8 serialized request bytes + 4096 framing tokens + 64/message + 256/tool; assumes byte-level tokenizer and framing within this allowance; actual usage checked separately"
+  },
+  "rtk": {
+    "compressedOutputs": 1,
+    "beforeChars": 18274,
+    "afterChars": 280
+  },
+  "security": {
+    "withheldOutputs": 0,
+    "withheldChars": 0
+  },
+  "headroom": {
+    "generated": true,
+    "applied": true,
+    "consumed": true
+  },
+  "acceptance": {
+    "partial-and-cumulative": false,
+    "refund-idempotency": false,
+    "amount-and-input-boundaries": false,
+    "illegal-status-and-unknown": false
+  },
+  "finishedAt": "2026-09-27T08:32:13.909Z"
+}

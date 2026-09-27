@@ -1,0 +1,153 @@
+{
+  "schema": 1,
+  "experiment": "order-after-sales",
+  "model": "opencode/mimo-v2.5-free",
+  "reason": "missing_zen_free_model_credential",
+  "createdAt": "2026-09-27T08:42:05.971Z",
+  "planned": [
+    {
+      "id": "T1-natural-baseline-0",
+      "task": "T1",
+      "kind": "natural",
+      "arm": "baseline",
+      "repeat": 0,
+      "order": 1,
+      "status": "not_run"
+    },
+    {
+      "id": "T1-natural-combo-0",
+      "task": "T1",
+      "kind": "natural",
+      "arm": "combo",
+      "repeat": 0,
+      "order": 2,
+      "status": "not_run"
+    },
+    {
+      "id": "T2-natural-baseline-0",
+      "task": "T2",
+      "kind": "natural",
+      "arm": "baseline",
+      "repeat": 0,
+      "order": 3,
+      "status": "not_run"
+    },
+    {
+      "id": "T2-natural-combo-0",
+      "task": "T2",
+      "kind": "natural",
+      "arm": "combo",
+      "repeat": 0,
+      "order": 4,
+      "status": "not_run"
+    },
+    {
+      "id": "T3-natural-baseline-0",
+      "task": "T3",
+      "kind": "natural",
+      "arm": "baseline",
+      "repeat": 0,
+      "order": 5,
+      "status": "not_run"
+    },
+    {
+      "id": "T3-natural-combo-0",
+      "task": "T3",
+      "kind": "natural",
+      "arm": "combo",
+      "repeat": 0,
+      "order": 6,
+      "status": "not_run"
+    },
+    {
+      "id": "T3-pressure-baseline-0",
+      "task": "T3",
+      "kind": "pressure",
+      "arm": "baseline",
+      "repeat": 0,
+      "order": 7,
+      "status": "not_run"
+    },
+    {
+      "id": "T3-pressure-combo-0",
+      "task": "T3",
+      "kind": "pressure",
+      "arm": "combo",
+      "repeat": 0,
+      "order": 8,
+      "status": "not_run"
+    },
+    {
+      "id": "T1-natural-combo-1",
+      "task": "T1",
+      "kind": "natural",
+      "arm": "combo",
+      "repeat": 1,
+      "order": 9,
+      "status": "not_run"
+    },
+    {
+      "id": "T1-natural-baseline-1",
+      "task": "T1",
+      "kind": "natural",
+      "arm": "baseline",
+      "repeat": 1,
+      "order": 10,
+      "status": "not_run"
+    },
+    {
+      "id": "T2-natural-combo-1",
+      "task": "T2",
+      "kind": "natural",
+      "arm": "combo",
+      "repeat": 1,
+      "order": 11,
+      "status": "not_run"
+    },
+    {
+      "id": "T2-natural-baseline-1",
+      "task": "T2",
+      "kind": "natural",
+      "arm": "baseline",
+      "repeat": 1,
+      "order": 12,
+      "status": "not_run"
+    },
+    {
+      "id": "T3-natural-combo-1",
+      "task": "T3",
+      "kind": "natural",
+      "arm": "combo",
+      "repeat": 1,
+      "order": 13,
+      "status": "not_run"
+    },
+    {
+      "id": "T3-natural-baseline-1",
+      "task": "T3",
+      "kind": "natural",
+      "arm": "baseline",
+      "repeat": 1,
+      "order": 14,
+      "status": "not_run"
+    },
+    {
+      "id": "T3-pressure-combo-1",
+      "task": "T3",
+      "kind": "pressure",
+      "arm": "combo",
+      "repeat": 1,
+      "order": 15,
+      "status": "not_run"
+    },
+    {
+      "id": "T3-pressure-baseline-1",
+      "task": "T3",
+      "kind": "pressure",
+      "arm": "baseline",
+      "repeat": 1,
+      "order": 16,
+      "status": "not_run"
+    }
+  ]
+}

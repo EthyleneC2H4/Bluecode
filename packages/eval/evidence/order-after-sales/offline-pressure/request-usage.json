@@ -1,0 +1,67 @@
+{
+  "requests": [
+    {
+      "runId": "T3-pressure-combo-0",
+      "status": 200,
+      "durationMs": 0.9373329999943962,
+      "headroomMarkers": 0,
+      "estimatedInput": 37414,
+      "actualWindowExceeded": false,
+      "inputReservation": 142741,
+      "outputReservation": 2048,
+      "actualInput": null,
+      "actualOutput": null,
+      "cacheRead": null,
+      "cacheWrite": null,
+      "errorCode": null,
+      "usageSource": "provider-response"
+    },
+    {
+      "runId": "T3-pressure-combo-0",
+      "status": 200,
+      "durationMs": 703.1661250000034,
+      "headroomMarkers": 0,
+      "estimatedInput": 37560,
+      "actualWindowExceeded": false,
+      "inputReservation": 143455,
+      "outputReservation": 2048,
+      "actualInput": null,
+      "actualOutput": null,
+      "cacheRead": null,
+      "cacheWrite": null,
+      "errorCode": null,
+      "usageSource": "provider-response"
+    },
+    {
+      "runId": "T3-pressure-combo-0",
+      "status": 200,
+      "durationMs": 0.2886670000007143,
+      "headroomMarkers": 13,
+      "estimatedInput": 16026,
+      "actualWindowExceeded": false,
+      "inputReservation": 57449,
+      "outputReservation": 2048,
+      "actualInput": null,
+      "actualOutput": null,
+      "cacheRead": null,
+      "cacheWrite": null,
+      "errorCode": null,
+      "usageSource": "provider-response"
+    }
+  ],
+  "budget": {
+    "maxRequests": 8,
+    "maxInputTokens": 1280000,
+    "maxOutputTokens": 16384,
+    "reservedInput": 343645,
+    "reservedOutput": 6144,
+    "debitedInput": 343645,
+    "debitedOutput": 6144,
+    "actualInput": null,
+    "actualOutput": null,
+    "usageComplete": false,
+    "exhausted": false,
+    "violation": false,
+    "inputReservationMode": "UTF8 serialized request bytes + 4096 framing tokens + 64/message + 256/tool; assumes byte-level tokenizer and framing within this allowance; actual usage checked separately"
+  }
+}

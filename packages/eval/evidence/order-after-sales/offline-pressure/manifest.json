@@ -1,0 +1,158 @@
+{
+  "schema": 1,
+  "mode": "offline",
+  "run": {
+    "id": "T3-pressure-combo-0",
+    "task": "T3",
+    "kind": "pressure",
+    "arm": "combo",
+    "repeat": 0,
+    "order": 8
+  },
+  "startedAt": "2026-09-27T08:30:38.120Z",
+  "gitHead": "1901b2cb184f730207127569be4a6174d737a1e9",
+  "image": {
+    "name": "bluecode-business:offline",
+    "digest": "sha256:cd6f506939b78ef3c6773afe03488cea73344873130414d267d4a18fd86384c5",
+    "hostVersion": "1.18.23",
+    "bunVersion": "1.4.0"
+  },
+  "taskDigest": "57c0a4292f5bff8fa285a100c47ae43529983521d0838cb36fb8fe1f4fae2d4c",
+  "evaluatorDigest": "5cc3c9969f2f88973f999356699ad340cccdd9385688534010ef93bb07fb9723",
+  "model": {
+    "host": "bluecode-free/mimo-v2.5-free",
+    "upstream": "mimo-v2.5-free",
+    "pricingCheckedOn": null,
+    "pricingSource": "https://opencode.ai/docs/zen/#pricing"
+  },
+  "budgets": {
+    "maxRequests": 8,
+    "maxDurationMs": 600000,
+    "maxInputPerRequest": 40000,
+    "maxOutputPerRequest": 2048
+  },
+  "pluginEffective": {
+    "enabled": true,
+    "mode": "on",
+    "security": {
+      "mode": "enforce",
+      "timeoutMs": 1000,
+      "policy": {
+        "version": "vsec-1",
+        "exceptions": [],
+        "deniedPaths": [],
+        "mcpTools": {}
+      }
+    },
+    "maxStorageBytes": 1073741824,
+    "dataDir": "/artifacts/bluecode",
+    "rtk": {
+      "mode": "on",
+      "budgetTokens": 512,
+      "timeoutMs": 40,
+      "minBytes": 512
+    },
+    "headroom": {
+      "mode": "on",
+      "strategy": "layered",
+      "memoryMaxTokens": 4096,
+      "memoryRatio": 0.15,
+      "summarizer": {
+        "enabled": false,
+        "timeoutMs": 10000,
+        "maxInputTokens": 8192,
+        "maxOutputTokens": 1024,
+        "sessionInputTokens": 32768,
+        "sessionOutputTokens": 4096
+      },
+      "targetRatio": 0.55,
+      "triggerRatio": 0.7,
+      "retainRecentTurns": 1,
+      "fallback": "passthrough"
+    }
+  },
+  "hostConfig": {
+    "model": "bluecode-free/mimo-v2.5-free",
+    "small_model": "bluecode-free/mimo-v2.5-free",
+    "autoupdate": false,
+    "share": "disabled",
+    "enabled_providers": [
+      "bluecode-free"
+    ],
+    "compaction": {
+      "auto": false,
+      "prune": false
+    },
+    "lsp": false,
+    "formatter": false,
+    "provider": {
+      "bluecode-free": {
+        "npm": "@ai-sdk/openai-compatible",
+        "name": "BlueCode frozen free model",
+        "options": {
+          "baseURL": "http://host.docker.internal:55454/T3-pressure-combo-0/main",
+          "apiKey": "{env:BLUECODE_RUN_TOKEN}"
+        },
+        "models": {
+          "mimo-v2.5-free": {
+            "name": "MiMo-V2.5 Free",
+            "tool_call": true,
+            "limit": {
+              "context": 40000,
+              "input": 40000,
+              "output": 2048
+            }
+          }
+        }
+      }
+    },
+    "agent": {
+      "build": {
+        "steps": 8,
+        "model": "bluecode-free/mimo-v2.5-free"
+      }
+    },
+    "permission": {
+      "*": "deny",
+      "read": "allow",
+      "edit": "allow",
+      "write": "allow",
+      "glob": "allow",
+      "grep": "allow",
+      "list": "allow",
+      "bash": "allow",
+      "headroom_retrieve": "allow"
+    },
+    "plugin": [
+      [
+        "file:///opt/bluecode/packages/plugin/src/business-observer.ts",
+        {
+          "mode": "on",
+          "dataDir": "/artifacts/bluecode",
+          "security": {
+            "mode": "enforce"
+          },
+          "rtk": {
+            "mode": "on",
+            "minBytes": 512,
+            "budgetTokens": 512
+          },
+          "headroom": {
+            "mode": "on",
+            "strategy": "layered",
+            "triggerRatio": 0.7,
+            "targetRatio": 0.55,
+            "retainRecentTurns": 1,
+            "memoryMaxTokens": 4096,
+            "fallback": "passthrough",
+            "summarizer": {
+              "enabled": false
+            }
+          }
+        }
+      ]
+    ]
+  },
+  "taskContract": "work/TASK.md",
+  "usagePolicy": "Provider response tokens only; missing usage remains null. Reservations and imported seed tokens are separate."
+}

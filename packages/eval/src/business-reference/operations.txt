@@ -1,0 +1,48 @@
+const object = (value: unknown): Record<string, unknown> | null => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null
+const positiveInteger = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0
+
+export function createOrder(state: State, input: unknown, idempotencyKey: string | null): Result {
+  const data = object(input)
+  if (!data || typeof data.sku !== "string" || !positiveInteger(data.quantity) || !idempotencyKey) return { status: 400, body: { error: "Invalid order request" } }
+  const fingerprint = JSON.stringify([data.sku, data.quantity])
+  const previous = state.orderKeys[idempotencyKey]
+  if (previous) return previous.fingerprint === fingerprint ? { status: 201, body: previous.result } : { status: 409, body: { error: "Idempotency key conflict" } }
+  const price = state.prices[data.sku]
+  if (price === undefined) return { status: 404, body: { error: "Unknown product" } }
+  if ((state.stock[data.sku] ?? 0) < data.quantity) return { status: 409, body: { error: "Insufficient stock" } }
+  const order: Order = { id: `o-${state.nextOrder++}`, sku: data.sku, quantity: data.quantity, unitPriceCents: price, totalCents: price * data.quantity, status: "PENDING", refundedQuantity: 0, refundedCents: 0 }
+  state.stock[data.sku]! -= data.quantity
+  state.orders[order.id] = order
+  state.orderKeys[idempotencyKey] = { fingerprint, result: order }
+  return { status: 201, body: order }
+}
+
+export function cancelOrder(state: State, orderId: string): Result {
+  const order = state.orders[orderId]
+  if (!order) return { status: 404, body: { error: "Unknown order" } }
+  if (order.status === "CANCELED") return { status: 200, body: order }
+  if (order.status !== "PENDING") return { status: 409, body: { error: "Order cannot be canceled" } }
+  state.stock[order.sku] = (state.stock[order.sku] ?? 0) + order.quantity
+  order.status = "CANCELED"
+  return { status: 200, body: order }
+}
+
+export function refundOrder(state: State, orderId: string, input: unknown, idempotencyKey: string | null): Result {
+  const order = state.orders[orderId]
+  if (!order) return { status: 404, body: { error: "Unknown order" } }
+  const data = object(input)
+  if (!data || !positiveInteger(data.quantity) || !positiveInteger(data.amountCents) || !idempotencyKey) return { status: 400, body: { error: "Invalid refund request" } }
+  const key = `${orderId}:${idempotencyKey}`
+  const fingerprint = JSON.stringify([data.quantity, data.amountCents])
+  const previous = state.refundKeys[key]
+  if (previous) return previous.fingerprint === fingerprint ? { status: 201, body: previous.result } : { status: 409, body: { error: "Idempotency key conflict" } }
+  if (order.status !== "PAID") return { status: 409, body: { error: "Order cannot be refunded" } }
+  if (data.amountCents !== order.unitPriceCents * data.quantity) return { status: 400, body: { error: "Refund amount mismatch" } }
+  if (order.refundedQuantity + data.quantity > order.quantity || order.refundedCents + data.amountCents > order.totalCents) return { status: 409, body: { error: "Refund limit exceeded" } }
+  const refund: Refund = { id: `r-${state.nextRefund++}`, orderId, quantity: data.quantity, amountCents: data.amountCents }
+  state.refunds[refund.id] = refund
+  state.refundKeys[key] = { fingerprint, result: refund }
+  order.refundedQuantity += data.quantity
+  order.refundedCents += data.amountCents
+  return { status: 201, body: refund }
+}

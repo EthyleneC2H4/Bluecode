@@ -1,0 +1,6 @@
+{
+  "name": "bluecode-business-runtime",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*"]
+}

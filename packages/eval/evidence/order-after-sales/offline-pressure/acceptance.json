@@ -1,0 +1,26 @@
+{
+  "task": "T3",
+  "passed": false,
+  "checks": [
+    {
+      "name": "partial-and-cumulative",
+      "passed": false,
+      "reason": "First partial refund failed"
+    },
+    {
+      "name": "refund-idempotency",
+      "passed": false,
+      "reason": "Refund retry or conflict failed"
+    },
+    {
+      "name": "amount-and-input-boundaries",
+      "passed": false,
+      "reason": "Invalid amount or quantity accepted"
+    },
+    {
+      "name": "illegal-status-and-unknown",
+      "passed": false,
+      "reason": "o-pending was refunded"
+    }
+  ]
+}

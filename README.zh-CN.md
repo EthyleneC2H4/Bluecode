@@ -6,6 +6,10 @@
 
 本仓库是独立学习实现，不是 vivo 的 BlueCode 私有源码。评测包括确定性合成历史回放，以及通过真实 OpenCode 调用 LLM 完成的小型编码任务，两者分别报告。
 
+## 订单与售后业务评测
+
+新增[业务评测说明](docs/order-after-sales-evaluation.md)：三份固定的创建订单、取消订单、部分退款任务，容器隔离执行、外部 HTTP 验收，以及自然任务 12 次＋历史压力任务 4 次的关闭压缩／RTK＋Headroom 对照。从仓库根目录运行 `bun run eval:business plan`、`bun run eval:business validate --output /tmp/business-acceptance.json`、`bun run eval:business:build`，再按说明执行离线机制检查。[面试演示路线](docs/order-after-sales-interview.md)和[阶段进度](docs/order-after-sales-progress.md)区分离线机制证据与在线结果。目前 16 次免费模型运行均因缺 Zen 凭据待执行，不报告业务正确率或实际 token 收益。
+
 ## 工作方式
 
 | 组件 | 职责 |

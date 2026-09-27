@@ -2,6 +2,8 @@
 
 本包提供四个入口，下面的命令均从仓库根目录运行。离线输入计数、真实 provider usage 和任务通过率采用不同口径，不合并为同一个收益数字。
 
+新增订单与售后业务入口 `bun run eval:business plan|validate|offline|run|summary|cleanup`。三份业务任务、独立黑盒验收、容器执行与当前待运行清单见[业务评测说明](../../docs/order-after-sales-evaluation.md)。`offline` 使用假模型验证执行链路；`run` 仅接受已核查的 Zen 免费模型及宿主凭据。
+
 | 入口 | 验证内容 | 是否调用外部 LLM | 已提交记录 |
 |---|---|---|---|
 | `bun run eval --headroom-strategy layered --retain-recent-turns 1` | RTK＋当前分层 headroom 的正式 A/B/C/D 消融 | 否；o200k_base 计数 | [一轮正式数据](retention-results/query-only-1.json) |

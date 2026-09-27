@@ -6,6 +6,10 @@ Context engineering and optional tool safety for [OpenCode](https://github.com/a
 
 This is an independent learning implementation, not vivo's private BlueCode source. Evaluation includes deterministic synthetic replays and small coding tasks executed by a real LLM through OpenCode; their metrics are reported separately.
 
+## Order and after-sales evaluation
+
+The new [business evaluation guide](docs/order-after-sales-evaluation.md) covers three fixed order, cancellation and partial-refund tasks, container execution, an external HTTP acceptance checker and a 12 natural + 4 pressure-run Baseline/RTK+Headroom comparison. Run `bun run eval:business plan`, `bun run eval:business validate --output /tmp/business-acceptance.json`, then `bun run eval:business:build` and the guide's offline smoke test. The [interview walkthrough](docs/order-after-sales-interview.md) and [progress ledger](docs/order-after-sales-progress.md) distinguish local mechanism evidence from online results. All 16 free-model runs are currently pending a Zen credential; no business accuracy or provider token benefit is claimed.
+
 ## How it works
 
 | Component | Responsibility |
