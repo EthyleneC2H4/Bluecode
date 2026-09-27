@@ -16,10 +16,12 @@ const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value
 const redact = (text: string, secrets: string[]) => secrets.reduce((value, secret) => secret ? value.replaceAll(secret, "[redacted]") : value, text).replace(/sk-[A-Za-z0-9_-]{16,}/g, "[redacted]")
 
 export function consumedHeadroom(trace: any[], requests: Array<{ sequence: number; headroomNodeIds: string[] }>) {
-  return trace.some(applied => applied.type === "runtime" && applied.stage === "transform" && applied.reason === "view"
-    && applied.details?.status === "applied" && trace.some(view => view.type === "transform" && view.sequence > applied.sequence
-      && Array.isArray(view.nodeIds) && view.nodeIds.length > 0 && requests.some(request => request.sequence > view.sequence
-        && request.headroomNodeIds.some(id => view.nodeIds.includes(id)))))
+  return trace.some(applied => {
+    if (applied.type !== "runtime" || applied.stage !== "transform" || applied.reason !== "view" || applied.details?.status !== "applied") return false
+    const view = trace.find(event => event.type === "transform" && event.sequence > applied.sequence)
+    return view && Array.isArray(view.nodeIds) && view.nodeIds.length > 0 && requests.some(request => request.sequence > view.sequence
+      && request.headroomNodeIds.some(id => view.nodeIds.includes(id)))
+  })
 }
 
 export function classifyBusinessFailure(input: { timedOut: boolean; aborted: boolean; budgetExhausted: boolean;

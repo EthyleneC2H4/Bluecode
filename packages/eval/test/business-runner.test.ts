@@ -48,6 +48,8 @@ test("Headroom consumption requires a later request carrying a node from the app
   expect(consumedHeadroom(trace, [{ sequence: 2, headroomNodeIds: ["a"] }])).toBe(false)
   expect(consumedHeadroom(trace, [{ sequence: 5, headroomNodeIds: ["b"] }])).toBe(false)
   expect(consumedHeadroom(trace, [{ sequence: 5, headroomNodeIds: ["a"] }])).toBe(true)
+  expect(consumedHeadroom([trace[0], { type: "transform", nodeIds: [], sequence: 4 },
+    { type: "transform", nodeIds: ["a"], sequence: 5 }], [{ sequence: 6, headroomNodeIds: ["a"] }])).toBe(false)
 })
 
 test("Provider rejection and incomplete harness cannot count as delivered business work", () => {
