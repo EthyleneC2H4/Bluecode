@@ -114,7 +114,10 @@ async function runOne(run: PlannedBusinessRun, options: BusinessRunOptions, imag
   await writeFile(join(artifacts, "entrypoint.sh"), entrypoint())
   const token = proxy.register(run.id, BUSINESS_UPSTREAM_MODEL, Date.now() + deadlineMs)
   const tokenFile = join(root, ".run-token.env")
-  await writeFile(tokenFile, `BLUECODE_RUN_TOKEN=${token}\nBLUECODE_BUSINESS_TRACE_TOKEN=${proxy.traceToken(run.id)}\n`, { mode: 0o600 })
+  await writeFile(tokenFile, `BLUECODE_RUN_TOKEN=${token}\n`, { mode: 0o600 })
+  const traceSecret = join(root, "trace-secret")
+  await mkdir(traceSecret)
+  await writeFile(join(traceSecret, "token"), proxy.traceToken(run.id), { mode: 0o600 })
   const name = `bluecode-run-${randomUUID().replaceAll("-", "").slice(0, 20)}`
   const prompt = run.kind === "pressure"
     ? "请先运行 bun run inspect:history，阅读 TASK.md，严格保留累计退款、状态和幂等约束，完成 T3 后运行 bun test。"
@@ -130,7 +133,8 @@ async function runOne(run: PlannedBusinessRun, options: BusinessRunOptions, imag
   ]
   const argv = ["docker", "run", "--rm", "--name", name, "--init", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
     "--pids-limit=256", "--memory=2g", "--cpus=2", "--network=bridge", "--tmpfs", "/tmp:rw,nosuid,nodev,size=128m",
-    "--mount", `type=bind,source=${work},target=/workspace`, "--mount", `type=bind,source=${artifacts},target=/artifacts`, "--env-file", tokenFile,
+    "--mount", `type=bind,source=${work},target=/workspace`, "--mount", `type=bind,source=${artifacts},target=/artifacts`,
+    "--mount", `type=bind,source=${traceSecret},target=/trace-secret`, "--env-file", tokenFile,
     ...env.flatMap(value => ["-e", value]), options.image, "sh", "/artifacts/entrypoint.sh"]
   let execution: Awaited<ReturnType<typeof command>> | null = null
   let budgetSnapshot: ReturnType<typeof proxy.budget> = null
@@ -143,6 +147,7 @@ async function runOne(run: PlannedBusinessRun, options: BusinessRunOptions, imag
     traceSnapshot = proxy.trace(run.id)
     proxy.revoke(run.id)
     await rm(tokenFile, { force: true })
+    await rm(traceSecret, { recursive: true, force: true })
   }
   const durationMs = performance.now() - start
   const requests = proxy.records(run.id)

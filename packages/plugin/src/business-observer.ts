@@ -1,5 +1,6 @@
 /** Minimal production-code observer used by isolated business evaluations. */
 import bluecodePlugin from "./index"
+import { readFileSync, unlinkSync } from "node:fs"
 
 type Input = Parameters<typeof bluecodePlugin>[0]
 type Options = Parameters<typeof bluecodePlugin>[1]
@@ -7,8 +8,8 @@ type Hooks = Awaited<ReturnType<typeof bluecodePlugin>>
 
 export default async function businessObserver(input: Input, options?: Options): Promise<Hooks> {
   const url = process.env.BLUECODE_BUSINESS_TRACE_URL
-  const token = process.env.BLUECODE_BUSINESS_TRACE_TOKEN
-  delete process.env.BLUECODE_BUSINESS_TRACE_TOKEN
+  const token = readFileSync("/trace-secret/token", "utf8").trim()
+  unlinkSync("/trace-secret/token")
   let pending = Promise.resolve()
   const record = (event: Record<string, unknown>) => {
     pending = pending.then(async () => {
