@@ -6,6 +6,11 @@ type Input = Parameters<typeof bluecodePlugin>[0]
 type Options = Parameters<typeof bluecodePlugin>[1]
 type Hooks = Awaited<ReturnType<typeof bluecodePlugin>>
 
+export function newHeadroomNodeIds(beforeText: string, afterText: string): string[] {
+  const before = new Set([...beforeText.matchAll(/\[headroom node:([0-9a-f]{64})\]/g)].map(match => match[1]!))
+  return [...new Set([...afterText.matchAll(/\[headroom node:([0-9a-f]{64})\]/g)].map(match => match[1]!))].filter(id => !before.has(id))
+}
+
 export default async function businessObserver(input: Input, options?: Options): Promise<Hooks> {
   const url = process.env.BLUECODE_BUSINESS_TRACE_URL
   const token = readFileSync("/trace-secret/token", "utf8").trim()
@@ -32,11 +37,11 @@ export default async function businessObserver(input: Input, options?: Options):
   }
   const transform = hooks["experimental.chat.messages.transform"]
   hooks["experimental.chat.messages.transform"] = async (event, output) => {
-    const beforeChars = JSON.stringify(output.messages).length
+    const beforeText = JSON.stringify(output.messages)
     await transform?.(event, output)
     const text = JSON.stringify(output.messages)
-    await record({ type: "transform", beforeChars, afterChars: text.length,
-      nodeIds: [...text.matchAll(/\[headroom node:([0-9a-f]{64})\]/g)].map(match => match[1]!) })
+    await record({ type: "transform", beforeChars: beforeText.length, afterChars: text.length,
+      nodeIds: newHeadroomNodeIds(beforeText, text) })
   }
   return hooks
 }
