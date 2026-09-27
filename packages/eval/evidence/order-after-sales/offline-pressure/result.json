@@ -8,7 +8,7 @@
   "mode": "offline",
   "passed": false,
   "failureType": "business_error",
-  "durationMs": 94997.70150000001,
+  "durationMs": 91839.57733300001,
   "actualInput": null,
   "actualOutput": null,
   "cacheRead": null,
@@ -29,9 +29,9 @@
     "maxRequests": 8,
     "maxInputTokens": 1280000,
     "maxOutputTokens": 16384,
-    "reservedInput": 343645,
+    "reservedInput": 343663,
     "reservedOutput": 6144,
-    "debitedInput": 343645,
+    "debitedInput": 343663,
     "debitedOutput": 6144,
     "actualInput": null,
     "actualOutput": null,
@@ -60,5 +60,5 @@
     "amount-and-input-boundaries": false,
     "illegal-status-and-unknown": false
   },
-  "finishedAt": "2026-09-27T08:32:13.909Z"
+  "finishedAt": "2026-09-27T09:30:03.531Z"
 }

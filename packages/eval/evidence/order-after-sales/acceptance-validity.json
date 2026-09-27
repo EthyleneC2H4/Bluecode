@@ -90,6 +90,64 @@
           }
         },
         {
+          "name": "missing-order-key",
+          "result": {
+            "task": "T1",
+            "passed": false,
+            "checks": [
+              {
+                "name": "server-price",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "idempotency-and-conflict",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "invalid-and-insufficient",
+                "passed": false,
+                "reason": "Missing order idempotency key was accepted"
+              },
+              {
+                "name": "concurrent-stock",
+                "passed": true,
+                "reason": null
+              }
+            ]
+          }
+        },
+        {
+          "name": "order-retry-response-drift",
+          "result": {
+            "task": "T1",
+            "passed": false,
+            "checks": [
+              {
+                "name": "server-price",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "idempotency-and-conflict",
+                "passed": false,
+                "reason": "Retry or conflict semantics failed"
+              },
+              {
+                "name": "invalid-and-insufficient",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "concurrent-stock",
+                "passed": true,
+                "reason": null
+              }
+            ]
+          }
+        },
+        {
           "name": "oversell",
           "result": {
             "task": "T1",
@@ -253,6 +311,64 @@
           }
         },
         {
+          "name": "missing-refund-key",
+          "result": {
+            "task": "T3",
+            "passed": false,
+            "checks": [
+              {
+                "name": "partial-and-cumulative",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "refund-idempotency",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "amount-and-input-boundaries",
+                "passed": false,
+                "reason": "Missing refund idempotency key was accepted"
+              },
+              {
+                "name": "illegal-status-and-unknown",
+                "passed": true,
+                "reason": null
+              }
+            ]
+          }
+        },
+        {
+          "name": "refund-retry-response-drift",
+          "result": {
+            "task": "T3",
+            "passed": false,
+            "checks": [
+              {
+                "name": "partial-and-cumulative",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "refund-idempotency",
+                "passed": false,
+                "reason": "Refund retry or conflict failed"
+              },
+              {
+                "name": "amount-and-input-boundaries",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "illegal-status-and-unknown",
+                "passed": true,
+                "reason": null
+              }
+            ]
+          }
+        },
+        {
           "name": "single-refund-only",
           "result": {
             "task": "T3",
@@ -335,6 +451,35 @@
                 "name": "illegal-status-and-unknown",
                 "passed": false,
                 "reason": "o-pending was refunded"
+              }
+            ]
+          }
+        },
+        {
+          "name": "canceled-refund",
+          "result": {
+            "task": "T3",
+            "passed": false,
+            "checks": [
+              {
+                "name": "partial-and-cumulative",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "refund-idempotency",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "amount-and-input-boundaries",
+                "passed": true,
+                "reason": null
+              },
+              {
+                "name": "illegal-status-and-unknown",
+                "passed": false,
+                "reason": "o-canceled was refunded"
               }
             ]
           }

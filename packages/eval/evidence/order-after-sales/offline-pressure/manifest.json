@@ -9,16 +9,16 @@
     "repeat": 0,
     "order": 8
   },
-  "startedAt": "2026-09-27T08:30:38.120Z",
-  "gitHead": "1901b2cb184f730207127569be4a6174d737a1e9",
+  "startedAt": "2026-09-27T09:28:30.915Z",
+  "gitHead": "5b7534897a946e7674ac1f9135897204a572a383",
   "image": {
     "name": "bluecode-business:offline",
-    "digest": "sha256:cd6f506939b78ef3c6773afe03488cea73344873130414d267d4a18fd86384c5",
+    "digest": "sha256:3599c017c0c8da3a3db875d02e1a64a6bd7da6c33deb1099d471a6afa8f14e51",
     "hostVersion": "1.18.23",
     "bunVersion": "1.4.0"
   },
-  "taskDigest": "57c0a4292f5bff8fa285a100c47ae43529983521d0838cb36fb8fe1f4fae2d4c",
-  "evaluatorDigest": "5cc3c9969f2f88973f999356699ad340cccdd9385688534010ef93bb07fb9723",
+  "taskDigest": "46b38889bfa0fb2e03118e1161ecbca86e23bf206cf73b613104c95cb5ad5d71",
+  "evaluatorDigest": "68ca3684ddfaec738e3dbe2b8cf5add85eec9d07e0988243b4c7fa78bed046d1",
   "model": {
     "host": "bluecode-free/mimo-v2.5-free",
     "upstream": "mimo-v2.5-free",
@@ -90,7 +90,7 @@
         "npm": "@ai-sdk/openai-compatible",
         "name": "BlueCode frozen free model",
         "options": {
-          "baseURL": "http://host.docker.internal:55454/T3-pressure-combo-0/main",
+          "baseURL": "http://host.docker.internal:59759/T3-pressure-combo-0/main",
           "apiKey": "{env:BLUECODE_RUN_TOKEN}"
         },
         "models": {

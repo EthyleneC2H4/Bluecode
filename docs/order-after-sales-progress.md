@@ -14,7 +14,7 @@
 ## 本地验证记录
 
 - `bun run eval:business validate`：参考实现 3/3 通过，错误实现 14/14 被拒绝。
-- `bun test` 与 `bun run typecheck`：审阅修复后的完整 `verify` 中 879 项通过、1 项模板测试跳过、0 项失败；代理鉴权／预算、输出目录保护和压缩消费顺序均有定向测试。
+- `bun test` 与 `bun run typecheck`：审阅修复后的完整 `verify` 中 880 项通过、1 项模板测试跳过、0 项失败；代理鉴权／预算、输出目录保护和压缩消费顺序均有定向测试。
 - `bun run check:security`、`bun run eval:security:host /tmp/bluecode-business-security-host.json`：通过；宿主检查首次与回放并行运行时进程组清理报错，单独复跑通过，未复现。
 - `bun run eval --invariants --headroom-strategy layered --retain-recent-turns 1 --report-path /tmp/bluecode-business-replay.json`：通过；这是旧有离线回放指标，不能填入本业务在线结果。
 - `bun run verify`：审阅修复后的类型、全部测试、依赖、宿主与安全门禁通过。离线压力试跑的镜像摘要和评测器摘要保存在其 manifest 中；该次运行早于后续文档补充。
